@@ -1,0 +1,19 @@
+node_modules/
+.DS_Store
+*.log
+
+# Generated assets (don't commit GBs of generated media)
+kie/assets/raw/*
+!kie/assets/raw/.gitkeep
+src/assets/raw/*
+!src/assets/raw/.gitkeep
+
+# Secrets / local config
+.env
+.env.local
+*.local.json
+
+# IDE
+.vscode/
+.idea/
+*.swp

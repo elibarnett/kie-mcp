@@ -1,0 +1,47 @@
+{
+  "name": "kie-mcp",
+  "version": "4.0.0",
+  "private": false,
+  "type": "module",
+  "description": "MCP server for kie.ai — 45+ image models, 70+ video models, 20+ audio tools with deep model intelligence",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "start:http": "node server.mjs --http",
+    "start:http:port": "node server.mjs --http --port=3100"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "license": "MIT",
+  "author": "Eli Barnett",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elibarnett/kie-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "kie.ai",
+    "claude",
+    "ai-image-generation",
+    "ai-video-generation",
+    "veo",
+    "sora",
+    "kling",
+    "seedance",
+    "happyhorse",
+    "flux",
+    "nano-banana",
+    "gpt-image",
+    "suno",
+    "elevenlabs"
+  ],
+  "bin": {
+    "kie-mcp": "./server.mjs"
+  },
+  "files": [
+    "server.mjs",
+    "README.md",
+    "LICENSE"
+  ]
+}
