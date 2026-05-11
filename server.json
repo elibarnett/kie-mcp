@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.elibarnett/kie-mcp",
+  "description": "Comprehensive MCP server for kie.ai — 45+ image models, 70+ video models, 20+ audio tools with built-in Averiguare model intelligence. Includes GPT Image 2, Nano Banana 2/Pro, Flux Kontext, Veo 3.1, HappyHorse 1.0, Seedance 2.0, Sora 2, Kling 3.0, Wan 2.7, Suno, ElevenLabs, and more.",
+  "version": "4.0.0",
+  "repository": {
+    "url": "https://github.com/elibarnett/kie-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registry_type": "npm",
+      "identifier": "kie-mcp",
+      "version": "4.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environment_variables": [
+        {
+          "name": "KIE_API_KEY",
+          "description": "Your kie.ai API key from https://kie.ai/api-key",
+          "is_required": true,
+          "is_secret": true
+        },
+        {
+          "name": "KIE_PROJECT_ROOT",
+          "description": "Directory where generated files are saved (under kie/assets/raw/). Defaults to current working directory.",
+          "is_required": false,
+          "is_secret": false
+        }
+      ]
+    }
+  ]
+}

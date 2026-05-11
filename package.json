@@ -1,5 +1,6 @@
 {
   "name": "kie-mcp",
+  "mcpName": "io.github.elibarnett/kie-mcp",
   "version": "4.0.0",
   "private": false,
   "type": "module",
