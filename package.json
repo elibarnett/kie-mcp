@@ -18,7 +18,7 @@
   "author": "Eli Barnett",
   "repository": {
     "type": "git",
-    "url": "https://github.com/elibarnett/kie-mcp.git"
+    "url": "git+https://github.com/elibarnett/kie-mcp.git"
   },
   "keywords": [
     "mcp",
@@ -38,7 +38,7 @@
     "elevenlabs"
   ],
   "bin": {
-    "kie-mcp": "./server.mjs"
+    "kie-mcp": "server.mjs"
   },
   "files": [
     "server.mjs",
