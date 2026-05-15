@@ -1,0 +1,22 @@
+services:
+  kie-mcp:
+    build: .
+    image: kie-mcp:local
+    container_name: kie-mcp
+    restart: unless-stopped
+    # Bind to localhost only — not exposed publicly
+    ports:
+      - "127.0.0.1:3100:3100"
+    environment:
+      - KIE_API_KEY=${KIE_API_KEY}
+      - KIE_PROJECT_ROOT=/workspace
+      - KIE_MCP_PORT=3100
+    volumes:
+      # Persist generated assets on the host
+      - ./kie/assets/raw:/workspace/kie/assets/raw
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
