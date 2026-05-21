@@ -144,6 +144,10 @@ const PRICING = {
   'happyhorse/image-to-video': 8,
   'happyhorse/reference-to-video': 8,
   'happyhorse/video-edit': 10,
+  // ── Gemini Omni (Google, May 2026) ──
+  'gemini-omni/video': 30,                // per second — estimated based on 4K capability
+  'gemini-omni/voice-create': 5,          // flat per voice
+  'gemini-omni/character-create': 5,      // flat per character
 
   // ── Audio Models ──
   'suno-music': 10,                   // flat per track
@@ -2306,6 +2310,33 @@ const VIDEO_MODEL_REGISTRY = {
       return input;
     },
   },
+
+  // ── Gemini Omni (NEW May 19, 2026 — Google's "anything from anything" multimodal video) ──
+  'gemini-omni/video': {
+    name: 'Gemini Omni Video (Google)',
+    description: 'NEW — Google\'s "anything from anything" model. Text + up to 7 images + 3 audio + 1 video + 3 character IDs → coherent 4K video.',
+    capabilities: ['cinematic', 'animation', 'audio', 'character', 'multi-reference', 'latest', 'new', 'multimodal', '4k'],
+    type: 'market',
+    apiModel: 'gemini-omni-video',
+    aspectRatios: ['16:9', '9:16'],
+    options: {
+      duration: { type: 'string', enum: ['4', '6', '8', '10'], default: '8', description: 'Duration in seconds' },
+      resolution: { type: 'string', enum: ['720p', '1080p', '4k'], default: '720p' },
+      audio_ids: { type: 'array', description: 'Up to 3 voice IDs from create_omni_voice' },
+      character_ids: { type: 'array', description: 'Up to 3 character IDs from create_omni_character' },
+      video_list: { type: 'array', description: 'Max 1 reference video (≤100MB, ≤30s)' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || '16:9', duration: opts.duration || '8', resolution: opts.resolution || '720p' };
+      if (imageUrls?.length) input.image_urls = imageUrls.slice(0, 7);
+      if (opts.audio_ids) input.audio_ids = opts.audio_ids;
+      if (opts.character_ids) input.character_ids = opts.character_ids;
+      if (opts.video_list) input.video_list = opts.video_list;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
 };
 
 // ─── Audio Tools Registry (metadata for list_models, not for request building) ───
@@ -2339,6 +2370,9 @@ const AUDIO_TOOLS_REGISTRY = {
   'get_timestamped_lyrics': { name: 'Suno Timestamped Lyrics', pricingKey: 'suno/timestamped-lyrics', category: 'music', description: 'Get word-level timestamped lyrics from a Suno track for karaoke/captioning', capabilities: ['lyrics', 'audio-processing', 'latest'] },
   'generate_cover_art': { name: 'Suno Cover Art', pricingKey: 'suno/cover-art', category: 'music', description: 'Generate album cover art for an existing Suno music track', capabilities: ['music-generation', 'cover-art'] },
   'upload_extend_audio': { name: 'Suno Upload & Extend Audio', pricingKey: 'suno/upload-extend', category: 'music', description: 'Extend an uploaded audio file (not a Suno track) with new AI-generated content', capabilities: ['music-generation', 'music-editing'] },
+  // ── Gemini Omni character creation (May 2026) ──
+  'create_omni_voice': { name: 'Gemini Omni Voice Creator', pricingKey: 'gemini-omni/voice-create', category: 'video', description: 'Create a reusable voice ID for Gemini Omni video. Returns kieAudioId for use in audio_ids array.', capabilities: ['character', 'voice', 'latest', 'new'] },
+  'create_omni_character': { name: 'Gemini Omni Character Creator', pricingKey: 'gemini-omni/character-create', category: 'video', description: 'Create a reusable visual character ID for Gemini Omni video. Returns character_id from image + optional voice.', capabilities: ['character', 'multimodal', 'latest', 'new'] },
 };
 
 // ─── Helpers ───
@@ -2511,7 +2545,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.0.0' };
+const SERVER_INFO = { name: 'kie-art', version: '4.0.1' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2999,6 +3033,34 @@ const handleListTools = async () => ({
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
         },
         required: ['taskId'],
+      },
+    },
+    {
+      name: 'create_omni_voice',
+      description: 'NEW — Create a reusable voice character for Gemini Omni video generation. Returns kieAudioId for use in generate_video audio_ids.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          audio_id: { type: 'string', description: 'Preset voice ID (e.g. "achernar", "achird", "algenib" — 30 options)' },
+          name: { type: 'string', description: 'Voice character name (max 210 chars)' },
+          voice_description: { type: 'string', description: 'Detailed voice characteristics: timbre, style, rate, emotion (max 20000 chars)' },
+          example_dialogue: { type: 'string', description: 'Sample dialogue (max 120 chars), e.g. "Hello, I am Adam"' },
+        },
+        required: ['audio_id', 'name'],
+      },
+    },
+    {
+      name: 'create_omni_character',
+      description: 'NEW — Create a reusable visual character for Gemini Omni video generation. Combines image + optional voice. Returns character_id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          descriptions: { type: 'string', description: 'Character appearance, identity, style, clothing, personality' },
+          image_urls: { type: 'array', items: { type: 'string' }, description: 'Exactly 1 image URL (≤20MB)' },
+          audio_ids: { type: 'array', items: { type: 'string' }, description: 'Optional voice IDs from create_omni_voice' },
+          character_name: { type: 'string', description: 'Character name' },
+        },
+        required: ['descriptions', 'image_urls'],
       },
     },
     {
@@ -3809,6 +3871,30 @@ const handleCallTool = async (request) => {
         return { content: [{ type: 'text', text: `✅ Cover art generated!\nTask ID: ${newTaskId}\nDownloaded to: ${outPath}` }] };
       }
 
+      case 'create_omni_voice': {
+        const { audio_id, name: voiceName, voice_description, example_dialogue } = args;
+        const body = { audio_id, name: voiceName };
+        if (voice_description) body.voice_description = voice_description;
+        if (example_dialogue) body.example_dialogue = example_dialogue;
+        const result = await kieRequest('POST', '/api/v1/omni/audio/create', body);
+        const data = result.data || result;
+        const kieAudioId = data.kieAudioId || data.audio_id || data.id;
+        if (!kieAudioId) return { content: [{ type: 'text', text: `Failed.\n${JSON.stringify(result, null, 2)}` }] };
+        return { content: [{ type: 'text', text: `✅ Voice character created!\nName: ${voiceName}\nkieAudioId: ${kieAudioId}\n\nUse this ID in generate_video model_options.audio_ids array (Gemini Omni).` }] };
+      }
+
+      case 'create_omni_character': {
+        const { descriptions, image_urls, audio_ids, character_name } = args;
+        const body = { descriptions, image_urls };
+        if (audio_ids) body.audio_ids = audio_ids;
+        if (character_name) body.character_name = character_name;
+        const result = await kieRequest('POST', '/api/v1/omni/character/create', body);
+        const data = result.data || result;
+        const characterId = data.character_id || data.characterId || data.id;
+        if (!characterId) return { content: [{ type: 'text', text: `Failed.\n${JSON.stringify(result, null, 2)}` }] };
+        return { content: [{ type: 'text', text: `✅ Visual character created!\nName: ${character_name || '(unnamed)'}\ncharacter_id: ${characterId}\n\nUse this ID in generate_video model_options.character_ids array (Gemini Omni).` }] };
+      }
+
       case 'upload_extend_audio': {
         const { uploadUrl, prompt, continueAt, model, style, title, instrumental, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -4024,7 +4110,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.0.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.0.1', sessions: sessions.size }));
       return;
     }
 

@@ -1,6 +1,8 @@
 services:
   kie-mcp:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.local
     image: kie-mcp:local
     container_name: kie-mcp
     restart: unless-stopped
