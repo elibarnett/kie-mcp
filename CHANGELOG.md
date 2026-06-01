@@ -2,6 +2,36 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.0.2] — 2026-06-01
+
+Post-release patch pass. No new models — just bug fixes, validation hardening, accurate pricing, and Docker / docs hygiene.
+
+### Fixed
+
+- **`generate_video` upscale handlers were silently broken** — `veo_upscale_4k` could never extract the URL (kie returns `code: 422` even on success with `data.resultUrls` plural; our handler looked for singular `resultUrl` via `kieRequest` which throws on non-200). `veo_upscale_1080p` also threw mid-poll (kie returns `code: 500` during processing). Both rewritten with a tolerant fetch helper + dual singular/plural URL extraction.
+- **Polling could abort mid-task** on transient malformed JSON from `/api/v1/jobs/recordInfo`. `kieRequest` now throws a typed `KieMalformedResponseError` and `pollTask` / `pollSunoTask` catch it as a transient — log and retry next iteration. Non-polling callers still treat parse failures as fatal.
+- **Cross-model option validation** in `generate_image` / `generate_video` — `aspect_ratio` checked against each model's declared `aspectRatios`; option-level `enum`/`min`/`max` enforced client-side. The low-level MCP SDK doesn't validate per-tool inputSchemas, so typos previously surfaced as opaque kie.ai errors.
+- **`gemini-omni/video` buildInput hardening**: arrays now type-checked (`Array.isArray`) and sliced to documented caps (`image_urls` ≤ 7, `audio_ids` ≤ 3, `character_ids` ≤ 3, `video_list` ≤ 1). Empty arrays no longer forwarded. Reference asset quota (`images + videos×2 + character_ids ≤ 7`) enforced up-front. `duration` `String()`-coerced. Per-model `maxPromptChars: 20000` cap enforced via the validator.
+- **`create_omni_voice` schema**: `audio_id` is now a proper `enum` with all 30 preset voice IDs; `name`, `voice_description`, `example_dialogue` carry the documented `maxLength` (210 / 20000 / 120).
+- **`create_omni_character` schema + handler**: `image_urls` carries `minItems: 1, maxItems: 1`; `audio_ids` carries `maxItems: 3` and items type. Handler validates `image_urls` shape up front; empty `audio_ids` no longer forwarded; response ID extraction puts docs-confirmed `characterId` first.
+- **`gemini-omni/video` array options** now declare `items` spec (string for `audio_ids`/`character_ids`, object for `video_list` with documented `{url, start, ends?}` shape) — improves `list_models` verbose rendering and gives LLM tool-callers a typed hint.
+- **Omni IDs are now discoverable via `list_tasks`** — `create_omni_voice` and `create_omni_character` push to `taskHistory` so the IDs survive context compaction or scroll.
+- **`create_omni_voice` success message** now matches `create_omni_character`'s explicit `"only consumed by model='gemini-omni/video'"` — users won't try to pass `audio_ids` to Veo/Sora and silently have it ignored.
+- **AUDIO_TOOLS_REGISTRY categorization** — `create_omni_voice` / `create_omni_character` changed from misleading `category: 'video'` to `category: 'character'`. `'video'` added to their `capabilities` so existing filter-by-video search still surfaces them.
+- **`Dockerfile.local`**: `npm install` → `npm ci` for reproducible builds from the lockfile.
+- **New `.dockerignore`** to keep `kie/assets/raw/`, `node_modules/`, and repo metadata out of the Docker build context (was streaming multi-GB of generated assets on every rebuild).
+
+### Changed
+
+- **Veo family PRICING numbers replaced with empirically-measured values.** Probed each tier 2026-06-01 with a single live API call per slug; captured exact `creditsConsumed` via balance deltas. Old estimates were wrong by between -75% and +110%:
+  - `veo-3/*` (T2V/I2V): 50 → 31.25 cr/s (250 cr per 8s clip; matches kie's marketing for Quality)
+  - `veo-3-fast/*`: 10 → 21 cr/s (168 cr per 8s clip — likely Veo 3.1 Fast under the slug)
+  - `veo-3-lite/*`: 5 → 3.75 cr/s (30 cr per 8s clip)
+  - `veo/extend`: 50 → 31.25 cr/s (assumed same as Quality)
+  - `veo/1080p`: 20 → 5 cr (flat)
+  - `veo/4k`: 80 → 120 cr (flat)
+- Kept in `PRICING_ESTIMATED` because per-second rates may vary across other resolutions/durations/aspect ratios — only one config per tier was probed.
+
 ## [4.0.1] — 2026-05-21
 
 ### Added
@@ -14,19 +44,6 @@ All notable changes to kie-mcp will be documented here.
 ### Workflow
 
 `create_omni_voice` → `create_omni_character` (passing the voice ID) → `generate_video model='gemini-omni/video'` (passing both IDs).
-
-### Fixed (post-release patch pass)
-
-- Cross-model option validation in `generate_image` / `generate_video` — `aspect_ratio` is now checked against each model's declared `aspectRatios`, and option-level `enum`/`min`/`max` are enforced client-side before the API call (the low-level MCP SDK doesn't validate per-tool inputSchemas, so this catches typos that previously surfaced as opaque API errors).
-- `gemini-omni/video` buildInput: arrays now type-checked (`Array.isArray`) and sliced to documented caps (`image_urls` ≤ 7, `audio_ids` ≤ 3, `character_ids` ≤ 3, `video_list` ≤ 1). Empty arrays are no longer forwarded to the API.
-- `gemini-omni/video` buildInput: enforces the kie.ai reference asset quota (`images + videos×2 + character_ids ≤ 7`) up-front with a descriptive error.
-- `gemini-omni/video` buildInput: `duration` is `String()`-coerced so numeric inputs serialize as the documented string enum.
-- `create_omni_voice` schema: `audio_id` is now a proper `enum` with all 30 preset voice IDs; `name`, `voice_description`, `example_dialogue` carry the documented `maxLength` (210 / 20000 / 120).
-- `create_omni_character` schema: `image_urls` carries `minItems: 1, maxItems: 1`; `audio_ids` carries `maxItems: 3`.
-- `create_omni_character` handler: validates `image_urls` is an array of exactly 1 URL before sending; empty `audio_ids` no longer forwarded.
-- Cost display: models with unverified pricing (HappyHorse 1.0, Gemini Omni) now surface "(estimate — pricing not officially disclosed)" in the cost line so users don't budget against guessed numbers.
-- `Dockerfile.local`: `npm install` → `npm ci` for reproducible builds from the lockfile.
-- New `.dockerignore` to keep `kie/assets/raw/`, `node_modules/`, and repo metadata out of the Docker build context.
 
 ## [4.0.0] — 2026-05-11
 
@@ -84,5 +101,6 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.0.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.2
 [4.0.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.1
 [4.0.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.0
