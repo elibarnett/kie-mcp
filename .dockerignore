@@ -1,0 +1,30 @@
+# Don't ship local node_modules — image installs its own via npm ci
+node_modules/
+
+# Generated media (can be GB of output assets the container doesn't need)
+kie/assets/raw/*
+!kie/assets/raw/.gitkeep
+src/assets/raw/*
+!src/assets/raw/.gitkeep
+
+# Secrets / local config
+.env
+.env.local
+*.local.json
+
+# Repo metadata not needed at runtime
+.git/
+.github/
+.gitignore
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Docs & local-dev compose — the image is self-contained
+README.md
+CHANGELOG.md
+LICENSE
+docker-compose.yml
+Dockerfile
+Dockerfile.local

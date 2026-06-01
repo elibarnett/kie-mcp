@@ -1,7 +1,7 @@
 FROM node:20-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 COPY server.mjs ./
 RUN mkdir -p /workspace/kie/assets/raw
 ENV KIE_PROJECT_ROOT=/workspace

@@ -182,14 +182,52 @@ const PRICING = {
   'runway/extend': 6,                  // per second
 };
 
+// Models whose PRICING numbers are inferred rather than officially disclosed by kie.ai.
+// Surfaced as "(estimate — pricing not officially disclosed)" in cost display so users
+// know not to budget against it exactly.
+const PRICING_ESTIMATED = new Set([
+  'happyhorse/text-to-video',
+  'happyhorse/image-to-video',
+  'happyhorse/reference-to-video',
+  'happyhorse/video-edit',
+  'gemini-omni/video',
+]);
+
 function getCostEstimate(modelId, durationSec) {
   const perUnit = PRICING[modelId];
   if (!perUnit) return null;
+  const note = PRICING_ESTIMATED.has(modelId) ? ' (estimate — pricing not officially disclosed)' : '';
   // Image models and flat-rate entries
-  if (!durationSec) return `~${perUnit} credits (~$${(perUnit * 0.005).toFixed(3)})`;
+  if (!durationSec) return `~${perUnit} credits (~$${(perUnit * 0.005).toFixed(3)})${note}`;
   // Per-second video models
   const total = Math.round(perUnit * durationSec);
-  return `~${total} credits (~$${(total * 0.005).toFixed(2)}) for ${durationSec}s`;
+  return `~${total} credits (~$${(total * 0.005).toFixed(2)}) for ${durationSec}s${note}`;
+}
+
+// Validate user-supplied args/model_options against the model's declared schema.
+// Returns null if OK, or an error string describing the first violation.
+// Runs the cheap checks the MCP SDK's low-level Server doesn't enforce: aspectRatios
+// membership, options-level enum / min / max. Keeps API roundtrips for real failures.
+function validateModelOptions(modelDef, args, model_options) {
+  if (modelDef.aspectRatios?.length && args.aspect_ratio && !modelDef.aspectRatios.includes(args.aspect_ratio)) {
+    return `aspect_ratio "${args.aspect_ratio}" not supported by this model. Allowed: ${modelDef.aspectRatios.join(', ')}`;
+  }
+  const opts = modelDef.options || {};
+  for (const [k, spec] of Object.entries(opts)) {
+    const v = model_options?.[k];
+    if (v === undefined || v === null) continue;
+    if (spec.enum?.length) {
+      // duration enums are commonly strings; compare loosely against the string form too
+      if (!spec.enum.includes(v) && !spec.enum.includes(String(v))) {
+        return `model_options.${k} = ${JSON.stringify(v)} not in allowed values: ${spec.enum.map(e => JSON.stringify(e)).join(', ')}`;
+      }
+    }
+    if (spec.type === 'number' && typeof v === 'number') {
+      if (typeof spec.min === 'number' && v < spec.min) return `model_options.${k} = ${v} below min ${spec.min}`;
+      if (typeof spec.max === 'number' && v > spec.max) return `model_options.${k} = ${v} above max ${spec.max}`;
+    }
+  }
+  return null;
 }
 
 // ─── Model Registry ───
@@ -2314,12 +2352,14 @@ const VIDEO_MODEL_REGISTRY = {
   // ── Gemini Omni (NEW May 19, 2026 — Google's "anything from anything" multimodal video) ──
   'gemini-omni/video': {
     name: 'Gemini Omni Video (Google)',
-    description: 'NEW — Google\'s "anything from anything" model. Text + up to 7 images + 3 audio + 1 video + 3 character IDs → coherent 4K video.',
+    description: 'NEW — Google\'s "anything from anything" model. Text + up to 7 images + 3 audio + 1 video + 3 character IDs → coherent video up to 4K (must opt into 1080p/4k; default is 720p).',
     capabilities: ['cinematic', 'animation', 'audio', 'character', 'multi-reference', 'latest', 'new', 'multimodal', '4k'],
     type: 'market',
     apiModel: 'gemini-omni-video',
     aspectRatios: ['16:9', '9:16'],
+    // Reference asset quota per request: images + videos*2 + character_ids ≤ 7 (per kie.ai docs).
     options: {
+      prompt: { type: 'string', description: 'Video prompt (max 20000 chars)' },
       duration: { type: 'string', enum: ['4', '6', '8', '10'], default: '8', description: 'Duration in seconds' },
       resolution: { type: 'string', enum: ['720p', '1080p', '4k'], default: '720p' },
       audio_ids: { type: 'array', description: 'Up to 3 voice IDs from create_omni_voice' },
@@ -2328,11 +2368,26 @@ const VIDEO_MODEL_REGISTRY = {
       seed: { type: 'number', min: 0, max: 2147483647 },
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
-      const input = { prompt, aspect_ratio: aspectRatio || '16:9', duration: opts.duration || '8', resolution: opts.resolution || '720p' };
-      if (imageUrls?.length) input.image_urls = imageUrls.slice(0, 7);
-      if (opts.audio_ids) input.audio_ids = opts.audio_ids;
-      if (opts.character_ids) input.character_ids = opts.character_ids;
-      if (opts.video_list) input.video_list = opts.video_list;
+      const input = {
+        prompt,
+        aspect_ratio: aspectRatio || '16:9',
+        duration: String(opts.duration || '8'),
+        resolution: opts.resolution || '720p',
+      };
+      // Cap arrays to documented limits; reject obviously-wrong types early.
+      const images = Array.isArray(imageUrls) ? imageUrls.slice(0, 7) : [];
+      const audioIds = Array.isArray(opts.audio_ids) ? opts.audio_ids.slice(0, 3) : [];
+      const characterIds = Array.isArray(opts.character_ids) ? opts.character_ids.slice(0, 3) : [];
+      const videoList = Array.isArray(opts.video_list) ? opts.video_list.slice(0, 1) : [];
+      // Reference asset quota (images + videos*2 + character_ids ≤ 7) per kie.ai docs.
+      const quota = images.length + videoList.length * 2 + characterIds.length;
+      if (quota > 7) {
+        throw new Error(`gemini-omni/video reference quota exceeded: images(${images.length}) + videos×2(${videoList.length * 2}) + character_ids(${characterIds.length}) = ${quota}, must be ≤ 7`);
+      }
+      if (images.length) input.image_urls = images;
+      if (audioIds.length) input.audio_ids = audioIds;
+      if (characterIds.length) input.character_ids = characterIds;
+      if (videoList.length) input.video_list = videoList;
       if (opts.seed !== undefined) input.seed = opts.seed;
       return input;
     },
@@ -3041,23 +3096,33 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          audio_id: { type: 'string', description: 'Preset voice ID (e.g. "achernar", "achird", "algenib" — 30 options)' },
-          name: { type: 'string', description: 'Voice character name (max 210 chars)' },
-          voice_description: { type: 'string', description: 'Detailed voice characteristics: timbre, style, rate, emotion (max 20000 chars)' },
-          example_dialogue: { type: 'string', description: 'Sample dialogue (max 120 chars), e.g. "Hello, I am Adam"' },
+          audio_id: {
+            type: 'string',
+            enum: [
+              'achernar', 'achird', 'algenib', 'algieba', 'alnilam', 'aoede', 'autonoe',
+              'callirrhoe', 'charon', 'despina', 'enceladus', 'erinome', 'fenrir',
+              'gacrux', 'iapetus', 'kore', 'laomedeia', 'leda', 'orus', 'puck',
+              'pulcherrima', 'rasalgethi', 'sadachbia', 'sadaltager', 'schedar',
+              'sulafat', 'umbriel', 'vindemiatrix', 'zephyr', 'zubenelgenubi',
+            ],
+            description: 'Preset base voice (30 options). The created voice inherits this preset and is customized by voice_description.',
+          },
+          name: { type: 'string', maxLength: 210, description: 'Voice character name (max 210 chars)' },
+          voice_description: { type: 'string', maxLength: 20000, description: 'Detailed voice characteristics: timbre, style, rate, emotion (max 20000 chars)' },
+          example_dialogue: { type: 'string', maxLength: 120, description: 'Sample dialogue (max 120 chars), e.g. "Hello, I am Adam"' },
         },
         required: ['audio_id', 'name'],
       },
     },
     {
       name: 'create_omni_character',
-      description: 'NEW — Create a reusable visual character for Gemini Omni video generation. Combines image + optional voice. Returns character_id.',
+      description: 'NEW — Create a reusable visual character for Gemini Omni video generation. Combines image + optional voice. Returns characterId.',
       inputSchema: {
         type: 'object',
         properties: {
           descriptions: { type: 'string', description: 'Character appearance, identity, style, clothing, personality' },
-          image_urls: { type: 'array', items: { type: 'string' }, description: 'Exactly 1 image URL (≤20MB)' },
-          audio_ids: { type: 'array', items: { type: 'string' }, description: 'Optional voice IDs from create_omni_voice' },
+          image_urls: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 1, description: 'Exactly 1 image URL (≤20MB)' },
+          audio_ids: { type: 'array', items: { type: 'string' }, maxItems: 3, description: 'Optional voice IDs from create_omni_voice' },
           character_name: { type: 'string', description: 'Character name' },
         },
         required: ['descriptions', 'image_urls'],
@@ -3185,6 +3250,10 @@ const handleCallTool = async (request) => {
 
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls (image-to-image model).` }] };
+        }
+        const validationError = validateModelOptions(modelDef, { aspect_ratio }, model_options);
+        if (validationError) {
+          return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${validationError}` }] };
         }
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -3443,6 +3512,10 @@ const handleCallTool = async (request) => {
         }
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls.` }] };
+        }
+        const validationError = validateModelOptions(modelDef, { aspect_ratio }, model_options);
+        if (validationError) {
+          return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${validationError}` }] };
         }
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -3885,14 +3958,17 @@ const handleCallTool = async (request) => {
 
       case 'create_omni_character': {
         const { descriptions, image_urls, audio_ids, character_name } = args;
+        if (!Array.isArray(image_urls) || image_urls.length !== 1) {
+          return { content: [{ type: 'text', text: `image_urls must be an array with exactly 1 URL (got ${Array.isArray(image_urls) ? image_urls.length + ' items' : typeof image_urls}).` }] };
+        }
         const body = { descriptions, image_urls };
-        if (audio_ids) body.audio_ids = audio_ids;
+        if (Array.isArray(audio_ids) && audio_ids.length) body.audio_ids = audio_ids.slice(0, 3);
         if (character_name) body.character_name = character_name;
         const result = await kieRequest('POST', '/api/v1/omni/character/create', body);
         const data = result.data || result;
-        const characterId = data.character_id || data.characterId || data.id;
+        const characterId = data.characterId || data.character_id || data.id;
         if (!characterId) return { content: [{ type: 'text', text: `Failed.\n${JSON.stringify(result, null, 2)}` }] };
-        return { content: [{ type: 'text', text: `✅ Visual character created!\nName: ${character_name || '(unnamed)'}\ncharacter_id: ${characterId}\n\nUse this ID in generate_video model_options.character_ids array (Gemini Omni).` }] };
+        return { content: [{ type: 'text', text: `✅ Visual character created!\nName: ${character_name || '(unnamed)'}\ncharacterId: ${characterId}\n\nUse this ID in generate_video model_options.character_ids array (only consumed by model='gemini-omni/video').` }] };
       }
 
       case 'upload_extend_audio': {
