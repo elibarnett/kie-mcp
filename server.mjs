@@ -73,12 +73,14 @@ const PRICING = {
   'wan/2-7-image-pro': 8,
 
   // ── Video Models (credits per second, unless noted) ──
-  'veo-3/text-to-video': 50,          // ~400 credits/8s ($2.00)
-  'veo-3/image-to-video': 50,         // same as text-to-video, alias
-  'veo-3-fast/text-to-video': 10,     // ~80 credits/8s ($0.40)
-  'veo-3-fast/image-to-video': 10,    // same as text-to-video, alias
-  'veo-3-lite/text-to-video': 5,
-  'veo-3-lite/image-to-video': 5,     // same as text-to-video, alias
+  // Veo numbers empirically measured 2026-06-01 via single 8s 720p 16:9 T2V probes;
+  // rates may vary with resolution/duration/aspect (see PRICING_ESTIMATED below).
+  'veo-3/text-to-video': 31.25,       // 250 cr/8s ($1.25) — probed: veo3 slug
+  'veo-3/image-to-video': 31.25,      // assumed same as T2V (kie buildBody sends identical model slug)
+  'veo-3-fast/text-to-video': 21,     // 168 cr/8s ($0.84) — probed: veo3_fast slug (likely Veo 3.1 Fast)
+  'veo-3-fast/image-to-video': 21,    // assumed same as T2V
+  'veo-3-lite/text-to-video': 3.75,   // 30 cr/8s ($0.15) — probed: veo3_lite slug
+  'veo-3-lite/image-to-video': 3.75,  // assumed same as T2V
   'runway/text-to-video': 2.4,        // 12 credits/5s ($0.06)
   'runway/aleph-edit': 6,
   'sora/text-to-video': 3,            // ~30 credits/10s ($0.15)
@@ -176,21 +178,36 @@ const PRICING = {
   'elevenlabs/speech-to-text': 3,      // flat
   // ── Utility ──
   'upload-file': 0,                    // free
-  'veo/extend': 50,                    // per second, same as veo quality
-  'veo/1080p': 20,                     // flat per upscale
-  'veo/4k': 80,                        // flat per upscale (~2x fast generation)
+  'veo/extend': 31.25,                 // per second, assumed same as veo quality
+  'veo/1080p': 5,                      // flat per upscale (empirical 2026-06-01)
+  'veo/4k': 120,                       // flat per upscale (empirical 2026-06-01)
   'runway/extend': 6,                  // per second
 };
 
 // Models whose PRICING numbers are inferred rather than officially disclosed by kie.ai.
 // Surfaced as "(estimate — pricing not officially disclosed)" in cost display so users
 // know not to budget against it exactly.
+//
+// Veo family: numbers above are empirically measured (2026-06-01) on a single config
+// (8s 720p 16:9 T2V with audio). Kept in PRICING_ESTIMATED because the per-second rate
+// MAY vary across other resolutions/durations/aspect ratios — we only probed one
+// config per tier. HappyHorse + Gemini Omni rates were never officially disclosed by
+// kie.ai (research-derived); flagged for the same reason.
 const PRICING_ESTIMATED = new Set([
   'happyhorse/text-to-video',
   'happyhorse/image-to-video',
   'happyhorse/reference-to-video',
   'happyhorse/video-edit',
   'gemini-omni/video',
+  'veo-3/text-to-video',
+  'veo-3/image-to-video',
+  'veo-3-fast/text-to-video',
+  'veo-3-fast/image-to-video',
+  'veo-3-lite/text-to-video',
+  'veo-3-lite/image-to-video',
+  'veo/extend',
+  'veo/1080p',
+  'veo/4k',
 ]);
 
 function getCostEstimate(modelId, durationSec) {
