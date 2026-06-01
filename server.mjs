@@ -185,12 +185,27 @@ const PRICING = {
 // Models whose PRICING numbers are inferred rather than officially disclosed by kie.ai.
 // Surfaced as "(estimate — pricing not officially disclosed)" in cost display so users
 // know not to budget against it exactly.
+//
+// Veo family: empirical probe (2026-06-01) returned creditsConsumed=168 for an 8s 720p
+// veo3_fast T2V (= 21 cr/s), while our table claimed 10 cr/s and kie.ai marketing
+// pages quote 60 cr / 8s clip. The 2x+ discrepancy between three sources means our
+// veo-3* numbers are unreliable in their current form. Flag as estimated until a
+// dashboard-confirmed table can replace them.
 const PRICING_ESTIMATED = new Set([
   'happyhorse/text-to-video',
   'happyhorse/image-to-video',
   'happyhorse/reference-to-video',
   'happyhorse/video-edit',
   'gemini-omni/video',
+  'veo-3/text-to-video',
+  'veo-3/image-to-video',
+  'veo-3-fast/text-to-video',
+  'veo-3-fast/image-to-video',
+  'veo-3-lite/text-to-video',
+  'veo-3-lite/image-to-video',
+  'veo/extend',
+  'veo/1080p',
+  'veo/4k',
 ]);
 
 function getCostEstimate(modelId, durationSec) {
