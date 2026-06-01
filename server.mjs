@@ -2434,6 +2434,18 @@ const AUDIO_TOOLS_REGISTRY = {
 
 const taskHistory = [];
 
+// Thrown when kie.ai returns a 2xx response whose body is not valid JSON.
+// Observed empirically on /api/v1/jobs/recordInfo for tasks in interim
+// (non-terminal) states — terminal-state responses parse cleanly. Poll loops
+// catch this and retry the next iteration rather than aborting the whole task.
+class KieMalformedResponseError extends Error {
+  constructor(text, status) {
+    super(`kie.ai API returned non-JSON (HTTP ${status}): ${text.slice(0, 500)}`);
+    this.name = 'KieMalformedResponseError';
+    this.status = status;
+  }
+}
+
 async function kieRequest(method, path, body) {
   const url = `${API_BASE}${path}`;
   const opts = {
@@ -2448,7 +2460,7 @@ async function kieRequest(method, path, body) {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`kie.ai API returned non-JSON (HTTP ${res.status}): ${text.slice(0, 500)}`);
+    throw new KieMalformedResponseError(text, res.status);
   }
   console.error(`[kie-mcp] ${method} ${path} → HTTP ${res.status}, code=${json.code}, msg=${json.msg}, keys=${Object.keys(json).join(',')}`);
   if (res.status !== 200) {
@@ -2480,6 +2492,22 @@ function getPollEndpoint(modelId) {
   return null;
 }
 
+// Tolerant single-shot poll: returns null if kie.ai returned malformed JSON
+// (a transient symptom observed on interim non-terminal states); rethrows
+// anything else. The surrounding maxWaitMs still bounds total wait, so a
+// persistently-broken endpoint will still time out cleanly.
+async function pollOnce(method, path) {
+  try {
+    return await kieRequest(method, path);
+  } catch (err) {
+    if (err instanceof KieMalformedResponseError) {
+      console.error(`[kie-mcp] transient malformed poll response (${path}); retrying next iteration.`);
+      return null;
+    }
+    throw err;
+  }
+}
+
 async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
   const dedicatedEndpoint = modelId && getPollEndpoint(modelId);
   const start = Date.now();
@@ -2487,43 +2515,47 @@ async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
   while (Date.now() - start < maxWaitMs) {
     if (dedicatedEndpoint) {
       // Dedicated models use their own polling endpoint
-      const result = await kieRequest('GET', `${dedicatedEndpoint}?taskId=${taskId}`);
-      const data = result.data || result;
+      const result = await pollOnce('GET', `${dedicatedEndpoint}?taskId=${taskId}`);
+      if (result) {
+        const data = result.data || result;
 
-      // successFlag-based models: GPT-4o, Flux Kontext, Veo
-      // successFlag: 0=processing, 1=success, 2+=failed
-      if (data.successFlag !== undefined) {
-        if (data.successFlag === 1) {
-          const normalized = { ...data, state: 'success' };
-          // GPT-4o: response.result_urls (snake_case)
-          if (data.response?.result_urls) {
-            normalized.resultJson = JSON.stringify({ resultUrls: data.response.result_urls });
+        // successFlag-based models: GPT-4o, Flux Kontext, Veo
+        // successFlag: 0=processing, 1=success, 2+=failed
+        if (data.successFlag !== undefined) {
+          if (data.successFlag === 1) {
+            const normalized = { ...data, state: 'success' };
+            // GPT-4o: response.result_urls (snake_case)
+            if (data.response?.result_urls) {
+              normalized.resultJson = JSON.stringify({ resultUrls: data.response.result_urls });
+            }
+            // Veo: response.resultUrls (camelCase)
+            if (data.response?.resultUrls) {
+              normalized.resultJson = JSON.stringify({ resultUrls: data.response.resultUrls });
+            }
+            // Flux Kontext: resultImageUrl at top level
+            if (data.resultImageUrl) {
+              normalized.resultJson = JSON.stringify({ resultImageUrl: data.resultImageUrl });
+            }
+            return normalized;
           }
-          // Veo: response.resultUrls (camelCase)
-          if (data.response?.resultUrls) {
-            normalized.resultJson = JSON.stringify({ resultUrls: data.response.resultUrls });
+          if (data.successFlag >= 2) {
+            throw new Error(`Task failed (flag=${data.successFlag}): ${data.errorMessage || data.failMsg || 'Unknown'}`);
           }
-          // Flux Kontext: resultImageUrl at top level
-          if (data.resultImageUrl) {
-            normalized.resultJson = JSON.stringify({ resultImageUrl: data.resultImageUrl });
-          }
-          return normalized;
         }
-        if (data.successFlag >= 2) {
-          throw new Error(`Task failed (flag=${data.successFlag}): ${data.errorMessage || data.failMsg || 'Unknown'}`);
+        // state-based models: Runway (same format as market models)
+        else if (data.state) {
+          if (data.state === 'success') return data;
+          if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
         }
-      }
-      // state-based models: Runway (same format as market models)
-      else if (data.state) {
-        if (data.state === 'success') return data;
-        if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
       }
     } else {
       // Market models use the generic recordInfo endpoint
-      const result = await kieRequest('GET', `/api/v1/jobs/recordInfo?taskId=${taskId}`);
-      const data = result.data || result;
-      if (data.state === 'success') return data;
-      if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
+      const result = await pollOnce('GET', `/api/v1/jobs/recordInfo?taskId=${taskId}`);
+      if (result) {
+        const data = result.data || result;
+        if (data.state === 'success') return data;
+        if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
+      }
     }
     await new Promise((r) => setTimeout(r, 3000));
   }
@@ -2534,12 +2566,14 @@ async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
 async function pollSunoTask(taskId, maxWaitMs = 300000) {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
-    const poll = await kieRequest('GET', `/api/v1/generate/record-info?taskId=${taskId}`);
-    const d = poll.data || poll;
-    if (d.status === 'SUCCESS' || d.status === 'FIRST_SUCCESS') return d;
-    if (d.status === 'CREATE_TASK_FAILED' || d.status === 'GENERATE_AUDIO_FAILED')
-      throw new Error(`Suno task failed: ${d.errorMessage || d.status}`);
-    if (d.status === 'SENSITIVE_WORD_ERROR') throw new Error('Content filtered by Suno.');
+    const poll = await pollOnce('GET', `/api/v1/generate/record-info?taskId=${taskId}`);
+    if (poll) {
+      const d = poll.data || poll;
+      if (d.status === 'SUCCESS' || d.status === 'FIRST_SUCCESS') return d;
+      if (d.status === 'CREATE_TASK_FAILED' || d.status === 'GENERATE_AUDIO_FAILED')
+        throw new Error(`Suno task failed: ${d.errorMessage || d.status}`);
+      if (d.status === 'SENSITIVE_WORD_ERROR') throw new Error('Content filtered by Suno.');
+    }
     await new Promise((r) => setTimeout(r, 4000));
   }
   throw new Error(`Suno task ${taskId} timed out after ${maxWaitMs / 1000}s`);
