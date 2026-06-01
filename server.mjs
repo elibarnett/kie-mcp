@@ -2405,6 +2405,36 @@ async function kieRequest(method, path, body) {
   return json;
 }
 
+// Veo upscale endpoints return non-standard kie codes during polling that would
+// cause kieRequest to throw mid-loop:
+//   - 1080p (GET get-1080p-video): code 500 while processing, code 200 + resultUrl on success
+//   - 4K    (POST get-4k-video):  code 422 on BOTH processing AND success (kie quirk),
+//                                  with resultUrls populated on success
+// Bypass kieRequest for these — fetch directly and parse without throwing.
+async function fetchVeoUpscalePoll(method, path, body = null) {
+  const opts = {
+    method,
+    headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${API_BASE}${path}`, opts);
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null; // malformed JSON treated as "not ready" — retry next iteration
+  }
+}
+
+// 1080p returns `resultUrl` (singular). 4K returns `resultUrls` (plural array). Be
+// defensive against either, since kie's API is inconsistent here.
+function extractUpscaleUrl(json) {
+  if (!json?.data) return null;
+  if (json.data.resultUrl) return json.data.resultUrl;
+  if (Array.isArray(json.data.resultUrls) && json.data.resultUrls[0]) return json.data.resultUrls[0];
+  return null;
+}
+
 // Polling endpoint config for dedicated models.
 // Image models (GPT-4o, Flux Kontext) use successFlag-based polling.
 // Video models (Veo, Runway) use their own status formats.
@@ -3997,15 +4027,16 @@ const handleCallTool = async (request) => {
         const outFilename = filename || `veo-1080p-${ts}.mp4`;
         const outPath = join(RAW_DIR, outFilename);
 
-        // Veo 1080p is a GET endpoint with polling
+        // 1080p uses GET; kie returns code 500 during processing (kieRequest would
+        // throw), then code 200 + data.resultUrl on success. Use the tolerant fetch.
         const maxWait = 180000; // 3 min
         const start = Date.now();
         let resultUrl = null;
         while (Date.now() - start < maxWait) {
-          const result = await kieRequest('GET', `/api/v1/veo/get-1080p-video?taskId=${task_id}&index=${index}`);
-          if (result.data?.resultUrl) { resultUrl = result.data.resultUrl; break; }
-          if (result.code === 200 && result.data?.resultUrl) { resultUrl = result.data.resultUrl; break; }
-          await new Promise((r) => setTimeout(r, 20000)); // 20s intervals
+          const json = await fetchVeoUpscalePoll('GET', `/api/v1/veo/get-1080p-video?taskId=${task_id}&index=${index}`);
+          resultUrl = extractUpscaleUrl(json);
+          if (resultUrl) break;
+          await new Promise((r) => setTimeout(r, 20000));
         }
         if (!resultUrl) return { content: [{ type: 'text', text: `1080p upscale timed out for task ${task_id}. Try again in a minute.` }] };
 
@@ -4019,26 +4050,26 @@ const handleCallTool = async (request) => {
         const outFilename = filename || `veo-4k-${ts}.mp4`;
         const outPath = join(RAW_DIR, outFilename);
 
-        // Veo 4K is a POST that creates a task, then poll
+        // 4K uses POST; first call kicks off the upscale (billed immediately), then
+        // every subsequent POST polls. kie returns code 422 with msg "...processing..."
+        // while running AND code 422 with msg "generated successfully" + data.resultUrls
+        // populated on terminal state. kieRequest would throw on every poll (including
+        // the success one) — use the tolerant fetch instead.
         const body = { taskId: task_id, index };
-        const result = await kieRequest('POST', '/api/v1/veo/get-4k-video', body);
-        if (result.data?.resultUrl) {
-          await downloadToFile(result.data.resultUrl, outPath);
-          return { content: [{ type: 'text', text: `✅ Veo 4K upscale complete!\nDownloaded to: ${outPath}` }] };
-        }
+        let json = await fetchVeoUpscalePoll('POST', '/api/v1/veo/get-4k-video', body);
+        let resultUrl = extractUpscaleUrl(json);
 
-        // If not immediate, poll
         const maxWait = 600000; // 10 min for 4K
         const start = Date.now();
-        while (Date.now() - start < maxWait) {
-          await new Promise((r) => setTimeout(r, 30000)); // 30s intervals
-          const poll = await kieRequest('POST', '/api/v1/veo/get-4k-video', body);
-          if (poll.data?.resultUrl) {
-            await downloadToFile(poll.data.resultUrl, outPath);
-            return { content: [{ type: 'text', text: `✅ Veo 4K upscale complete!\nDownloaded to: ${outPath}` }] };
-          }
+        while (!resultUrl && Date.now() - start < maxWait) {
+          await new Promise((r) => setTimeout(r, 30000));
+          json = await fetchVeoUpscalePoll('POST', '/api/v1/veo/get-4k-video', body);
+          resultUrl = extractUpscaleUrl(json);
         }
-        return { content: [{ type: 'text', text: `4K upscale timed out for task ${task_id}. May still be processing — try again.` }] };
+        if (!resultUrl) return { content: [{ type: 'text', text: `4K upscale timed out for task ${task_id}. May still be processing — try again.` }] };
+
+        await downloadToFile(resultUrl, outPath);
+        return { content: [{ type: 'text', text: `✅ Veo 4K upscale complete!\nDownloaded to: ${outPath}` }] };
       }
 
       // ── Runway Extend ──
