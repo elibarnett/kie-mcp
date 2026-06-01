@@ -224,10 +224,14 @@ function getCostEstimate(modelId, durationSec) {
 // Validate user-supplied args/model_options against the model's declared schema.
 // Returns null if OK, or an error string describing the first violation.
 // Runs the cheap checks the MCP SDK's low-level Server doesn't enforce: aspectRatios
-// membership, options-level enum / min / max. Keeps API roundtrips for real failures.
+// membership, options-level enum / min / max, and per-model prompt length caps
+// (`modelDef.maxPromptChars`). Keeps API roundtrips for real failures.
 function validateModelOptions(modelDef, args, model_options) {
   if (modelDef.aspectRatios?.length && args.aspect_ratio && !modelDef.aspectRatios.includes(args.aspect_ratio)) {
     return `aspect_ratio "${args.aspect_ratio}" not supported by this model. Allowed: ${modelDef.aspectRatios.join(', ')}`;
+  }
+  if (modelDef.maxPromptChars && typeof args.prompt === 'string' && args.prompt.length > modelDef.maxPromptChars) {
+    return `prompt exceeds max ${modelDef.maxPromptChars} chars (got ${args.prompt.length})`;
   }
   const opts = modelDef.options || {};
   for (const [k, spec] of Object.entries(opts)) {
@@ -2374,14 +2378,14 @@ const VIDEO_MODEL_REGISTRY = {
     type: 'market',
     apiModel: 'gemini-omni-video',
     aspectRatios: ['16:9', '9:16'],
+    maxPromptChars: 20000,
     // Reference asset quota per request: images + videos*2 + character_ids ≤ 7 (per kie.ai docs).
     options: {
-      prompt: { type: 'string', description: 'Video prompt (max 20000 chars)' },
       duration: { type: 'string', enum: ['4', '6', '8', '10'], default: '8', description: 'Duration in seconds' },
       resolution: { type: 'string', enum: ['720p', '1080p', '4k'], default: '720p' },
-      audio_ids: { type: 'array', description: 'Up to 3 voice IDs from create_omni_voice' },
-      character_ids: { type: 'array', description: 'Up to 3 character IDs from create_omni_character' },
-      video_list: { type: 'array', description: 'Max 1 reference video (≤100MB, ≤30s)' },
+      audio_ids: { type: 'array', items: { type: 'string' }, description: 'Up to 3 voice IDs from create_omni_voice' },
+      character_ids: { type: 'array', items: { type: 'string' }, description: 'Up to 3 character IDs from create_omni_character' },
+      video_list: { type: 'array', items: { type: 'object' }, description: 'Max 1 reference video object {url, start, ends?} (≤100MB, ≤30s, trim range must differ ≤10s)' },
       seed: { type: 'number', min: 0, max: 2147483647 },
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
@@ -2443,8 +2447,8 @@ const AUDIO_TOOLS_REGISTRY = {
   'generate_cover_art': { name: 'Suno Cover Art', pricingKey: 'suno/cover-art', category: 'music', description: 'Generate album cover art for an existing Suno music track', capabilities: ['music-generation', 'cover-art'] },
   'upload_extend_audio': { name: 'Suno Upload & Extend Audio', pricingKey: 'suno/upload-extend', category: 'music', description: 'Extend an uploaded audio file (not a Suno track) with new AI-generated content', capabilities: ['music-generation', 'music-editing'] },
   // ── Gemini Omni character creation (May 2026) ──
-  'create_omni_voice': { name: 'Gemini Omni Voice Creator', pricingKey: 'gemini-omni/voice-create', category: 'video', description: 'Create a reusable voice ID for Gemini Omni video. Returns kieAudioId for use in audio_ids array.', capabilities: ['character', 'voice', 'latest', 'new'] },
-  'create_omni_character': { name: 'Gemini Omni Character Creator', pricingKey: 'gemini-omni/character-create', category: 'video', description: 'Create a reusable visual character ID for Gemini Omni video. Returns character_id from image + optional voice.', capabilities: ['character', 'multimodal', 'latest', 'new'] },
+  'create_omni_voice': { name: 'Gemini Omni Voice Creator', pricingKey: 'gemini-omni/voice-create', category: 'character', description: 'Create a reusable voice ID for Gemini Omni video. Returns kieAudioId for use in audio_ids array.', capabilities: ['character', 'voice', 'video', 'latest', 'new'] },
+  'create_omni_character': { name: 'Gemini Omni Character Creator', pricingKey: 'gemini-omni/character-create', category: 'character', description: 'Create a reusable visual character ID for Gemini Omni video. Returns characterId from image + optional voice.', capabilities: ['character', 'multimodal', 'video', 'latest', 'new'] },
 };
 
 // ─── Helpers ───
@@ -3332,7 +3336,7 @@ const handleCallTool = async (request) => {
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls (image-to-image model).` }] };
         }
-        const validationError = validateModelOptions(modelDef, { aspect_ratio }, model_options);
+        const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options);
         if (validationError) {
           return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${validationError}` }] };
         }
@@ -3594,7 +3598,7 @@ const handleCallTool = async (request) => {
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls.` }] };
         }
-        const validationError = validateModelOptions(modelDef, { aspect_ratio }, model_options);
+        const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options);
         if (validationError) {
           return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${validationError}` }] };
         }
@@ -4034,7 +4038,9 @@ const handleCallTool = async (request) => {
         const data = result.data || result;
         const kieAudioId = data.kieAudioId || data.audio_id || data.id;
         if (!kieAudioId) return { content: [{ type: 'text', text: `Failed.\n${JSON.stringify(result, null, 2)}` }] };
-        return { content: [{ type: 'text', text: `✅ Voice character created!\nName: ${voiceName}\nkieAudioId: ${kieAudioId}\n\nUse this ID in generate_video model_options.audio_ids array (Gemini Omni).` }] };
+        // Record in taskHistory so list_tasks can recover the ID later in the session.
+        taskHistory.push({ taskId: kieAudioId, model: 'gemini-omni/voice', prompt: voiceName, status: 'success', createdAt: new Date().toISOString() });
+        return { content: [{ type: 'text', text: `✅ Voice character created!\nName: ${voiceName}\nkieAudioId: ${kieAudioId}\n\nUse this ID in generate_video model_options.audio_ids array (only consumed by model='gemini-omni/video').` }] };
       }
 
       case 'create_omni_character': {
@@ -4049,6 +4055,8 @@ const handleCallTool = async (request) => {
         const data = result.data || result;
         const characterId = data.characterId || data.character_id || data.id;
         if (!characterId) return { content: [{ type: 'text', text: `Failed.\n${JSON.stringify(result, null, 2)}` }] };
+        // Record in taskHistory so list_tasks can recover the ID later in the session.
+        taskHistory.push({ taskId: characterId, model: 'gemini-omni/character', prompt: character_name || (descriptions ? descriptions.slice(0, 80) : '(unnamed)'), status: 'success', createdAt: new Date().toISOString() });
         return { content: [{ type: 'text', text: `✅ Visual character created!\nName: ${character_name || '(unnamed)'}\ncharacterId: ${characterId}\n\nUse this ID in generate_video model_options.character_ids array (only consumed by model='gemini-omni/video').` }] };
       }
 
