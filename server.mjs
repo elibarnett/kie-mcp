@@ -171,9 +171,9 @@ const PRICING = {
   'suno/cover-art': 4,
   'suno/upload-extend': 10,
   'elevenlabs/sound-effect-v2': 3,    // flat
-  'elevenlabs/text-to-speech-turbo-2-5': 2,  // flat
-  'elevenlabs/text-to-speech-multilingual-v2': 3, // flat
-  'elevenlabs/text-to-dialogue-v3': 5, // flat
+  'elevenlabs/text-to-speech-turbo-2-5': 6,  // per 1000 chars, ceil-rounded (empirical 2026-06-11: 35/150/600 chars→6, 1500→12, 3000→18)
+  'elevenlabs/text-to-speech-multilingual-v2': 12, // per 1000 chars, ceil-rounded (empirical 2026-06-11: 33/150 chars→12, 1500→24)
+  'elevenlabs/text-to-dialogue-v3': 14, // per 1000 chars, linear no rounding (empirical 2026-06-11: 67 chars→0.98, 1330→18.62)
   'elevenlabs/audio-isolation': 3,     // flat
   'elevenlabs/speech-to-text': 3,      // flat
   // ── Utility ──
@@ -2872,7 +2872,7 @@ const handleListTools = async () => ({
           text: { type: 'string', description: 'Text to synthesize into speech' },
           voice_id: {
             type: 'string',
-            description: 'ElevenLabs voice ID (optional, uses default voice if omitted)',
+            description: 'ElevenLabs voice ID. Optional — defaults to James ("EkK5I93UQWFDigLMpZcX").',
           },
           model: {
             type: 'string',
@@ -3710,8 +3710,8 @@ const handleCallTool = async (request) => {
         const outPath = join(RAW_DIR, outFilename);
 
         const apiModel = ttsModel === 'multilingual-v2' ? 'elevenlabs/text-to-speech-multilingual-v2' : 'elevenlabs/text-to-speech-turbo-2-5';
-        const input = { text, output_format: 'mp3_44100_128' };
-        if (voice_id) input.voice = voice_id;
+        // kie.ai requires a voice (422 "voiceId cannot be empty" without one) despite docs claiming a server-side default
+        const input = { text, voice: voice_id || 'EkK5I93UQWFDigLMpZcX', output_format: 'mp3_44100_128' };
         if (speed !== undefined && ttsModel === 'multilingual-v2') input.speed = speed;
         if (language_code && ttsModel === 'multilingual-v2') input.language_code = language_code;
 
