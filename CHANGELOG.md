@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.0.5] — 2026-06-11
+
+### Fixed
+
+- **TTS/dialogue voices were effectively locked to the default** — kie.ai only accepts its curated set of ~67 voices and rejects every other ElevenLabs voice ID with "This voice is not within the range of allowed options" (verified live: allowlisted ID → 200, real-but-unlisted ElevenLabs ID → 500). The MCP gave callers no way to discover the allowed set. Now ships the full catalog (scraped from kie's docs, shared by turbo-2-5, multilingual-v2, and text-to-dialogue-v3): `generate_tts` and `generate_dialogue` accept a voice **name** ("Bella", "Viking Bjorn", "Aria") or allowlisted ID, validate client-side, and an unknown value returns the complete name/vibe/ID catalog so agents self-correct without burning a request. Note two pairs of duplicate names (Mark, Hope, Jessica Anne Bogart, Viraj ×2 each) — use IDs to disambiguate those.
+
 ## [4.0.4] — 2026-06-11
 
 ### Fixed
