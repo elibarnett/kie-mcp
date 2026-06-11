@@ -18,6 +18,95 @@ const RAW_DIR = join(PROJECT_ROOT, 'kie/assets/raw');
 // only needs to exist as a field — set KIE_CALLBACK_URL to receive real ones.
 const SUNO_CALLBACK_URL = process.env.KIE_CALLBACK_URL || 'https://example.com/kie-mcp-callback';
 
+// kie.ai restricts ElevenLabs TTS/dialogue to this curated voice set —
+// arbitrary ElevenLabs voice IDs are rejected with "This voice is not
+// within the range of allowed options". Catalog scraped from
+// docs.kie.ai/market/elevenlabs/text-to-speech-turbo-2-5 (2026-06-11);
+// both TTS models and text-to-dialogue-v3 share it.
+const ELEVENLABS_VOICES = [
+  { id: 'EkK5I93UQWFDigLMpZcX', name: 'James', vibe: 'Husky, Engaging and Bold' },
+  { id: 'Z3R5wn05IrDiVCyEkUrK', name: 'Arabella', vibe: 'Mysterious and Emotive' },
+  { id: 'NNl6r8mD7vthiJatiJt1', name: 'Bradford', vibe: 'Expressive and Articulate' },
+  { id: 'YOq2y2Up4RgXP2HyXjE5', name: 'Xavier', vibe: 'Dominating, Metallic Announcer' },
+  { id: 'B8gJV1IhpuegLxdpXFOE', name: 'Kuon', vibe: 'Cheerful, Clear and Steady' },
+  { id: '2zRM7PkgwBPiau2jvVXc', name: 'Monika Sogam', vibe: 'Deep and Natural' },
+  { id: '1SM7GgM6IMuvQlz2BwM3', name: 'Mark', vibe: 'Casual, Relaxed and Light' },
+  { id: '5l5f8iK3YPeGga21rQIX', name: 'Adeline', vibe: 'Feminine and Conversational' },
+  { id: 'scOwDtmlUjD3prqpp97I', name: 'Sam', vibe: 'Support Agent' },
+  { id: 'NOpBlnGInO9m6vDvFkFC', name: 'Spuds Oxley', vibe: 'Wise and Approachable' },
+  { id: 'BZgkqPqms7Kj9ulSkVzn', name: 'Eve', vibe: 'Authentic, Energetic and Happy' },
+  { id: 'wo6udizrrtpIxWGp2qJk', name: 'Northern Terry' },
+  { id: 'gU0LNdkMOQCOrPrwtbee', name: 'British Football Announcer' },
+  { id: 'DGzg6RaUqxGRTHSBjfgF', name: 'Brock', vibe: 'Commanding and Loud Sergeant' },
+  { id: 'x70vRnQBMBu4FAYhjJbO', name: 'Nathan', vibe: 'Virtual Radio Host' },
+  { id: 'Sm1seazb4gs7RSlUVw7c', name: 'Anika', vibe: 'Animated, Friendly and Engaging' },
+  { id: 'P1bg08DkjqiVEzOn76yG', name: 'Viraj', vibe: 'Rich and Soft' },
+  { id: 'qDuRKMlYmrm8trt5QyBn', name: 'Taksh', vibe: 'Calm, Serious and Smooth' },
+  { id: 'qXpMhyvQqiRxWQs4qSSB', name: 'Horatius', vibe: 'Energetic Character Voice' },
+  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', vibe: 'Energetic, Social Media Creator' },
+  { id: 'N2lVS1w4EtoT3dr4eOWO', name: 'Callum', vibe: 'Husky Trickster' },
+  { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', vibe: 'Enthusiast, Quirky Attitude' },
+  { id: 'kPzsL2i3teMYv0FxEYQ6', name: 'Brittney', vibe: 'Social Media Voice - Fun, Youthful \u0026 Informative' },
+  { id: 'UgBBYS2sOqTuMpoF3BR0', name: 'Mark', vibe: 'Natural Conversations' },
+  { id: 'hpp4J3VqNfWAUOO0d1Us', name: 'Bella', vibe: 'Professional, Bright, Warm' },
+  { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian', vibe: 'Deep, Resonant and Comforting' },
+  { id: 'uYXf8XasLslADfZ2MB4u', name: 'Hope', vibe: 'Bubbly, Gossipy and Girly' },
+  { id: 'gs0tAILXbY5DNrJrsM6F', name: 'Jeff', vibe: 'Classy, Resonating and Strong' },
+  { id: 'DTKMou8ccj1ZaWGBiotd', name: 'Jamahal', vibe: 'Young, Vibrant, and Natural' },
+  { id: 'vBKc2FfBKJfcZNyEt1n6', name: 'Finn', vibe: 'Youthful, Eager and Energetic' },
+  { id: 'DYkrAHD8iwork3YSUBbs', name: 'Tom', vibe: 'Conversations \u0026 Books' },
+  { id: '56AoDkrOh6qfVPDXZ7Pt', name: 'Cassidy', vibe: 'Crisp, Direct and Clear' },
+  { id: 'eR40ATw9ArzDf9h3v7t7', name: 'Addison 2.0', vibe: 'Australian Audiobook \u0026 Podcast' },
+  { id: 'g6xIsTj2HwM6VR4iXFCw', name: 'Jessica Anne Bogart', vibe: 'Chatty and Friendly' },
+  { id: 'lcMyyd2HUfFzxdCaC4Ta', name: 'Lucy', vibe: 'Fresh \u0026 Casual' },
+  { id: '6aDn1KB0hjpdcocrUkmq', name: 'Tiffany', vibe: 'Natural and Welcoming' },
+  { id: 'Sq93GQT4X1lKDXsQcixO', name: 'Felix', vibe: 'Warm, Positive \u0026 Contemporary RP' },
+  { id: 'flHkNRp1BlvT73UL6gyz', name: 'Jessica Anne Bogart', vibe: 'Eloquent Villain' },
+  { id: '9yzdeviXkFddZ4Oz8Mok', name: 'Lutz', vibe: 'Chuckling, Giggly and Cheerful' },
+  { id: 'pPdl9cQBQq4p6mRkZy2Z', name: 'Emma', vibe: 'Adorable and Upbeat' },
+  { id: 'zYcjlYFOd3taleS0gkk3', name: 'Edward', vibe: 'Loud, Confident and Cocky' },
+  { id: 'nzeAacJi50IvxcyDnMXa', name: 'Marshal', vibe: 'Friendly, Funny Professor' },
+  { id: 'ruirxsoakN0GWmGNIo04', name: 'John Morgan', vibe: 'Gritty, Rugged Cowboy' },
+  { id: 'TC0Zp7WVFzhA8zpTlRqV', name: 'Aria', vibe: 'Sultry Villain' },
+  { id: 'ljo9gAlSqKOvF6D8sOsX', name: 'Viking Bjorn', vibe: 'Epic Medieval Raider' },
+  { id: 'PPzYpIqttlTYA83688JI', name: 'Pirate Marshal' },
+  { id: '8JVbfL6oEdmuxKn5DK2C', name: 'Johnny Kid', vibe: 'Serious and Calm Narrator' },
+  { id: 'iCrDUkL56s3C8sCRl7wb', name: 'Hope', vibe: 'Poetic, Romantic and Captivating' },
+  { id: 'wJqPPQ618aTW29mptyoc', name: 'Ana Rita', vibe: 'Smooth, Expressive and Bright' },
+  { id: 'EiNlNiXeDU1pqqOPrYMO', name: 'John Doe', vibe: 'Deep' },
+  { id: '4YYIPFl9wE5c4L2eu2Gb', name: 'Burt Reynolds™', vibe: 'Deep, Smooth and Clear' },
+  { id: '6F5Zhi321D3Oq7v1oNT4', name: 'Hank', vibe: 'Deep and Engaging Narrator' },
+  { id: 'YXpFCvM1S3JbWEJhoskW', name: 'Wyatt', vibe: 'Wise Rustic Cowboy' },
+  { id: 'LG95yZDEHg6fCZdQjLqj', name: 'Phil', vibe: 'Explosive, Passionate Announcer' },
+  { id: 'CeNX9CMwmxDxUF5Q2Inm', name: 'Johnny Dynamite', vibe: 'Vintage Radio DJ' },
+  { id: 'aD6riP1btT197c6dACmy', name: 'Rachel M', vibe: 'Pro British Radio Presenter' },
+  { id: 'mtrellq69YZsNwzUSyXh', name: 'Rex Thunder', vibe: 'Deep N Tough' },
+  { id: 'dHd5gvgSOzSfduK4CvEg', name: 'Ed', vibe: 'Late Night Announcer' },
+  { id: 'eVItLK1UvXctxuaRV2Oq', name: 'Jean', vibe: 'Alluring and Playful Femme Fatale' },
+  { id: 'esy0r39YPLQjOczyOib8', name: 'Britney', vibe: 'Calm and Calculative Villain' },
+  { id: 'Tsns2HvNFKfGiNjllgqo', name: 'Sven', vibe: 'Emotional and Nice' },
+  { id: '1U02n4nD6AdIZ9CjF053', name: 'Viraj', vibe: 'Smooth and Gentle' },
+  { id: 'AeRdCCKzvd23BpJoofzx', name: 'Nathaniel', vibe: 'Engaging, British and Calm' },
+  { id: 'LruHrtVF6PSyGItzMNHS', name: 'Benjamin', vibe: 'Deep, Warm, Calming' },
+  { id: '1wGbFxmAM3Fgw63G1zZJ', name: 'Allison', vibe: 'Calm, Soothing and Meditative' },
+  { id: 'hqfrgApggtO1785R4Fsn', name: 'Theodore HQ', vibe: 'Serene and Grounded' },
+  { id: 'MJ0RnG71ty4LH3dvNfSd', name: 'Leon', vibe: 'Soothing and Grounded' },
+];
+const DEFAULT_VOICE_ID = 'EkK5I93UQWFDigLMpZcX'; // James
+
+// Accepts a curated voice ID or case-insensitive voice name ("Bella",
+// "Viking Bjorn"). Throws with the full catalog on a miss so tool callers
+// can self-correct without burning a kie request.
+function resolveVoice(value) {
+  if (!value) return DEFAULT_VOICE_ID;
+  const v = String(value).trim();
+  if (ELEVENLABS_VOICES.some((x) => x.id === v)) return v;
+  const byName = ELEVENLABS_VOICES.find((x) => x.name.toLowerCase() === v.toLowerCase());
+  if (byName) return byName.id;
+  const catalog = ELEVENLABS_VOICES.map((x) => `${x.name}${x.vibe ? ` — ${x.vibe}` : ''} (${x.id})`).join('\n');
+  throw new Error(`Voice "${value}" is not in kie.ai's allowed voice set (arbitrary ElevenLabs voice IDs are rejected upstream). Pick a name or ID from:\n${catalog}`);
+}
+
 if (!API_KEY) {
   console.error('KIE_API_KEY environment variable is required');
   process.exit(1);
@@ -2699,7 +2788,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.0.4' };
+const SERVER_INFO = { name: 'kie-art', version: '4.0.5' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2886,7 +2975,7 @@ const handleListTools = async () => ({
           text: { type: 'string', description: 'Text to synthesize into speech' },
           voice_id: {
             type: 'string',
-            description: 'ElevenLabs voice ID. Optional — defaults to James ("EkK5I93UQWFDigLMpZcX").',
+            description: 'Voice name (e.g. "Bella", "Viking Bjorn", "Aria") or kie voice ID. kie.ai only accepts its curated ~67-voice set — arbitrary ElevenLabs voice IDs are rejected. An unknown value returns the full catalog. Optional — defaults to James.',
           },
           model: {
             type: 'string',
@@ -2919,7 +3008,7 @@ const handleListTools = async () => ({
               type: 'object',
               properties: {
                 text: { type: 'string', description: 'Line of dialogue' },
-                voice: { type: 'string', description: 'ElevenLabs voice ID for this speaker' },
+                voice: { type: 'string', description: 'Voice name (e.g. "Bella") or kie voice ID for this speaker — kie.ai only accepts its curated voice set; unknown values return the full catalog' },
               },
               required: ['text', 'voice'],
             },
@@ -3728,7 +3817,7 @@ const handleCallTool = async (request) => {
 
         const apiModel = ttsModel === 'multilingual-v2' ? 'elevenlabs/text-to-speech-multilingual-v2' : 'elevenlabs/text-to-speech-turbo-2-5';
         // kie.ai requires a voice (422 "voiceId cannot be empty" without one) despite docs claiming a server-side default
-        const input = { text, voice: voice_id || 'EkK5I93UQWFDigLMpZcX', output_format: 'mp3_44100_128' };
+        const input = { text, voice: resolveVoice(voice_id), output_format: 'mp3_44100_128' };
         if (speed !== undefined && ttsModel === 'multilingual-v2') input.speed = speed;
         if (language_code && ttsModel === 'multilingual-v2') input.language_code = language_code;
 
@@ -3751,7 +3840,7 @@ const handleCallTool = async (request) => {
         const outFilename = filename || `dialogue-${ts}.mp3`;
         const outPath = join(RAW_DIR, outFilename);
 
-        const input = { dialogue };
+        const input = { dialogue: dialogue.map((line) => ({ ...line, voice: resolveVoice(line.voice) })) };
         if (stability !== undefined) input.stability = stability;
         if (language_code) input.language_code = language_code;
 
@@ -4293,7 +4382,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.0.4', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.0.5', sessions: sessions.size }));
       return;
     }
 
