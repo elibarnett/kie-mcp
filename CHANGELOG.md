@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.0.4] — 2026-06-11
+
+### Fixed
+
+- **`generate_music` failed with `422: Please enter callBackUrl`** — kie.ai began rejecting Suno generation requests without a callback URL, even though results remain fully available via polling. All 17 async Suno-family create calls (music, sounds, extend, cover, add-instrumental/vocals, replace-section, persona, mashup, upload-extend, lyrics, WAV, vocal separation, MIDI, music video, cover art) now go through a `sunoCreate` helper that always sends a `callBackUrl`. Defaults to an inert placeholder since the MCP polls; set `KIE_CALLBACK_URL` to receive real callbacks. Synchronous endpoints (`boost_style`, `get_timestamped_lyrics`) are unaffected. Verified live: music generation without a callback 422s, with the placeholder completes in ~30s with 2 tracks.
+
 ## [4.0.3] — 2026-06-11
 
 ### Fixed
