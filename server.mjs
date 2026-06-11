@@ -170,7 +170,6 @@ const PRICING = {
   'suno/timestamped-lyrics': 2,
   'suno/cover-art': 4,
   'suno/upload-extend': 10,
-  'elevenlabs/sound-effect-v2': 3,    // flat
   'elevenlabs/text-to-speech-turbo-2-5': 6,  // per 1000 chars, ceil-rounded (empirical 2026-06-11: 35/150/600 chars→6, 1500→12, 3000→18)
   'elevenlabs/text-to-speech-multilingual-v2': 12, // per 1000 chars, ceil-rounded (empirical 2026-06-11: 33/150 chars→12, 1500→24)
   'elevenlabs/text-to-dialogue-v3': 14, // per 1000 chars, linear no rounding (empirical 2026-06-11: 67 chars→0.98, 1330→18.62)
@@ -2429,7 +2428,7 @@ const AUDIO_TOOLS_REGISTRY = {
   'separate_vocals': { name: 'Suno Vocal Separation', pricingKey: 'suno/separate-vocals', category: 'utility', description: 'Separate vocals from instrumentals or split into stems', capabilities: ['audio-processing'] },
   'generate_midi': { name: 'Suno MIDI Export', pricingKey: 'suno/generate-midi', category: 'utility', description: 'Export a Suno track to MIDI notation', capabilities: ['audio-processing'] },
   'create_music_video': { name: 'Suno Music Video', pricingKey: 'suno/create-music-video', category: 'video', description: 'Generate an MP4 music video visualization from a Suno track', capabilities: ['music-generation', 'video'] },
-  'generate_sfx': { name: 'ElevenLabs Sound Effects', pricingKey: 'elevenlabs/sound-effect-v2', category: 'sfx', description: 'Generate sound effects from text (0.5-22s, 48kHz)', capabilities: ['sfx-generation'] },
+  'generate_sfx': { name: 'Sound Effects (Suno V5)', pricingKey: 'suno/generate-sounds', category: 'sfx', description: 'Generate sound effects from text (routes via Suno V5 — kie.ai removed the ElevenLabs SFX model)', capabilities: ['sfx-generation'] },
   'generate_tts': { name: 'ElevenLabs Text-to-Speech', pricingKey: 'elevenlabs/text-to-speech-turbo-2-5', category: 'speech', description: 'Synthesize speech — Turbo 2.5 (fast) or Multilingual V2 (quality)', capabilities: ['text-to-speech'] },
   'generate_dialogue': { name: 'ElevenLabs Text-to-Dialogue', pricingKey: 'elevenlabs/text-to-dialogue-v3', category: 'speech', description: 'Multi-speaker dialogue generation with voice assignment', capabilities: ['text-to-speech', 'dialogue'] },
   'audio_isolation': { name: 'ElevenLabs Audio Isolation', pricingKey: 'elevenlabs/audio-isolation', category: 'utility', description: 'Isolate vocals or audio from background noise', capabilities: ['audio-processing'] },
@@ -2620,7 +2619,12 @@ async function pollSunoTask(taskId, maxWaitMs = 300000) {
     const poll = await pollOnce('GET', `/api/v1/generate/record-info?taskId=${taskId}`);
     if (poll) {
       const d = poll.data || poll;
-      if (d.status === 'SUCCESS' || d.status === 'FIRST_SUCCESS') return d;
+      if (d.status === 'SUCCESS' || d.status === 'FIRST_SUCCESS') {
+        // Some operations (e.g. sounds) nest results under data.response — lift
+        // sunoData to the top so all callers can read pollResult.sunoData
+        if (!d.sunoData && d.response?.sunoData) d.sunoData = d.response.sunoData;
+        return d;
+      }
       if (d.status === 'CREATE_TASK_FAILED' || d.status === 'GENERATE_AUDIO_FAILED')
         throw new Error(`Suno task failed: ${d.errorMessage || d.status}`);
       if (d.status === 'SENSITIVE_WORD_ERROR') throw new Error('Content filtered by Suno.');
@@ -2685,7 +2689,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.0.2' };
+const SERVER_INFO = { name: 'kie-art', version: '4.0.3' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2842,7 +2846,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_sfx',
-      description: `Generate a sound effect using ElevenLabs via kie.ai. Great for game sounds: UI clicks, magic spells, item pickups, explosions. Downloads to kie/assets/raw/.`,
+      description: `Generate a sound effect from text via Suno V5 (kie.ai removed the ElevenLabs sound-effect model). Great for game sounds: UI clicks, magic spells, item pickups, explosions. For loop/BPM/key control use generate_sounds instead. Downloads to kie/assets/raw/.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -2852,11 +2856,11 @@ const handleListTools = async () => ({
           },
           duration_seconds: {
             type: 'number',
-            description: 'Desired duration (0.5–22s). Leave unset for automatic.',
+            description: 'Target duration hint, folded into the prompt (Suno has no hard duration control).',
           },
           prompt_influence: {
             type: 'number',
-            description: 'How closely to follow the prompt (0–1). Default: 0.3',
+            description: 'Deprecated — ignored (no Suno equivalent). Kept for backward compatibility.',
           },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
         },
@@ -3679,27 +3683,30 @@ const handleCallTool = async (request) => {
       }
 
       case 'generate_sfx': {
-        const { text, duration_seconds, prompt_influence, filename } = args;
+        // kie.ai removed elevenlabs/sound-effect-v2 (createTask still accepts the
+        // slug but every generation fails server-side with code 500, and the docs
+        // page is gone) — route through Suno's sound generator instead.
+        const { text, duration_seconds, filename } = args;
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = filename || `sfx-${ts}.mp3`;
-        const outPath = join(RAW_DIR, outFilename);
 
-        const input = { text, output_format: 'mp3_44100_128' };
-        // API minimum is 0.5s — clamp silently
-        if (duration_seconds !== undefined) input.duration_seconds = Math.max(0.5, duration_seconds);
-        if (prompt_influence !== undefined) input.prompt_influence = prompt_influence;
+        // Suno has no duration parameter — fold the target length into the prompt
+        const prompt = duration_seconds !== undefined
+          ? `${text}, about ${Math.max(0.5, duration_seconds)} seconds long`
+          : text;
 
-        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/sound-effect-v2', input });
+        const result = await kieRequest('POST', '/api/v1/generate/sounds', { prompt, model: 'V5' });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start SFX generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
-        const pollResult = await pollTask(taskId, 60000);
-        const urls = extractResultUrls(pollResult);
-        if (urls.length === 0) return { content: [{ type: 'text', text: `SFX task ${taskId} done but no URLs found.` }] };
+        taskHistory.push({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        const pollResult = await pollSunoTask(taskId);
+        const sunoData = pollResult.sunoData || [];
+        if (!sunoData.length) return { content: [{ type: 'text', text: `SFX task ${taskId} done but no results.` }] };
 
-        await downloadToFile(urls[0], outPath);
-        return { content: [{ type: 'text', text: `✅ SFX generated!\nText: "${text}"\nDownloaded to: ${outPath}` }] };
+        const files = await downloadSunoTracks(sunoData, outFilename);
+        return { content: [{ type: 'text', text: `✅ SFX generated (via Suno V5)!\nText: "${text}"\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
       case 'generate_tts': {
@@ -4276,7 +4283,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.0.2', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.0.3', sessions: sessions.size }));
       return;
     }
 
