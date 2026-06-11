@@ -2,6 +2,17 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.0.3] — 2026-06-11
+
+### Fixed
+
+- **`generate_sfx` was completely broken** — kie.ai silently removed `elevenlabs/sound-effect-v2`. `createTask` still accepts the slug, but every generation fails server-side with `failCode: 500, "internal error, please try again later"` (0 credits consumed), and the model's docs page is gone from docs.kie.ai (other ElevenLabs pages remain). Verified 2026-06-11 with live probes including a minimal `{text}`-only request. `generate_sfx` now routes through Suno V5's sound generator (`/api/v1/generate/sounds`) — same tool name and input schema, so existing callers keep working. `duration_seconds` is folded into the prompt as a hint (Suno has no hard duration control); `prompt_influence` is accepted but ignored (no Suno equivalent). Pricing: 3 cr flat → 5 cr flat (`suno/generate-sounds`). For loop/BPM/key control, `generate_sounds` remains the richer interface.
+- **`generate_sounds` (and now `generate_sfx`) returned "done but no results" on success** — the sounds operation nests results under `data.response.sunoData`, but every handler reads `pollResult.sunoData` one level up. `pollSunoTask` now lifts `response.sunoData` to the top of the returned object on success, fixing all 14 call sites at once. Verified end-to-end over MCP stdio: `generate_sfx` → 2 valid 48 kHz MP3s downloaded in ~27s.
+
+### Known issues
+
+- **`generate_tts` without `voice_id` fails at task creation** — kie.ai now returns `422: voiceId cannot be empty`; the default-voice behavior the tool description promises no longer exists upstream. Tracked in #8.
+
 ## [4.0.2] — 2026-06-01
 
 Post-release patch pass. No new models — just bug fixes, validation hardening, accurate pricing, and Docker / docs hygiene.
