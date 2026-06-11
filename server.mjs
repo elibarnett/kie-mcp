@@ -13,6 +13,10 @@ const API_BASE = 'https://api.kie.ai';
 const API_KEY = process.env.KIE_API_KEY;
 const PROJECT_ROOT = process.env.KIE_PROJECT_ROOT || process.cwd();
 const RAW_DIR = join(PROJECT_ROOT, 'kie/assets/raw');
+// kie.ai rejects (some) Suno generation requests without a callBackUrl even
+// though results are equally available by polling. We poll, so the callback
+// only needs to exist as a field — set KIE_CALLBACK_URL to receive real ones.
+const SUNO_CALLBACK_URL = process.env.KIE_CALLBACK_URL || 'https://example.com/kie-mcp-callback';
 
 if (!API_KEY) {
   console.error('KIE_API_KEY environment variable is required');
@@ -2492,6 +2496,12 @@ async function kieRequest(method, path, body) {
   return json;
 }
 
+// All async Suno-family create endpoints go through here so the required
+// callBackUrl is always present; an explicit body.callBackUrl wins.
+function sunoCreate(path, body) {
+  return kieRequest('POST', path, { callBackUrl: SUNO_CALLBACK_URL, ...body });
+}
+
 // Veo upscale endpoints return non-standard kie codes during polling that would
 // cause kieRequest to throw mid-loop:
 //   - 1080p (GET get-1080p-video): code 500 while processing, code 200 + resultUrl on success
@@ -2689,7 +2699,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.0.3' };
+const SERVER_INFO = { name: 'kie-art', version: '4.0.4' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3655,7 +3665,7 @@ const handleCallTool = async (request) => {
         if (style) body.style = style;
         if (title) body.title = title;
 
-        const result = await kieRequest('POST', '/api/v1/generate', body);
+        const result = await sunoCreate('/api/v1/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start music generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
@@ -3696,7 +3706,7 @@ const handleCallTool = async (request) => {
           ? `${text}, about ${Math.max(0.5, duration_seconds)} seconds long`
           : text;
 
-        const result = await kieRequest('POST', '/api/v1/generate/sounds', { prompt, model: 'V5' });
+        const result = await sunoCreate('/api/v1/generate/sounds', { prompt, model: 'V5' });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start SFX generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
@@ -3788,7 +3798,7 @@ const handleCallTool = async (request) => {
         if (continueAt !== undefined) body.continueAt = continueAt;
         if (model) body.model = model;
         if (defaultParamFlag !== undefined) body.defaultParamFlag = defaultParamFlag;
-        const result = await kieRequest('POST', '/api/v1/generate/extend', body);
+        const result = await sunoCreate('/api/v1/generate/extend', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/extend', prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -3812,7 +3822,7 @@ const handleCallTool = async (request) => {
         if (title) body.title = title;
         if (negativeTags) body.negativeTags = negativeTags;
         if (vocalGender) body.vocalGender = vocalGender;
-        const result = await kieRequest('POST', '/api/v1/generate/upload-cover', body);
+        const result = await sunoCreate('/api/v1/generate/upload-cover', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/cover', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -3832,7 +3842,7 @@ const handleCallTool = async (request) => {
         if (tags) body.tags = tags;
         if (negativeTags) body.negativeTags = negativeTags;
         if (model) body.model = model;
-        const result = await kieRequest('POST', '/api/v1/generate/add-instrumental', body);
+        const result = await sunoCreate('/api/v1/generate/add-instrumental', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-instrumental', prompt: uploadUrl.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -3850,7 +3860,7 @@ const handleCallTool = async (request) => {
         if (style) body.style = style;
         if (negativeTags) body.negativeTags = negativeTags;
         if (model) body.model = model;
-        const result = await kieRequest('POST', '/api/v1/generate/add-vocals', body);
+        const result = await sunoCreate('/api/v1/generate/add-vocals', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-vocals', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -3868,7 +3878,7 @@ const handleCallTool = async (request) => {
         if (title) body.title = title;
         if (negativeTags) body.negativeTags = negativeTags;
         if (fullLyrics) body.fullLyrics = fullLyrics;
-        const result = await kieRequest('POST', '/api/v1/generate/replace-section', body);
+        const result = await sunoCreate('/api/v1/generate/replace-section', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/replace-section', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -3880,7 +3890,7 @@ const handleCallTool = async (request) => {
       case 'generate_lyrics': {
         const { prompt } = args;
         const body = { prompt: prompt.slice(0, 200) };
-        const result = await kieRequest('POST', '/api/v1/lyrics', body);
+        const result = await sunoCreate('/api/v1/lyrics', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const pollResult = await pollSunoTask(taskId, 60000);
@@ -3894,7 +3904,7 @@ const handleCallTool = async (request) => {
         const outFilename = filename || `wav-${ts}.wav`;
         const outPath = join(RAW_DIR, outFilename);
         const body = { taskId: origTaskId, audioId };
-        const result = await kieRequest('POST', '/api/v1/wav/generate', body);
+        const result = await sunoCreate('/api/v1/wav/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const pollResult = await pollSunoTask(taskId, 120000);
@@ -3909,7 +3919,7 @@ const handleCallTool = async (request) => {
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = filename || `stems-${ts}.mp3`;
         const body = { taskId: origTaskId, audioId, type: sepType };
-        const result = await kieRequest('POST', '/api/v1/vocal-removal/generate', body);
+        const result = await sunoCreate('/api/v1/vocal-removal/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const pollResult = await pollSunoTask(taskId, 120000);
@@ -3926,7 +3936,7 @@ const handleCallTool = async (request) => {
         const outPath = join(RAW_DIR, outFilename);
         const body = { taskId: origTaskId };
         if (audioId) body.audioId = audioId;
-        const result = await kieRequest('POST', '/api/v1/midi/generate', body);
+        const result = await sunoCreate('/api/v1/midi/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const pollResult = await pollSunoTask(taskId, 120000);
@@ -3944,7 +3954,7 @@ const handleCallTool = async (request) => {
         const body = { taskId: origTaskId, audioId };
         if (author) body.author = author;
         if (domainName) body.domainName = domainName;
-        const result = await kieRequest('POST', '/api/v1/mp4/generate', body);
+        const result = await sunoCreate('/api/v1/mp4/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const pollResult = await pollSunoTask(taskId, 300000);
@@ -3963,7 +3973,7 @@ const handleCallTool = async (request) => {
         if (soundTempo !== undefined) body.soundTempo = soundTempo;
         if (soundKey) body.soundKey = soundKey;
         if (grabLyrics !== undefined) body.grabLyrics = grabLyrics;
-        const result = await kieRequest('POST', '/api/v1/generate/sounds', body);
+        const result = await sunoCreate('/api/v1/generate/sounds', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -3982,7 +3992,7 @@ const handleCallTool = async (request) => {
         if (vocalStart !== undefined) body.vocalStart = vocalStart;
         if (vocalEnd !== undefined) body.vocalEnd = vocalEnd;
         if (style) body.style = style;
-        const result = await kieRequest('POST', '/api/v1/generate/generate-persona', body);
+        const result = await sunoCreate('/api/v1/generate/generate-persona', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const pollResult = await pollSunoTask(newTaskId, 120000);
@@ -3998,7 +4008,7 @@ const handleCallTool = async (request) => {
         if (taskId) body.taskId = taskId;
         if (prompt) body.prompt = prompt;
         if (model) body.model = model;
-        const result = await kieRequest('POST', '/api/v1/generate/mashup', body);
+        const result = await sunoCreate('/api/v1/generate/mashup', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/mashup', prompt: prompt?.slice(0, 80) || 'mashup', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -4026,7 +4036,7 @@ const handleCallTool = async (request) => {
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = filename || `cover-art-${ts}.png`;
         const outPath = join(RAW_DIR, outFilename);
-        const result = await kieRequest('POST', '/api/v1/suno/cover/generate', { taskId });
+        const result = await sunoCreate('/api/v1/suno/cover/generate', { taskId });
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const pollResult = await pollSunoTask(newTaskId, 120000);
@@ -4078,7 +4088,7 @@ const handleCallTool = async (request) => {
         if (style) body.style = style;
         if (title) body.title = title;
         if (instrumental !== undefined) body.instrumental = instrumental;
-        const result = await kieRequest('POST', '/api/v1/generate/upload-extend', body);
+        const result = await sunoCreate('/api/v1/generate/upload-extend', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/upload-extend', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
@@ -4283,7 +4293,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.0.3', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.0.4', sessions: sessions.size }));
       return;
     }
 

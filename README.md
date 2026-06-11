@@ -123,6 +123,7 @@ Configure your MCP client to use the resulting URL:
 | `KIE_API_KEY` | yes | Your kie.ai API key |
 | `KIE_PROJECT_ROOT` | no | Where generated files are saved (default: current working dir). Files go to `$KIE_PROJECT_ROOT/kie/assets/raw/` |
 | `KIE_MCP_PORT` | no | Port for HTTP mode (default: 3100) |
+| `KIE_CALLBACK_URL` | no | Callback URL sent with Suno generation requests (kie.ai requires the field; results are fetched by polling regardless). Defaults to an inert placeholder — set this only if you want to receive the callbacks yourself |
 
 ## Tools available
 
