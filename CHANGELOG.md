@@ -2,6 +2,16 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.0.6] — 2026-06-11
+
+### Fixed
+
+- **All 8 Sora tools failed with an opaque upstream error** — kie.ai has paused its entire Sora 2 family (`500: This interface is temporarily paused` on every sora-2 slug, verified 2026-06-11; likely ahead of OpenAI's Sept 24, 2026 API sunset). The registry entries now carry a `paused` flag: `generate_video` refuses paused models immediately with an explanation and alternatives (no API call), and `list_models` renders a `⏸ [PAUSED upstream — do not use]` marker so the model picker steers to Veo/Kling/Seedance. Sora recommendations removed from the `generate_video` tool description and README examples. Entries are kept (not deleted) in case kie un-pauses before the sunset.
+
+### Verified still healthy (docs pages moved, APIs fine)
+
+- `gpt4o` image, `flux-kontext-pro`/`max`, `ideogram/v3-reframe`, and the Kling 3.0 mapping (`kling-3/video` → `apiModel: kling-3.0/video`) were all confirmed live — no changes needed.
+
 ## [4.0.5] — 2026-06-11
 
 ### Fixed
