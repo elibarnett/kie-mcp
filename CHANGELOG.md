@@ -2,6 +2,38 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.1.0] — 2026-07-02
+
+New-model pass: 10 new registry entries covering the kie.ai models that landed June 2026, all researched in the house Averiguare style, with docs-scraped input schemas and empirical pricing where cheap enough to probe.
+
+### Added
+
+**Video (9 new entries in VIDEO_MODEL_REGISTRY):**
+
+- **HappyHorse 1.1** (`happyhorse-1-1/text-to-video`, `/image-to-video`, `/reference-to-video`) — Alibaba's June 22 successor to 1.0. Adds native synchronized audio with 7-language lip-sync, 9 aspect ratios, 3-15s durations, and R2V with up to 9 refs addressed as `[Image N]` in the prompt. #2 with-audio on Artificial Analysis (behind Seedance 2.0) — and note it does NOT beat 1.0 on silent T2V, so the 1.0 entries stay. Priced from kie's published rates (22.5 cr/s @720p, 29 cr/s @1080p default) — a premium over the 1.0 estimate.
+- **Kling 3.0 Turbo** (`kling/v3-turbo-text-to-video`, `/image-to-video`) — June 17 speed tier of Kling 3.0: keeps vCoT reasoning, 6-shot multi-shot, bundled audio + 5-language lip-sync; caps at 1080p. NOT a budget tier — 18 cr/s @720p / 22.5 @1080p sits above Kling 3.0 (12 cr/s).
+- **Seedance 2.0 Mini** (`bytedance/seedance-2-mini`) — ByteDance's budget 2.0 tier with the FULL multimodal ref stack (9 images + 3 videos + 3 audio), 480p/720p, 4-15s. 480p rate empirically confirmed: a 4s 480p clip consumed exactly 38.00 credits (9.5 cr/s); 720p published at 20.5 cr/s.
+- **Grok Imagine Video 1.5 preview** (`grok-imagine-video-1-5-preview`) — xAI Aurora engine, 1-15s, native synced audio, 720p max, #1 debut on I2V Arena. **Probed live: the preview snapshot is image-to-video ONLY** — `createTask` rejects any request without `image_urls` ("This field is required") even though kie's docs mark it nullable, so the entry carries `requiresImage: true`. 720p rate empirically confirmed at exactly 3 cr/s (12 credits for 4s); 480p published at 1.6 cr/s — cheapest with-audio video model in the registry.
+- **OmniHuman 1.5** (`omnihuman-1-5`) — ByteDance's audio-driven avatar model (image + audio ≤60s → full-body emotion-matched performance, per-character audio routing via masks). Premium at kie's published 27 cr/s.
+- **Volcengine Video Lip-Sync** (`volcengine/video-to-video-lip-sync`) — re-syncs the mouth of existing footage to new audio (dubbing/localization; video 3-350s, lite/basic modes). 8 cr/s published. No prompt — takes `video_url` + `audio_url` via `model_options`.
+
+**Image (2 new entries in MODEL_REGISTRY):**
+
+- **Nano Banana 2 Lite** (`nano-banana-2-lite`) — Gemini 3.1 Flash-Lite Image (June 30), ~4s generation, 1K-only, up to 10 input images, 15 aspect ratios. **Empirical pricing: exactly 4.00 credits per image — kie's site advertises 3 but the balance delta says 4**, which makes it the same price as nano-banana-2 on kie; the win is speed, not cost. Verified end-to-end over MCP stdio (14s round-trip).
+- **OmniHuman 1.5 Subject Detection** (`omnihuman-1-5/subject-detection`) — companion utility that returns mask images for up to 5 subjects; feed masks to `omnihuman-1-5` via `mask_url` for multi-person scenes. **Empirically FREE (creditsConsumed: 0)**, verified end-to-end (returns a grayscale PNG mask). The sibling `omnihuman-1-5/human-identification` endpoint was deliberately NOT added: it only pre-validates that an image is animatable, and OmniHuman itself fails fast with a clear error, so the pre-check adds a roundtrip without saving cost.
+
+### Fixed
+
+- `extractResultUrls` now understands `resultObject.mask_urls` (the subject-detection result shape) — without it the task succeeded but the tool reported "no result URLs".
+- `getCostEstimate` reports "free (0 credits)" for zero-priced models instead of falling through to "unknown".
+
+### Notes
+
+- All 10 slugs verified live against `POST /api/v1/jobs/createTask` (2026-07-02): 4 full generations (NB2 Lite, Grok 1.5, Seedance Mini, subject-detection ×2) plus zero-cost field-name probes for the expensive models (bad-enum and bogus-URL requests fail server-side with `creditsConsumed: 0`).
+- New per-second video entries are in `PRICING_ESTIMATED` because kie's rates vary by resolution (and for Seedance Mini by video-input presence) — the single PRICING number assumes each model's default config.
+- Sora entries untouched (paused upstream — see #18 / v4.0.6).
+- kie's new **Suno Voice API** (custom voice creation: generate / validate / regenerate / check-voice / record-info) was scoped out of this release to keep it reviewable — tracked in a follow-up issue.
+
 ## [4.0.6] — 2026-06-11
 
 ### Fixed
@@ -134,6 +166,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.1.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.0
 [4.0.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.2
 [4.0.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.1
 [4.0.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.0

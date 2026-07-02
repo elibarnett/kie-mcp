@@ -143,7 +143,9 @@ const PRICING = {
   'google/nano-banana': 4,
   'google/nano-banana-edit': 4,
   'nano-banana-2': 4,
+  'nano-banana-2-lite': 4,             // empirical 2026-07-02: one 1K gen consumed exactly 4.00 credits (kie's site advertises 3 — the balance delta says otherwise)
   'nano-banana-pro': 24,
+  'omnihuman-1-5/subject-detection': 0, // FREE — empirical 2026-07-02: creditsConsumed=0 on a live run
   'z-image': 3,
   'ideogram/character': 5,
   'ideogram/character-edit': 5,
@@ -239,6 +241,23 @@ const PRICING = {
   'happyhorse/image-to-video': 8,
   'happyhorse/reference-to-video': 8,
   'happyhorse/video-edit': 10,
+  // ── HappyHorse 1.1 (June 2026) — kie published: 22.5 cr/s @720p, 29 cr/s @1080p; default is 1080p ──
+  'happyhorse-1-1/text-to-video': 29,
+  'happyhorse-1-1/image-to-video': 29,
+  'happyhorse-1-1/reference-to-video': 29,
+  // ── Kling 3.0 Turbo (June 2026) — kie published: 18 cr/s @720p (default), 22.5 cr/s @1080p ──
+  'kling/v3-turbo-text-to-video': 18,
+  'kling/v3-turbo-image-to-video': 18,
+  // ── Seedance 2 Mini (June 2026) — kie published: 20.5 cr/s @720p (default) / 9.5 @480p, no video input; 12.5/6 with video input.
+  //    480p rate empirically confirmed 2026-07-02: one 4s 480p T2V consumed exactly 38.00 credits (9.5 cr/s). ──
+  'bytedance/seedance-2-mini': 20.5,
+  // ── Grok Imagine Video 1.5 preview (June 2026) — 3 cr/s @720p (default), 1.6 cr/s @480p.
+  //    720p rate empirically confirmed 2026-07-02: one 4s 720p I2V consumed exactly 12.00 credits (3 cr/s). ──
+  'grok-imagine-video-1-5-preview': 3,
+  // ── OmniHuman 1.5 — kie published: 27 cr/s (billed on output = audio length) ──
+  'omnihuman-1-5': 27,
+  // ── Volcengine lip-sync — kie published: 8 cr/s of generated video (follows audio duration) ──
+  'volcengine/video-to-video-lip-sync': 8,
   // ── Gemini Omni (Google, May 2026) ──
   'gemini-omni/video': 30,                // per second — estimated based on 4K capability
   'gemini-omni/voice-create': 5,          // flat per voice
@@ -291,6 +310,17 @@ const PRICING_ESTIMATED = new Set([
   'happyhorse/reference-to-video',
   'happyhorse/video-edit',
   'gemini-omni/video',
+  // v4.1.0 additions: kie publishes per-second rates for these, but the rate varies by
+  // resolution (and for seedance-2-mini by video-input presence) — the single number in
+  // PRICING assumes the default config, so flag it as an estimate.
+  'happyhorse-1-1/text-to-video',
+  'happyhorse-1-1/image-to-video',
+  'happyhorse-1-1/reference-to-video',
+  'kling/v3-turbo-text-to-video',
+  'kling/v3-turbo-image-to-video',
+  'bytedance/seedance-2-mini',
+  'grok-imagine-video-1-5-preview',
+  'omnihuman-1-5',
   'veo-3/text-to-video',
   'veo-3/image-to-video',
   'veo-3-fast/text-to-video',
@@ -304,6 +334,7 @@ const PRICING_ESTIMATED = new Set([
 
 function getCostEstimate(modelId, durationSec) {
   const perUnit = PRICING[modelId];
+  if (perUnit === 0) return 'free (0 credits)';
   if (!perUnit) return null;
   const note = PRICING_ESTIMATED.has(modelId) ? ' (estimate — pricing not officially disclosed)' : '';
   // Image models and flat-rate entries
@@ -719,6 +750,33 @@ const MODEL_REGISTRY = {
       const input = { prompt, aspect_ratio: aspectRatio, ...opts };
       if (imageUrls?.length) input.image_input = imageUrls;
       return input;
+    },
+  },
+  'nano-banana-2-lite': {
+    name: 'Nano Banana 2 Lite',
+    description: 'NEW (June 30, 2026) — Gemini 3.1 Flash-Lite Image. ~4s generation, 1K-only, 4 cr (empirical — kie advertises 3). The drafting/high-volume tier of the NB2 family; replaces the original Nano Banana.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'product-photography', 'latest', 'new', 'budget'],
+    research: { verdict: 'Google\'s speed/cost tier of the Nano Banana 2 family — officially Gemini 3.1 Flash-Lite Image, released June 30, 2026. Generates 1K-only images in ~4 seconds (roughly 2.7x faster than NB2) and surprisingly posts a higher reported T2I Arena Elo (1251) than Nano Banana Pro (1245) — though blind-preference Elo does not capture NB2\'s advantage on complex multi-object prompts, fine text, and high-res deliverables. Keeps the family\'s core strengths (prompt adherence, character consistency, in-image text, editing and multi-image composition in one call, SynthID watermark) but drops Search grounding, 2K/4K output, and async batch access. The 48-hours-post-launch verdict: an excellent drafting/high-volume tier and the official replacement for the original Nano Banana, but not a replacement for NB2 as the production default. Lite-specific data is still thin.', bestFor: ['high-volume, latency-sensitive pipelines: ad variants, e-commerce product images, social graphics at scale', 'fast visual drafting (4s round-trip) before finalizing on nano-banana-2 or Pro', 'real-time / interactive apps where 20s NB2 latency is too slow', 'prompt-based editing and multi-image composition on a budget', 'generating reference frames for image-to-video pipelines'], weaknesses: ['hard 1K resolution cap — no 2K/4K; unsuitable for print or large-format', 'weaker small-text rendering and infographic accuracy than NB2', 'no Google Search grounding', 'character-consistency wobbles across scene changes', 'complex edits (masked editing, major relighting) can produce artifacts', 'Lite-specific independent benchmarks scarce 2 days post-launch'], promptTechniques: ['family prompt style carries over: narrative paragraphs (Style + Subject + Setting + Action + Composition), not keyword lists', 'wrap desired in-image text in quotes and keep it LARGE — small text is the known failure mode', 'use as a draft loop: iterate cheaply, then re-run the winning prompt on nano-banana-2 at 2K/4K', 'keep compositions simple (1-2 subjects); route multi-character scenes to NB2/Pro', 'prefer simple global edits; avoid masked edits and dramatic relighting'], communityInsights: ['launch-day reception mixed: praised for speed/cost, questioned on quality-per-dollar (anecdotal, ~2 days old)', 'reported Arena Elo 1251 beats Nano Banana Pro (1245) in blind preference — provisional single-snapshot figure', 'Google positions it as the official successor to the original Nano Banana (gemini-2.5-flash-image): better, faster, cheaper', 'unverified single source: 88.2% usable-generation rate'], costEfficiency: 'Empirically 4 cr ($0.02) per 1K image (measured 2026-07-02 via balance delta — kie\'s site advertises 3 cr but the charge is 4). That is the SAME price as nano-banana-2, so on kie the economics are purely speed (~4s vs 3-20s), not cost. Still ~59% of Google\'s official $0.034.', comparedTo: { 'nano-banana-2': 'Same family, one tier down: ~4s vs 3-20s, 1K-only vs 4K, no Search grounding, weaker small text. NB2 stays the production default; Lite wins when latency or volume dominates.', 'nano-banana-pro': 'Pro (24 cr) wins every complex-composition and fine-detail test despite Lite\'s provisional Elo edge; opposite ends of the family.', 'z-image': 'z-image (3 cr) is the same price with no editing pedigree or text strength; Lite should beat it on prompt adherence and in-image text.', 'qwen/text-to-image': 'Qwen (3 cr) beats Lite on native 2K and CJK typography; Lite wins on speed, character consistency, and composition.' }, lastResearched: '2026-07-02', sources: ['https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-omni-flash-nano-banana-2-lite/', 'https://deepmind.google/models/gemini-image/flash-lite/', 'https://techcrunch.com/2026/06/30/google-introduces-a-faster-cheaper-image-generator-with-nano-banana-2-lite/', 'https://kie.ai/nano-banana-2-lite', 'https://www.buildfastwithai.com/blogs/nano-banana-2-lite-review-fastest-ai-image-generator-2026'] },
+    type: 'market',
+    maxPromptChars: 20000,
+    aspectRatios: ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9', 'auto'],
+    options: {},
+    buildInput(prompt, aspectRatio, imageUrls) {
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto' };
+      if (imageUrls?.length) input.image_urls = imageUrls.slice(0, 10);
+      return input;
+    },
+  },
+  'omnihuman-1-5/subject-detection': {
+    name: 'OmniHuman 1.5 Subject Detection',
+    description: 'FREE utility (creditsConsumed=0, verified live 2026-07-02) — detects up to 5 subjects in an image and returns mask images. Feed the masks to omnihuman-1-5 (mask_url) to control which subject speaks in multi-person scenes.',
+    capabilities: ['utility', 'mask', 'avatar-prep'],
+    research: { verdict: 'Companion utility for the OmniHuman 1.5 pipeline, mirroring BytePlus\'s official Subject Detection pre-step: pass a portrait image, get back mask images for each detected subject (up to 5). Functionally required for multi-person OmniHuman work — you pass the chosen mask(s) as mask_url in the omnihuman-1-5 call so the correct subject speaks. For single-person, front-facing portraits you can skip it entirely. kie also exposes omnihuman-1-5/human-identification (validates that an image contains a usable animatable subject before spending generation credits); we deliberately did not add a tool for it — OmniHuman itself fails fast with a clear error on unusable images, so the pre-check adds a roundtrip without saving meaningful cost.', bestFor: ['multi-person OmniHuman scenes: isolate each character, generate per-character clips with their audio', 'building conversation videos where different subjects speak in turn'], weaknesses: ['only useful as OmniHuman prep — not a general segmentation tool', 'image must be JPG/PNG ≤5MB, resolution under 4096x4096'], promptTechniques: ['no prompt needed — pass the portrait via image_urls', 'use a clear image where each subject is distinct'], communityInsights: ['mirrors the documented BytePlus Subject Recognition → Subject Detection → Video Generation workflow'], costEfficiency: 'FREE — a live run on 2026-07-02 reported creditsConsumed: 0. No reason not to use it before any multi-person OmniHuman generation.', comparedTo: { 'omnihuman-1-5': 'This is the prep step; omnihuman-1-5 consumes its mask output via mask_url.' }, lastResearched: '2026-07-02', sources: ['https://docs.kie.ai/market/omnihuman-1-5/subject-detection', 'https://docs.byteplus.com/en/docs/byteplus-vision/omnihuman1_5overview'] },
+    type: 'market',
+    requiresImage: true,
+    options: {},
+    buildInput(_prompt, _ar, imageUrls) {
+      return { image_url: imageUrls?.[0] };
     },
   },
   'nano-banana-pro': {
@@ -1461,6 +1519,41 @@ const VIDEO_MODEL_REGISTRY = {
     },
   },
 
+  'bytedance/seedance-2-mini': {
+    name: 'Seedance 2.0 Mini (ByteDance)',
+    description: 'NEW (June 2026) — budget Seedance 2.0 tier. Full multimodal ref stack (9 imgs + 3 vids + 3 audio), ~2x faster than 2.0 Fast at comparable quality; capped at 720p.',
+    capabilities: ['cinematic', 'audio', 'character', 'motion-control', 'music-video', 'lip-sync', 'multi-shot', 'latest', 'new', 'budget'],
+    research: { verdict: 'ByteDance\'s budget tier of the Seedance 2.0 family (June 2026, launched via Dreamina alongside the Volcano Engine 2026 announcements) — explicitly "a cheaper way to do the same jobs, not a stripped-down model." Keeps the full multimodal reference stack (text + up to 9 images + 3 videos ≤15s total + 3 audio files ≤15s total, plus first/last-frame control and native audio) but cuts resolution to 480p/720p, trims duration to 4-15s with a 5-12s sweet spot, and gives up top-end fidelity on complex motion and aggressive camera work. Third-party testing puts it at comparable-or-better quality than Seedance 2.0 Fast while generating ~2x faster — it effectively supersedes Fast for iteration and short-form. Mini-specific benchmark data is thin: no formal Arena Elo for Mini itself. The rational workflow: iterate cheap on Mini at 480p, re-render finals on Seedance 2.0.', bestFor: ['high-volume prompt iteration before re-rendering finals on seedance-2/text-to-video', 'short-form social content at 720p in the 5-12s range', 'anime and stylized work — testers found no obvious downgrade vs Standard/Fast', 'lip-sync/talking-head clips — native audio included in base price', 'character-consistent multi-shot storytelling using the full reference stack', 'e-commerce product image-to-video at scale'], weaknesses: ['capped at 720p — unusable for 1080p+ deliverables (Seedance 2.0 goes to 1080p-2K)', 'quality gap widens on complex motion, detailed subjects, aggressive camera movement', 'shorter max duration (~15s) vs Seedance 2.0\'s up to 60s', 'inherited Seedance 2.0 failure modes: identity drift, warped hands/text, multi-ref system takes practice', 'unverified single source: a 5s 720p clip took ~3 minutes — slower than marketing implies', 'at 720p no-video-input (20.5 cr/s) it is barely cheaper than Seedance 2 Fast (20 cr/s) — real savings are at 480p or with video inputs'], promptTechniques: ['prompts written for Seedance 2.0/Fast transfer directly — same interface and grammar', 'front-load: first 20-30 words lock subject and core action; style/lighting after', 'assign explicit jobs to each reference file — the model does not reliably infer roles', 'one strong reference beats five weak ones', 'for realism add "no 3D, no cartoon, no VFX"', 'draft at 480p with audio off to minimize credits', 'input caps: 9 images ≤30MB each; 3 videos ≤15s total ≤50MB each; 3 audio ≤15s total ≤15MB each'], communityInsights: ['reception dominated by SEO/reseller blogs; genuine Reddit/X sentiment for Mini specifically not found as of 2026-07 — treat as provisional', 'consensus across blogs: Mini largely supersedes Seedance 2.0 Fast (~2x faster, comparable-or-better quality)', 'unverified single source (APIMart): vs Kling 3.0 Fast — lip-sync/audio 8.8 vs 8.2, speed/stability 8.8 vs 6.9, >90% success rate', 'Seedance 2.5 (30s, 4K) announced June 23, 2026 and "coming soon" — may compress Mini\'s window at the top while cementing its budget role'], costEfficiency: 'kie.ai published: 480p = 9.5 cr/s ($0.0475) no-video / 6 cr/s with video input; 720p = 20.5 cr/s ($0.1025) no-video / 12.5 cr/s with video (with-video billed on input+output seconds). Real savings vs Seedance 2.0 (25 cr/s) are at 480p (~2.6x cheaper); plain 720p T2V is essentially Fast-priced — you buy speed, not a discount.', comparedTo: { 'seedance-2/text-to-video': 'Same multimodal stack, ~half the cost at 480p, but capped at 720p vs 1080p-2K and shorter clips. Mini to iterate, 2.0 for finals.', 'seedance-2-fast/text-to-video': 'Mini\'s direct victim: ~2x faster at comparable-or-better quality; Fast is now the legacy draft tier.', 'seedance/text-to-video': '1.5 Pro (8 cr/s) is still much cheaper per second but previous-gen: no full multimodal referencing. Mini is the cheapest way into the 2.0 architecture.', 'happyhorse-1-1/text-to-video': 'HappyHorse 1.1 has higher with-audio Elo and 7-language lip-sync but images-only refs; Mini\'s 480p tier is far cheaper for drafting.' }, lastResearched: '2026-07-02', sources: ['https://kie.ai/seedance-2-0-mini', 'https://www.atlascloud.ai/blog/guides/seedance-2-0-mini-performance-review', 'https://apimart.ai/blog/seedance-2-mini-vs-kling-3-0-fast-cheap-ai-video-api-comparison', 'https://www.xmk.com/seedance/blog/seedance-2-0-mini-guide', 'https://dreamina.capcut.com/seedance/seedance-2-0-mini-vs-seedance-2-0'] },
+    type: 'market',
+    apiModel: 'bytedance/seedance-2-mini',
+    maxPromptChars: 20000,
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'],
+    options: {
+      duration: { type: 'number', min: 4, max: 15, default: 5, description: 'Duration in seconds (4-15)' },
+      resolution: { type: 'string', enum: ['480p', '720p'], default: '720p', description: '480p is ~2x cheaper — use for drafts' },
+      generate_audio: { type: 'boolean', default: false, description: 'Generate native audio (increases cost)' },
+      first_frame_url: { type: 'string', description: 'Optional first frame image URL' },
+      last_frame_url: { type: 'string', description: 'Optional last frame image URL' },
+      reference_image_urls: { type: 'array', description: 'Up to 9 reference images for style/character' },
+      reference_video_urls: { type: 'array', description: 'Up to 3 reference videos (≤15s total) for motion/composition' },
+      reference_audio_urls: { type: 'array', description: 'Up to 3 reference audio files (≤15s total)' },
+      web_search: { type: 'boolean', default: false, description: 'Online search (T2V only)' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio, duration: opts.duration || 5, resolution: opts.resolution || '720p' };
+      if (opts.generate_audio) input.generate_audio = true;
+      if (opts.first_frame_url) input.first_frame_url = opts.first_frame_url;
+      else if (imageUrls?.[0]) input.first_frame_url = imageUrls[0];
+      if (opts.last_frame_url) input.last_frame_url = opts.last_frame_url;
+      if (opts.reference_image_urls) input.reference_image_urls = opts.reference_image_urls;
+      else if (imageUrls?.length > 1) input.reference_image_urls = imageUrls.slice(1);
+      if (opts.reference_video_urls) input.reference_video_urls = opts.reference_video_urls;
+      if (opts.reference_audio_urls) input.reference_audio_urls = opts.reference_audio_urls;
+      if (opts.web_search) input.web_search = true;
+      return input;
+    },
+  },
+
   // ── Seedance 1.5 (ByteDance — legacy) ──
   'seedance/text-to-video': {
     name: 'Seedance 1.5 Pro (ByteDance)',
@@ -1959,6 +2052,40 @@ const VIDEO_MODEL_REGISTRY = {
       return { prompt, input_urls: imageUrls, video_urls: opts.video_urls, mode: opts.mode || '720p', character_orientation: opts.character_orientation || 'image', background_source: opts.background_source || 'input_video' };
     },
   },
+  'kling/v3-turbo-text-to-video': {
+    name: 'Kling 3.0 Turbo T2V',
+    description: 'NEW (June 2026) — speed-optimized Kling 3.0 tier. Keeps vCoT reasoning, multi-shot (6 cuts), bundled audio + 5-language lip-sync; caps at 1080p. Faster queue, not a discount tier.',
+    capabilities: ['cinematic', 'audio', 'multi-shot', 'lip-sync', 'latest', 'new'],
+    research: { verdict: 'Released June 17, 2026 as Kuaishou\'s speed-optimized tier of the 3.0 generation, explicitly positioned as a "fast preview / rapid iteration" model. Keeps the headline 3.0 features — Visual Chain-of-Thought prompt reasoning, multi-shot up to 6 cuts, 3-15s durations, bundled audio with improved 5-language lip-sync — but caps output at 1080p (vs native 4K on full 3.0) and drops Motion Brush/storyboard tooling. Contrary to the 2.5-Turbo-means-cheap pattern, per-second pricing sits BETWEEN Kling 3.0 Standard and Pro — it is a latency play with audio bundled, not a budget tier. Too new for an Artificial Analysis Elo; quality claims rest on vendor copy. Best mental model: Kling 3.0-class output, faster queue, 1080p ceiling — draft on Turbo, finish hero shots on full 3.0.', bestFor: ['high-volume / fast-turnaround social and ad clips where queue speed matters more than 4K', 'dialogue and talking-head content — improved 5-language lip-sync with audio bundled in the price', 'multi-shot sequences (up to 6 shots, 3-15s) at 1080p without full 3.0 Pro rates', 'rapid preview passes before re-rendering finals on kling-3/video'], weaknesses: ['1080p ceiling — no native 4K', 'no Motion Brush or storyboard tooling', 'not the cheapest Kling — costs more per second than silent Kling 3.0 Standard', 'no published Arena Elo yet (released 2026-06-17)', '3.0-generation weaknesses presumably carry over: background boiling in foliage, occasional extra fingers, audio degrades with 3+ speakers, strict NSFW filter', '"faster" is asserted by Kuaishou but unquantified in every source consulted'], promptTechniques: ['multi-shot syntax: "shot <n>, <seconds>, <prompt>" — up to 6 shots, ~512 chars each; model auto-generates transitions', 'use the Kling 4-part formula: Subject + Action + Context + Style with concrete camera language', 'put dialogue in quotation marks to drive the lip-sync engine; specify speaker language', 'vCoT rewards complex multi-element prompts — describe scene logic, not mood words', 'draft on Turbo, re-render the winning prompt on kling-3/video for 4K'], communityInsights: ['genuine community reception essentially absent as of 2026-07 — all coverage is press releases and provider blogs', 'official launch framing is "fast video previews for rapid creative iteration"', 'unverified single source (Atlas Cloud): improved lip-sync removes "uncanny drift" in mouth tracking', 'unverified single source (EvoLink): at 720p Turbo bills ~33% more per second than silent standard 3.0 — measure cost per accepted clip'], costEfficiency: 'kie.ai published: 18 cr/s ($0.09) at 720p, 22.5 cr/s ($0.1125) at 1080p, audio included. More than Kling 3.0 (12 cr/s) — you pay for speed + bundled audio, not savings. Kling 2.5 Turbo (8 cr/s) remains ~40% cheaper for silent drafts. 15s max 1080p clip ≈ 338 cr (~$1.69).', comparedTo: { 'kling-3/video': 'Same generation but Turbo caps at 1080p vs 4K and drops the creative tooling; renders faster. Use Turbo for volume/dialogue/iteration, 3.0 for hero shots.', 'kling/v2-5-turbo-text-to-video': '2.5 Turbo is ~40% cheaper but has no audio, no multi-shot, no lip-sync, fixed 5/10s durations.', 'happyhorse-1-1/text-to-video': 'HappyHorse 1.1 leads on with-audio Arena Elo (~1150 vs Kling 3.0 Pro\'s 1105) and 7-language lip-sync; Kling Turbo counters with 6-shot sequencing at a similar rate.', 'veo-3-fast/text-to-video': 'Veo 3 Fast (21 cr/s) has better cinematic polish but 8s cap and no multi-shot; Turbo gives 15s and 6 shots at slightly less.' }, lastResearched: '2026-07-02', sources: ['https://www.atlascloud.ai/blog/guides/kling-3.0-turbo-vs-kling-3.0', 'https://evolink.ai/blog/kling-3-0-turbo-api-pricing-model-ids', 'https://www.imagine.art/blogs/kling-3-0-turbo-overview', 'https://kie.ai/kling-3-0-turbo', 'https://www.barchart.com/story/news/2548638/kling-3-0-turbo-released-kling-ai-brings-fast-video-previews-for-rapid-creative-iteration'] },
+    type: 'market',
+    apiModel: 'kling/v3-turbo-text-to-video',
+    maxPromptChars: 2500,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5, description: 'Duration in seconds (3-15), billed per second with 3s minimum' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '720p' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio || '16:9', duration: String(opts.duration || 5), resolution: opts.resolution || '720p' };
+    },
+  },
+  'kling/v3-turbo-image-to-video': {
+    name: 'Kling 3.0 Turbo I2V',
+    description: 'Kling 3.0 Turbo image-to-video — first-frame conditioning with bundled audio + lip-sync at 1080p max. Output aspect follows the input image.',
+    capabilities: ['cinematic', 'animation', 'image-to-video', 'audio', 'lip-sync', 'latest', 'new'],
+    research: { verdict: 'The I2V endpoint of Kling 3.0 Turbo: first-frame conditioning — prompt + single image (JPEG/PNG, ≤10MB) + duration + resolution, with output aspect ratio following the input image. Kling I2V has historically been the family\'s strongest mode for image fidelity, and Turbo brings the 3.0-generation vCoT reasoning and bundled audio to it at a faster queue. Multi-shot shot-syntax is documented only for the T2V endpoint. Same 1080p ceiling and pricing as Turbo T2V.', bestFor: ['animating stills with synchronized audio and lip-synced dialogue', 'fast iteration on image-anchored ad clips', 'talking-head content from a portrait keyframe', 'first-frame-controlled product animations'], weaknesses: ['single image only, no multi-reference', 'no aspect_ratio parameter — output follows the input image', 'multi-shot syntax not documented for I2V', 'same 1080p ceiling and carried-over 3.0-generation quirks as T2V'], promptTechniques: ['prompt for motion, camera, and audio context — not visual content (the image defines that)', 'put dialogue in quotes for the lip-sync engine', 'use clean, well-lit source images ≤10MB'], communityInsights: ['too new for independent I2V benchmarks — vendor claims only', 'Kling I2V historically strongest for image fidelity in the family'], costEfficiency: 'Same published rates as T2V: 18 cr/s at 720p, 22.5 cr/s at 1080p, audio included.', comparedTo: { 'kling/image-to-video': 'Kling 2.6 I2V (10 cr/s) is cheaper with audio; Turbo adds 3.0-generation reasoning, 15s durations, and faster queues.', 'happyhorse-1-1/image-to-video': 'HappyHorse 1.1 I2V has the higher with-audio Arena Elo (~1117, #2); Kling Turbo is cheaper at 720p (18 vs 22.5 cr/s).' }, lastResearched: '2026-07-02', sources: ['https://www.atlascloud.ai/blog/guides/kling-3.0-turbo-vs-kling-3.0', 'https://evolink.ai/blog/kling-3-0-turbo-api-pricing-model-ids', 'https://kie.ai/kling-3-0-turbo'] },
+    type: 'market',
+    apiModel: 'kling/v3-turbo-image-to-video',
+    maxPromptChars: 2500,
+    requiresImage: true,
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5, description: 'Duration in seconds (3-15), billed per second with 3s minimum' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '720p' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, image_urls: imageUrls.slice(0, 1), duration: String(opts.duration || 5), resolution: opts.resolution || '720p' };
+    },
+  },
   'kling/v2-1-standard': {
     name: 'Kling V2.1 Standard',
     description: 'Absolute budget option at 5 cr/s. 720p I2V only. Good enough for social media, not for client work.',
@@ -1982,6 +2109,30 @@ const VIDEO_MODEL_REGISTRY = {
   },
 
   // ── Grok Imagine ──
+  'grok-imagine-video-1-5-preview': {
+    name: 'Grok Imagine Video 1.5 (preview)',
+    description: 'NEW (June 2026) — xAI Aurora engine. Image-to-video ONLY in this preview snapshot (image_urls required despite docs marking it nullable — probed live 2026-07-02). 1-15s, native synced audio + lip-sync, 720p max. Debuted #1 on I2V Arena. Cheapest with-audio video model.',
+    capabilities: ['animation', 'audio', 'lip-sync', 'image-to-video', 'latest', 'new', 'budget'],
+    research: { verdict: 'Announced by xAI ~June 17, 2026 (kie serves the earlier 1-5-preview snapshot). A major step over Grok Imagine 1.0: moves to the Aurora autoregressive-MoE engine, stretches clips from ~6-10s to a flexible 1-15s, and generates video plus synchronized audio (lip-synced dialogue, SFX, music) in a single pass at up to 720p/24fps. Debuted #1 on the Image-to-Video Arena ahead of Sora 2, Veo 3.1, Seedance 2.0, and Kling in blind testing (exact Elo figures conflict across sources — treat as unverified). Remains the budget-speed play: trade-offs are a hard 720p ceiling, persistently weak fast-action/combat physics, contextual rather than reliably scriptable audio, and preview-snapshot caveats.', bestFor: ['image-to-video animation with synchronized native audio in one generation', 'fast, cheap short-form social clips (9:16 supported, 1-15s)', 'iterating draft variants at 480p/1.6 cr/s before re-rendering keepers at 720p', 'multi-shot sequences via extend-from-frame chaining', 'cost-conscious workflows where 720p is acceptable'], weaknesses: ['720p ceiling — well below Kling 3.0 and Veo upscale paths', 'fast action, combat, and complex physical interactions remain weak — no improvement over 1.0', 'audio is contextual, not fully scriptable — exact dialogue delivery is hit-or-miss', 'asset/identity drift in I2V: products and faces can change from the reference', 'community-reported moderation unpredictability', 'preview snapshot: single image input only, behavior/pricing may shift when xAI GAs 1.5'], promptTechniques: ['keep prompts ~30-60 words and front-load: Aurora renders sequentially, so put subject + primary action in the first sentence', 'five-part structure: subject/action → explicit camera move → atmosphere/lighting → audio direction → preservation language (for I2V identity)', 'always name a camera move (slow push-in, dolly, orbit, locked/static) — otherwise the model chooses for you', 'direct the audio in the prompt: add a "Sound:" section and put exact dialogue in quotes', 'for I2V the first frame is the biggest quality lever — keep the motion prompt short', 'one action beat per clip; chain extensions for longer narratives'], communityInsights: ['launch buzz heavy on X given the xAI integration; clips posted within an hour of Musk\'s wide-release post', '#1 debut on I2V Arena — Elo figures conflict across sources (1473 vs ~1330), treat specific numbers as unverified', 'Reddit split on scale of improvement — some found 1.5\'s internal scene cuts cinematic, others preferred 1.0\'s continuous single-take style', 'unverified single source: HappyHorse handles optical physics and spatial mirroring better in stress tests'], costEfficiency: 'kie.ai published: 1.6 cr/s (~$0.008) at 480p, 3 cr/s (~$0.015) at 720p — audio included. Max 15s 720p clip = 45 cr (~$0.23). xAI direct is $0.08/s (480p) / $0.14/s (720p), so the kie route is dramatically cheaper. Cheapest with-audio video model in this registry. Budget for retries — cost per accepted clip exceeds list rates once moderation retries are counted.', comparedTo: { 'grok-imagine/text-to-video': 'Same 3 cr/s at 720p but a real upgrade: Aurora engine, 1-15s flexible duration, far more natural single-pass audio, ~40% faster. Physics weakness carries over. Use 1.5 unless you need the old fixed 6s/10s quality modes.', 'veo-3-fast/text-to-video': 'Veo wins on prompt adherence and 1080p+ paths at 7x the price; Grok 1.5 beat Veo 3.1 in blind I2V arena testing.', 'kling/v3-turbo-text-to-video': 'Kling Turbo offers 1080p, multi-shot, and stronger lip-sync at 6-7x the cost; Grok 1.5 wins on price and speed.', 'bytedance/seedance-2-mini': 'Seedance Mini has the multimodal ref stack and 480p draft tier at 9.5 cr/s; Grok 1.5 at 1.6 cr/s (480p) is ~6x cheaper still, with weaker control.' }, lastResearched: '2026-07-02', sources: ['https://docs.kie.ai/market/grok-imagine/1-5-preview', 'https://kie.ai/grok-imagine-video-1.5', 'https://evolink.ai/blog/grok-imagine-video-1-5-preview-review', 'https://familypro.io/en/blog/grok-imagine-video-15-vs-10', 'https://the-decoder.com/xai-updates-grok-imagine-to-1-5-with-image-to-video-generation-at-720p-resolution/'] },
+    type: 'market',
+    apiModel: 'grok-imagine-video-1-5-preview',
+    maxPromptChars: 4096,
+    // Probed 2026-07-02: createTask returns "This field is required" unless image_urls
+    // has at least one entry — the preview snapshot is I2V-only even though the docs
+    // schema marks image_urls as nullable (T2V presumably arrives with the GA release).
+    requiresImage: true,
+    aspectRatios: ['1:1', '16:9', '9:16', '3:2', '2:3', 'auto'],
+    options: {
+      duration: { type: 'number', min: 1, max: 15, default: 8, description: 'Duration in seconds (1-15)' },
+      resolution: { type: 'string', enum: ['480p', '720p'], default: '720p', description: '480p is ~half price — use for drafts' },
+      nsfw_checker: { type: 'boolean', default: true, description: 'Content filtering (set false to disable kie-side filtering)' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto', duration: opts.duration || 8, resolution: opts.resolution || '720p', image_urls: imageUrls.slice(0, 1) };
+      if (opts.nsfw_checker === false) input.nsfw_checker = false;
+      return input;
+    },
+  },
   'grok-imagine/text-to-video': {
     name: 'Grok Imagine T2V',
     description: 'Grok video generation with quality modes',
@@ -2390,6 +2541,57 @@ const VIDEO_MODEL_REGISTRY = {
   },
 
   // ── HappyHorse 1.0 (NEW April 8, 2026 — appeared on Artificial Analysis as #1 in T2V/I2V) ──
+  'omnihuman-1-5': {
+    name: 'OmniHuman 1.5 (ByteDance)',
+    description: 'NEW — ByteDance audio-driven avatar: image + audio (≤60s) → full-body emotion-matched performance. Multi-person via masks from omnihuman-1-5/subject-detection. Premium at 27 cr/s.',
+    capabilities: ['avatar', 'lip-sync', 'character', 'animation', 'audio-driven', 'latest', 'new'],
+    research: { verdict: 'ByteDance\'s second-generation audio-driven human animation model (paper arXiv:2508.19209) and the current reference point for "semantic" avatar performance: a dual-system design pairs an MLLM planner with a Multimodal DiT so gestures and expressions follow the MEANING and emotion of the audio rather than just its rhythm. Versus OmniHuman-1 it adds text-prompt control, emotion-aware expression, meaning-correlated gestures, multi-person scenes with per-character audio routing via masks, 720p/1080p selection, and a fast mode. It is a performance/full-body-acting model more than a raw lip-sync specialist — one head-to-head found Kling AI Avatar slightly sharper on phoneme-level lip articulation while OmniHuman-1.5 was more stable and identity-preserving. At 27 cr/s it is one of the priciest per-second models here — reserve for hero avatar shots, not bulk dubbing (use volcengine/video-to-video-lip-sync for that).', bestFor: ['talking/singing/performing avatars from a single image + audio where full-body, emotion-matched acting matters', 'multi-character dialogue: separate audio tracks routed to specific people via subject-detection masks (up to 5)', 'longer single-take performances (audio up to 60s; ~15s per clip recommended)', 'identity-stable, smooth performances over exaggerated cartoon expressiveness', 'stylized/non-photoreal subjects — people, pets, anime'], weaknesses: ['lip-sync phoneme precision slightly behind Kling AI Avatar in a published head-to-head', 'high-energy audio (shouting, laughter) can over-exaggerate mouth shapes or briefly distort faces', 'expensive: 27 cr/s means a 60s clip ≈ 1620 cr (~$8.10)', 'multi-person is not automatic — requires the subject-detection utility to generate masks first', 'audio capped at <60s and 10MB; quality degrades past ~15s', 'prompt limited to zh/en/ja/ko/es/id, ≤1000 chars'], promptTechniques: ['the audio IS the main prompt: the model reads semantic content and vocal emotion — use expressive, clean recordings', 'use the optional text prompt to direct actions, emotional tone, and camera movement', 'for multi-person images, run omnihuman-1-5/subject-detection first, then pass mask_url values so the correct subject speaks', 'iterate with pe_fast_mode=true and output_resolution "720", re-render finals at "1080"', 'keep audio to ~15s per clip; avoid heavy face occlusion in the source image', 'set seed for reproducible takes'], communityInsights: ['reviewers describe the jump from 1.0 as gestures correlating "with meaning, not audio energy"', 'unverified single-source head-to-head (piapi.ai): Kling Avatar wins raw lip-sync accuracy; OmniHuman 1.5 wins emotional transitions and identity preservation', 'Hedra now hosts OmniHuman 1.5 as a selectable engine — competitors treat it as best-in-class for the niche', 'HeyGen\'s Avatar V tech report claims beating OmniHuman-1.5 — vendor benchmark, treat as marketing'], costEfficiency: 'kie.ai published: 27 cr/s (~$0.135) — billed on output video length (= audio length). Official BytePlus is $0.16/s, so kie is ~15% under. ~3.4x the cost of volcengine lip-sync (8 cr/s) and ~2.7x Kling Avatar Pro (10 cr/s) — the premium buys full-body semantic acting. Control cost with 720p + pe_fast_mode + short audio.', comparedTo: { 'kling/ai-avatar-pro': 'Kling slightly sharper phoneme-level lip-sync with more dramatic dynamics at 10 cr/s; OmniHuman smoother, more identity-stable, stronger full-body semantic acting and multi-person masking.', 'infinitalk/from-audio': 'Infinitalk (4 cr/s) is the budget talking-head; OmniHuman is the premium full-body performer at ~7x the price.', 'volcengine/video-to-video-lip-sync': 'Different task: Volcengine re-syncs the mouth of EXISTING footage at 8 cr/s; OmniHuman generates a whole new performance from a still image.', 'wan/speech-to-video': 'Wan S2V (3 cr/s) is far cheaper but generic; OmniHuman leads on emotional nuance and gesture semantics.' }, lastResearched: '2026-07-02', sources: ['https://omnihuman-lab.github.io/v1_5/', 'https://arxiv.org/abs/2508.19209', 'https://docs.byteplus.com/en/docs/byteplus-vision/omnihuman1_5overview', 'https://piapi.ai/blogs/omnihuman-1-5-vs-kling-ai-avatar', 'https://kie.ai/omnihuman-1-5'] },
+    type: 'market',
+    apiModel: 'omnihuman-1-5',
+    maxPromptChars: 1000,
+    requiresImage: true,
+    options: {
+      audio_url: { type: 'string', description: 'Audio URL to drive the avatar (<60s, ≤10MB; ~15s recommended). Required.' },
+      mask_url: { type: 'array', description: 'Optional mask image URL(s) from omnihuman-1-5/subject-detection — selects which subject speaks (up to 5)' },
+      output_resolution: { type: 'string', enum: ['720', '1080'], default: '1080' },
+      pe_fast_mode: { type: 'boolean', default: false, description: 'Fast mode — sacrifices some quality for speed' },
+      seed: { type: 'number', min: -1, max: 2147483647, description: '-1 = random; same positive seed reproduces results' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { image_url: imageUrls?.[0], audio_url: opts.audio_url, output_resolution: opts.output_resolution || '1080', pe_fast_mode: opts.pe_fast_mode || false };
+      if (prompt) input.prompt = prompt;
+      if (opts.mask_url) input.mask_url = opts.mask_url;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+  'volcengine/video-to-video-lip-sync': {
+    name: 'Volcengine Video Lip-Sync (ByteDance)',
+    description: 'NEW — re-syncs the mouth of EXISTING footage to new audio (dubbing/localization). Video 3-350s + pure-vocal audio. lite mode for frontal talking heads, basic for complex scenes. 8 cr/s.',
+    capabilities: ['lip-sync', 'video-to-video', 'editing', 'dubbing', 'latest', 'new'],
+    research: { verdict: 'Volcengine\'s 视频改口型 (Video Lip-Sync Reshaping) API from ByteDance\'s Intelligent Vision Service. Takes an existing single-person video plus a new pure-vocal audio file (audio only — no TTS-text input; chain generate_tts first) and re-renders the mouth region to match, preserving the original performance. Two tiers: "lite" for frontal talking-head footage (faster) and "basic" for single speakers in complex scenes with scene segmentation and speaker ID. Specs are well documented (3-350s video, 360p-1080p, strict face-angle limits) but independent quality benchmarks are essentially nonexistent in English — quality claims come from kie\'s marketing. Structurally a dubbing/localization tool, not an avatar generator: it only edits the mouth. Test on your own footage before committing.', bestFor: ['video dubbing/localization: re-syncing existing talking-head footage to translated or replacement audio without reshooting', 'long-form content — up to 350s input video and 240s driving audio per job (far beyond short avatar clips)', 'e-learning, corporate training, and creator content repurposed into other languages', 'Asian/tonal-language dubbing (Mandarin, JA, KO, Vietnamese, Bahasa) — claimed strength (vendor claim)', 'pipeline use: pair with generate_tts for text-driven dubbing'], weaknesses: ['single-person videos only; basic mode adds speaker ID but still targets one speaker', 'strict face-angle limits: yaw ≤30°, pitch ≤15°, roll ≤20°, hard fail beyond ±45° — profile shots and action footage will fail', 'no TTS/text input — must supply finished audio (≤10MB)', 'output is fixed MP4 at 25 fps regardless of source frame rate', 'output duration follows the audio, trimming or looping the video — long audio over short video makes awkward loops', 'zero independent quality reviews found — all claims are vendor marketing'], promptTechniques: ['no prompt — inputs are video_url + audio_url via model_options', 'shoot/select frontal single-speaker footage; keep head yaw under ~30°', 'feed clean vocals-only audio; if the track has music/noise set separate_vocal: true', 'use "basic" mode with open_scenedet for multi-shot videos so it segments scenes and finds the speaker', 'prep video to spec: MP4/MOV, H.264, 360p-1080p, 24-60 fps, ≤500MB, 3-350s', 'use align_audio (+align_audio_reverse for ping-pong) when audio outruns the video; templ_start_seconds picks where the template starts'], communityInsights: ['no meaningful English-language community discussion found as of 2026-07 — reception effectively undocumented outside vendor pages', 'kie case studies (university dubbing 200+ hrs of lectures at 70% cost reduction) are vendor marketing anecdotes', 'on Volcengine directly the concurrency limit is 1 request/account; kie claims higher but unverified'], costEfficiency: 'kie.ai published: 8 cr/s (~$0.04, ~$2.40/min) of generated video, mirroring Volcengine\'s direct China price (0.3 CNY/s). ~3.4x cheaper than OmniHuman 1.5 per second and comparable to sync.so Lipsync 2.0 Pro. Billing follows audio duration — a 4-minute dub ≈ 1920 cr (~$9.60).', comparedTo: { 'omnihuman-1-5': 'Different task: OmniHuman generates a new animated performance from a still image at 27 cr/s; Volcengine only edits the mouth of existing real footage at 8 cr/s — better for dubbing authenticity, useless for creating new footage.', 'kling/ai-avatar-pro': 'Kling Avatar is image-to-avatar-video; it does not re-sync your existing video. Community reports cite ~10s limits on Kling\'s lip-sync feature vs Volcengine\'s 350s input.', 'sora/watermark-remover': 'Unrelated but a reminder: this section of the registry is utility-shaped — Volcengine is production plumbing, not a creative model.' }, lastResearched: '2026-07-02', sources: ['https://kie.ai/volcengine-video-to-video-lip-sync', 'https://docs.kie.ai/market/volcengine/video-to-video-lip-sync', 'https://www.volcengine.com/docs/85128/1465367', 'https://fal.ai/models/fal-ai/sync-lipsync'] },
+    type: 'market',
+    apiModel: 'volcengine/video-to-video-lip-sync',
+    options: {
+      video_url: { type: 'string', description: 'Video to re-sync (MP4/MOV, H.264, 360p-1080p, 3-350s, ≤500MB). Required.' },
+      audio_url: { type: 'string', description: 'Pure vocal audio URL driving the lip movements (≤10MB). Required.' },
+      mode: { type: 'string', enum: ['lite', 'basic'], default: 'lite', description: 'lite = single-person frontal (faster); basic = complex scenes with scene segmentation + speaker ID' },
+      separate_vocal: { type: 'boolean', default: false, description: 'Run vocal separation to suppress background noise in the audio' },
+      open_scenedet: { type: 'boolean', default: false, description: 'Scene segmentation + speaker identification (basic mode only)' },
+      align_audio: { type: 'boolean', default: true, description: 'Loop the video when audio is longer than the video (lite mode)' },
+      align_audio_reverse: { type: 'boolean', default: false, description: 'Loop the video in reverse/ping-pong (lite mode, requires align_audio)' },
+      templ_start_seconds: { type: 'number', min: 0, description: 'Start time within the template video, in seconds (lite mode)' },
+    },
+    buildInput(_prompt, _ar, _imgs, opts) {
+      const input = { mode: opts.mode || 'lite', video_url: opts.video_url, audio_url: opts.audio_url };
+      if (opts.separate_vocal) input.separate_vocal = true;
+      if (opts.open_scenedet) input.open_scenedet = true;
+      if (opts.align_audio !== undefined) input.align_audio = opts.align_audio;
+      if (opts.align_audio_reverse) input.align_audio_reverse = true;
+      if (opts.templ_start_seconds !== undefined) input.templ_start_seconds = opts.templ_start_seconds;
+      return input;
+    },
+  },
   'happyhorse/text-to-video': {
     name: 'HappyHorse 1.0 T2V',
     description: 'Alibaba flagship — #1 on Artificial Analysis Arena T2V (Elo 1389, +118 over Seedance 2.0). 15B params, open-source, by Zhang Di (former Kling architect).',
@@ -2467,6 +2669,60 @@ const VIDEO_MODEL_REGISTRY = {
       if (opts.reference_image) input.reference_image = opts.reference_image;
       if (opts.seed !== undefined) input.seed = opts.seed;
       return input;
+    },
+  },
+
+  // ── HappyHorse 1.1 (NEW June 22, 2026 — production-focused successor to 1.0) ──
+  'happyhorse-1-1/text-to-video': {
+    name: 'HappyHorse 1.1 T2V',
+    description: 'HappyHorse 1.1 — adds native synchronized audio with 7-language lip-sync, 9 aspect ratios, smoother motion. #2 with-audio on Arena (behind Seedance 2.0).',
+    capabilities: ['cinematic', 'animation', 'audio', 'lip-sync', 'latest', 'new', 'alibaba'],
+    research: { verdict: 'Released June 22-23, 2026 by Alibaba ATH/Taotian. A production-focused upgrade rather than a quality leap: keeps the 15B unified single-stream transformer of 1.0 but adds native synchronized audio with 7-language lip-sync (EN, Mandarin, Cantonese, JA, KO, DE, FR), 3-15s durations, and markedly smoother motion with stronger subject consistency. On Artificial Analysis (late June 2026) it ranks #2 with-audio in T2V (Elo ~1150) — beating HappyHorse 1.0 and Kling 3.0 Pro on audio tracks but trailing Seedance 2.0 (~1219) everywhere that matters. On no-audio T2V it sits a hair BELOW 1.0 (1285 vs 1290) — choose 1.1 for audio/dialogue work, not for a raw silent-quality bump. Note the April-2026 #1 Elos cited for 1.0 (1389) no longer reflect the board — Seedance 2.0 has since taken the crown.', bestFor: ['multilingual talking-head, presenter, and short-drama content via native 7-language lip-sync', 'short-form social ads where synchronized dialogue, ambience, music, and Foley in a single pass beats a separate dubbing pipeline', 'physics-plausible motion (cloth drag, water displacement) inherited and improved from 1.0', 'branded content requiring identity preservation without re-rendering per language'], weaknesses: ['resolution capped at 1080p — Kling 3.0 and Seedance 2.0 offer higher tiers', 'clips limited to 3-15 seconds', 'voice rendering in extended dialogue can sound slightly unnatural', 'no audio INPUT — cannot feed an existing voiceover to sync to (most-requested missing feature)', 'trails Seedance 2.0 on every Artificial Analysis category', 'does not beat its own 1.0 on no-audio T2V Elo', 'promised open-source weight release from the 1.0 era still has not shipped'], promptTechniques: ['write detailed multi-element prompts covering subject, action, environment, lighting, mood, camera AND audio direction — 1.1 holds complex prompts together where 1.0 dropped elements', 'specify dialogue language explicitly to trigger the correct lip-sync track', 'prompt limit 5,000 non-Chinese / 2,500 Chinese characters, any language', 'iterate at 720p for cost, finalize at 1080p', 'download results promptly — kie result URLs expire after 24h'], communityInsights: ['consensus across reviews: 1.1 fixed the sluggish/stuttery fast-motion feel of 1.0 and shifted the story from benchmark wins to production reliability', 'most-cited differentiator: 9-image multi-reference PLUS native multilingual audio in one pipeline — no direct competitor matches both', 'unverified community report: vendor-reported 14.60% lip-sync word error rate across supported languages', 'Alibaba paired the launch with a global HorsePower AI filmmaking competition (prizes up to RMB 1M)', '1.1-specific field reports still thin as of 2026-07 — release is ~10 days old'], costEfficiency: 'kie.ai published: 22.5 cr/s ($0.1125) at 720p, 29 cr/s ($0.145) at 1080p. ~2.5-3.6x the old 1.0 estimate — this is a premium tier now. Native audio+lip-sync eliminates separate TTS/dubbing spend; track cost-per-approved-clip given retry rates in complex scenes.', comparedTo: { 'happyhorse/text-to-video': '1.1 adds native audio, 7-language lip-sync, 3-15s durations, smoother motion. Beats 1.0 decisively on with-audio Elo (~1150 vs 1124) but sits marginally below on no-audio T2V — silent-clip quality is essentially unchanged.', 'seedance-2/text-to-video': 'Seedance 2.0 leads every AA category (with-audio T2V 1219 vs ~1150) and has richer refs (9 img + 3 vid + 3 audio). HappyHorse 1.1 counters with native multilingual lip-sync in one pass, which Seedance lacks.', 'kling-3/video': 'HappyHorse 1.1 out-Elos Kling 3.0 Pro on with-audio T2V (~1150 vs 1105); Kling counters with 4K, multi-shot, and mature tooling.', 'veo-3/text-to-video': 'Current boards put Veo 3.1 at ~1094 with-audio T2V — HappyHorse 1.1 leads by ~55 points; Veo retains 4K upscale paths and ecosystem.' }, lastResearched: '2026-07-02', sources: ['https://technode.com/2026/06/23/alibaba-unveils-happyhorse-1-1-video-generation-model-launches-global-ai-filmmaking-competition/', 'https://www.cometapi.com/what-is-happyhorse-1-1-benchmarks-use-cases-limits-advise/', 'https://artificialanalysis.ai/video/leaderboard/text-to-video', 'https://www.atlascloud.ai/models/alibaba/happyhorse-1.1/text-to-video', 'https://kie.ai/happyhorse-1-1'] },
+    type: 'market',
+    apiModel: 'happyhorse-1-1/text-to-video',
+    maxPromptChars: 4999,
+    aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '4:5', '5:4', '9:21', '21:9'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5, description: 'Duration in seconds (3-15)' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio || '16:9', duration: opts.duration || 5, resolution: opts.resolution || '1080p' };
+    },
+  },
+  'happyhorse-1-1/image-to-video': {
+    name: 'HappyHorse 1.1 I2V',
+    description: 'HappyHorse 1.1 I2V — animates a first-frame image with native audio. Biggest with-audio Elo jump of the family (+28 over 1.0, ~1117, #2 on Arena).',
+    capabilities: ['cinematic', 'animation', 'image-to-video', 'audio', 'lip-sync', 'latest', 'new', 'alibaba'],
+    research: { verdict: 'The I2V endpoint animates stills while preserving character identity, visual style, and scene detail; 1.1 specifically improves motion quality, skin-texture realism, text-rendering stability, and cross-shot consistency. Biggest with-audio Elo jump of any 1.1 endpoint (+28 over 1.0, ~1117 — #2 on Arena behind Seedance 2.0 at 1195). Best HappyHorse endpoint for product shots and talking-head/presenter content built from a keyframe. Single first-frame image only — use reference-to-video for multi-ref work.', bestFor: ['animating product photography with cinematic motion + native sound', 'talking-head/presenter content built from a keyframe', 'hero image animation for ads and brand content', 'animating concept art with identity preservation'], weaknesses: ['single image only — no multi-reference (use happyhorse-1-1/reference-to-video)', 'no aspect_ratio control — output follows the input image', 'image constraints: ≥300px sides, aspect between 1:2.5 and 2.5:1, ≤20MB', 'same 1080p/15s ceiling and no-audio-input limitation as T2V'], promptTechniques: ['describe MOTION and audio, not visual content (the image provides that)', 'specify camera movement explicitly: "slow dolly-in", "orbit clockwise 30 degrees"', 'state what should NOT move', 'high-resolution sharp source images give dramatically better results'], communityInsights: ['image anchoring mitigates the family\'s text-rendering and hand-articulation weaknesses', 'reviewers cite I2V as the strongest 1.1 endpoint for commercial work'], costEfficiency: 'Same published rates as T2V: 22.5 cr/s at 720p, 29 cr/s at 1080p.', comparedTo: { 'happyhorse/image-to-video': '1.1 adds native audio + lip-sync and smoother motion; 1.0 remains cheaper (8 cr/s estimate) for silent clips.', 'seedance-2/text-to-video': 'Seedance with first_frame_url is the same I2V function with richer multimodal refs; HappyHorse 1.1 wins on native multilingual lip-sync.', 'kling/v3-turbo-image-to-video': 'Kling Turbo I2V is cheaper at 720p (18 cr/s) with multi-shot heritage; HappyHorse 1.1 has the higher with-audio Arena Elo.' }, lastResearched: '2026-07-02', sources: ['https://artificialanalysis.ai/video/leaderboard/image-to-video', 'https://www.cometapi.com/what-is-happyhorse-1-1-benchmarks-use-cases-limits-advise/', 'https://kie.ai/happyhorse-1-1'] },
+    type: 'market',
+    apiModel: 'happyhorse-1-1/image-to-video',
+    maxPromptChars: 5000,
+    requiresImage: true,
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5, description: 'Duration in seconds (3-15)' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, image_urls: imageUrls.slice(0, 1), duration: opts.duration || 5, resolution: opts.resolution || '1080p' };
+    },
+  },
+  'happyhorse-1-1/reference-to-video': {
+    name: 'HappyHorse 1.1 R2V',
+    description: 'HappyHorse 1.1 R2V — up to 9 reference images with [Image N] prompt addressing, native audio. The headline new capability of 1.1.',
+    capabilities: ['cinematic', 'animation', 'character', 'multi-reference', 'audio', 'lip-sync', 'latest', 'new', 'alibaba'],
+    research: { verdict: 'The headline new capability of 1.1: up to 9 reference images anchoring characters, environments, style palettes, or products — well beyond most competitors\' 1-2 image limits — combined with native multilingual audio in one pipeline. Reference each image as "[Image 1]".."[Image 9]" in the prompt, in upload order. Caveats: many references can create conflicting guidance, subjects can still drift in complex multi-character scenes, and no third-party benchmark isolates R2V quality yet.', bestFor: ['character-consistent series with multiple reference angles', 'e-commerce/product videos needing consistent products across shots', 'apparel and product placement with style + composition refs', 'branded content with per-language lip-synced dialogue reusing the same refs'], weaknesses: ['image references only — no video or audio refs (Seedance 2.0 has both)', 'many refs can introduce conflicting instructions — 3-5 is the practical sweet spot', 'subjects still drift in complex multi-character scenes', 'refs must be ≥400px shortest side, ≤20MB; blurry/compressed refs degrade output'], promptTechniques: ['address refs explicitly: "the woman in a red qipao in [Image 1]" — order must match the media array', 'specify the object in each referenced image, not just the index', 'keep refs at consistent lighting/style', 'describe relationships between references explicitly'], communityInsights: ['9-ref + native multilingual audio combination is the most-cited differentiator vs Seedance 2.0 and Kling', 'no third-party benchmark isolates R2V quality yet — too new'], costEfficiency: 'Same published rates as T2V: 22.5 cr/s at 720p, 29 cr/s at 1080p. Cheaper than Seedance 2.0 (25 cr/s at 720p) for image-only multi-ref work at 720p.', comparedTo: { 'happyhorse/reference-to-video': '1.0 R2V is the same shape without audio at a lower estimated rate; 1.1 adds lip-sync and [Image N] prompt addressing.', 'seedance-2/text-to-video': 'Seedance accepts 9 images + 3 videos + 3 audio refs; HappyHorse 1.1 R2V is images-only but adds native multilingual lip-sync.', 'gemini-omni/video': 'Gemini Omni takes 7 images + 3 audio + 1 video + character IDs up to 4K; HappyHorse 1.1 is cheaper and takes more images.' }, lastResearched: '2026-07-02', sources: ['https://www.cometapi.com/what-is-happyhorse-1-1-benchmarks-use-cases-limits-advise/', 'https://www.explainx.ai/blog/happyhorse-1-1-alibaba-video-generation-model-2026', 'https://kie.ai/happyhorse-1-1'] },
+    type: 'market',
+    apiModel: 'happyhorse-1-1/reference-to-video',
+    maxPromptChars: 5000,
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '3:4', '4:3', '4:5', '5:4', '1:1', '9:21', '21:9'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5, description: 'Duration in seconds (3-15)' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return { prompt, reference_image: imageUrls.slice(0, 9), aspect_ratio: aspectRatio || '16:9', duration: opts.duration || 5, resolution: opts.resolution || '1080p' };
     },
   },
 
@@ -2763,6 +3019,8 @@ function extractResultUrls(result) {
       const p = typeof result.resultJson === 'string' ? JSON.parse(result.resultJson) : result.resultJson;
       urls = p.resultUrls || p.result_urls || [];
       if (p.resultObject?.url) urls.push(p.resultObject.url);
+      // OmniHuman subject-detection returns resultObject.mask_urls
+      if (Array.isArray(p.resultObject?.mask_urls)) urls.push(...p.resultObject.mask_urls);
       if (p.url) urls.push(p.url);
       // Flux kontext returns originImageUrl/resultImageUrl
       if (p.resultImageUrl) urls.push(p.resultImageUrl);
@@ -2796,7 +3054,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.0.6' };
+const SERVER_INFO = { name: 'kie-art', version: '4.1.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2804,7 +3062,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai (45+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Anime→qwen (3cr cheapest). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -2888,7 +3146,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (66+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→wan/flash-image-to-video (2cr/s), wan/turbo (2cr/s). Budget cinematic→hailuo-standard (4cr/s) Image-to-video→veo-3/image-to-video, kling/image-to-video, wan/image-to-video. Lip sync/talking head→kling/ai-avatar-pro, infinitalk/from-audio. Motion control→kling/motion-control, wan/animate-move. Multi-scene→kling-3/video (multi-shot) Extend video→use veo_extend or runway_extend tools. Upscale→veo_upscale_1080p, veo_upscale_4k. Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (80+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (2cr/s). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p, NEW). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family is paused upstream by kie.ai (June 2026) — not usable. Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -4394,7 +4652,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.0.6', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.1.0', sessions: sessions.size }));
       return;
     }
 
