@@ -36,7 +36,7 @@ Just ask Claude things like:
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse 1.0** (NEW): T2V, I2V, R2V, Video Edit — #1 on Artificial Analysis Arena
 - **ByteDance Seedance**: 2.0 / 2.0 Fast / 1.5 Pro (T2V + I2V)
-- **OpenAI Sora 2**: T2V/I2V, Pro, Characters, Storyboard, Watermark Remover
+- **OpenAI Sora 2** ⏸: T2V/I2V, Pro, Characters, Storyboard, Watermark Remover — *paused upstream by kie.ai (June 2026); OpenAI sunsets the Sora API Sept 2026*
 - **Kuaishou Kling**: 3.0, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
 - **Alibaba Wan**: 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
 - **MiniMax Hailuo**: 2.3 Pro/Standard, 02 Pro/Standard
@@ -149,12 +149,12 @@ Try these queries in any MCP client:
 ```
 list_models filter="reasoning"          # GPT-4o, Nano Banana, GPT Image 2
 list_models filter="lip-sync"           # Kling Avatar, Infinitalk, Wan Speech
-list_models filter="multi-shot"         # Kling 3.0, Sora Storyboard
-list_models filter="cheapest video"     # Wan Flash, Sora 2 standard
+list_models filter="multi-shot"         # Kling 3.0
+list_models filter="cheapest video"     # Wan Flash, Wan Turbo
 list_models filter="alibaba"            # HappyHorse 1.0 family
 list_models filter="best visual quality" # Veo Quality, Seedance 2.0
 list_models filter="text rendering"     # Ideogram v3, GPT Image 2
-list_models filter="character"          # Sora Characters, Ideogram Character
+list_models filter="character"          # Ideogram Character, Kling AI Avatar
 ```
 
 ## Architecture

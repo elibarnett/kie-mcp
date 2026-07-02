@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.elibarnett/kie-mcp",
   "description": "MCP for kie.ai: 45+ image, 70+ video, 20+ audio models with model intelligence",
-  "version": "4.0.5",
+  "version": "4.0.6",
   "repository": {
     "url": "https://github.com/elibarnett/kie-mcp",
     "source": "github"
@@ -11,7 +11,7 @@
     {
       "registryType": "npm",
       "identifier": "kie-mcp",
-      "version": "4.0.5",
+      "version": "4.0.6",
       "transport": {
         "type": "stdio"
       },

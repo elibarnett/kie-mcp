@@ -1247,6 +1247,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'Best physics simulator in AI video and cheapest serious model at 3 cr/s. Native audio sync (coffee cups clink, footsteps match). Quality inconsistent — OpenAI acknowledged compute shortages. Text rendering ~5% readable. WARNING: Sora app shuts down April 26, 2026. API shuts down September 24, 2026. Dead-end for production pipelines.', bestFor: ['physics-heavy scenes (liquids, gravity, collisions)', 'rapid concept prototyping at low cost', 'short-form social media (5-10s)', 'scenes needing synchronized ambient audio'], weaknesses: ['text rendering almost completely broken', 'quality varies by server load', 'API shutting down September 2026', 'content moderation overly aggressive', 'character consistency drifts without Characters feature'], promptTechniques: ['structure: scene description, cinematography, actions, dialogue', 'use specific film terms: "medium close-up, shallow DoF, warm backlight"', 'break actions into countable beats', 'specify 3-5 anchor colors for palette', 'keep ONE camera move and ONE subject action per shot', 'generate 4s clips and stitch rather than 8s+'], communityInsights: ['Reddit: "7.5/10 tool trapped in 5/10 access system"', 'generate early morning US time (6-8 AM EST) for best quality', 'daily caps 7-15 clips depending on load', 'physics praised as comparable to Veo 3'], costEfficiency: 'Cheapest serious model at 3 cr/s. 10s clip costs ~/bin/zsh.15 via kie-art vs .00 official. Exceptional prototyping value.', comparedTo: { 'veo-3/text-to-video': 'Veo has better resolution and color grading. Sora has better physics and audio sync.', 'kling-3/video': 'Kling offers 4K/60fps and better humans. Sora has superior physics and audio sync.' }, lastResearched: '2026-04-19', sources: ['https://openai.com/index/sora-2/', 'https://the-decoder.com/openai-sets-two-stage-sora-shutdown-with-app-closing-april-2026-and-api-following-in-september/'] },
     type: 'market',
     apiModel: 'sora-2-text-to-video',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     aspectRatios: ['landscape', 'portrait', 'square'],
     options: {
       n_frames: { type: 'string', enum: ['10', '20'], default: '10', description: '10=short, 20=long' },
@@ -1268,6 +1269,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'Where Sora truly shines. Image anchoring locks composition and the physics engine produces the most realistic contact dynamics, cloth simulation, and secondary motion in the field. At 3 cr/s the cheapest I2V with native audio. Community rates I2V higher than T2V — reference images eliminate the lottery. API shutdown Sept 2026.', bestFor: ['animating product shots', 'bringing concept art to life', 'physics-heavy animations from statics', 'creating motion from AI-generated images'], weaknesses: ['input should match target resolution', 'character details drift after ~10s', 'multi-character scenes from single ref often fail', 'API shutting down Sept 2026'], promptTechniques: ['match input resolution to output target exactly', 'describe motion relative to image', 'specify what should NOT move', 'for products: describe camera orbit precisely'], communityInsights: ['I2V achieves 85-90% character consistency vs 70-80% prompting alone', 'best workflow: generate still with Flux/DALL-E, animate with Sora I2V', 'community rates I2V higher than T2V overall'], costEfficiency: '3 cr/s — same as T2V but better results due to image anchoring. Best value I2V available.', comparedTo: { 'veo-3/image-to-video': 'Veo has better polish; Sora has better physics and audio.', 'kling/image-to-video': 'Kling better for humans; Sora for objects and environments.' }, lastResearched: '2026-04-19', sources: ['https://wavespeed.ai/blog/posts/wan-2-7-vs-seedance-2-vs-sora-2-vs-veo-3-1-fast-image-to-video-comparison/'] },
     type: 'market',
     apiModel: 'sora-2-image-to-video',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     requiresImage: true,
     aspectRatios: ['landscape', 'portrait', 'square'],
     options: {
@@ -1290,6 +1292,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'The upgrade for client-facing work. 1080p, 25s max, sharper textures, handles abstract/metaphorical prompts ("time melting in cityscape"). 50% premium (4.5 vs 3 cr/s) justified when output directly impacts revenue. Workflow: iterate on standard, finalize on Pro. API shutdown Sept 2026.', bestFor: ['client-facing commercial content', 'complex multi-subject scenes (8-10s)', 'abstract/metaphorical prompts', 'fine texture detail: hair, water, fabric', 'longer-form content (15-25s)'], weaknesses: ['longer queue times', 'text rendering still broken', 'expensive for prototyping', 'API shutting down Sept 2026'], promptTechniques: ['Pro handles production terms: "180-degree shutter, 65mm photochemical contrast"', 'leverage for metaphorical prompts standard cant interpret', 'Pro sustains 3-4 dialogue exchanges vs standard 1-2'], communityInsights: ['agency workflow: 10 standard variants (/bin/zsh.15 each), pick best, regenerate as Pro (/bin/zsh.45)', 'quality difference most noticeable in texture and lighting'], costEfficiency: '4.5 cr/s — 50% premium worth ONLY for finals. Iterate on standard (3 cr/s), finalize on Pro.', comparedTo: { 'sora/text-to-video': 'Pro: 1080p, 25s, sharper. Standard: cheaper for prototyping.', 'veo-3/text-to-video': 'Veo edges Pro on color grading. Pro matches on physics, beats on audio sync.' }, lastResearched: '2026-04-19', sources: ['https://www.mindstudio.ai/blog/sora-2-vs-sora-2-pro-upgrade-worth-it'] },
     type: 'market',
     apiModel: 'sora-2-pro-text-to-video',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     aspectRatios: ['landscape', 'portrait', 'square'],
     options: {
       n_frames: { type: 'string', enum: ['10', '20'], default: '10' },
@@ -1312,6 +1315,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'Combines image anchoring with Pro-tier quality. 1080p with enhanced edge sharpness and physics simulation. Sweet spot for product commercials and brand hero animations where input image quality is already high. Iterate on standard I2V, finalize on Pro I2V. API shutdown Sept 2026.', bestFor: ['high-res product photo animation', 'cinematic concept art to motion', 'brand hero animations (fabric, glass, metal)', 'physics animations from reference (liquid pours, cloth draping)'], weaknesses: ['4.5 cr/s — expensive for iteration', 'Pro amplifies both good and bad source material', 'API shutting down Sept 2026'], promptTechniques: ['match input resolution to output exactly', 'describe micro-movements precisely', 'keep first 2s close to reference, then introduce motion'], communityInsights: ['Flux Ultra generates hero image + Sora Pro I2V animates — rivals traditional motion graphics', 'preferred model for product advertisers due to texture fidelity'], costEfficiency: '4.5 cr/s — justified when input image quality is high and output needs to be client-ready.', comparedTo: { 'sora/image-to-video': 'Pro: 1080p, sharper, handles complex motion longer. Standard: sufficient for prototyping.' }, lastResearched: '2026-04-19', sources: ['https://wavespeed.ai/blog/posts/wan-2-7-vs-seedance-2-vs-sora-2-vs-veo-3-1-fast-image-to-video-comparison/'] },
     type: 'market',
     apiModel: 'sora-2-pro-image-to-video',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     requiresImage: true,
     aspectRatios: ['landscape', 'portrait', 'square'],
     options: {
@@ -1333,6 +1337,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'Genuinely unique — no other model offers 95%+ persistent, reusable character identities. Cameo system extracts facial geometry, skin texture, body proportions from a 3-10s reference video, creating a character_id that persists indefinitely. Max 2 characters per generation. At 3 cr/s character consistency is essentially free. Transformative for serialized content. Being discontinued — API shutdown Sept 2026.', bestFor: ['serialized content with recurring characters', 'brand mascot animations', 'short narrative films with 1-2 characters', 'social media series with consistent AI persona'], weaknesses: ['max 2 characters per generation', 'consistency degrades after ~20s', 'face upload prohibited — must use Cameo video', 'clothing drifts between generations', 'API shutting down Sept 2026'], promptTechniques: ['create character bible — copy verbatim into every prompt', 'use @character1/@character2 syntax', 'specify clothing in EVERY prompt', 'for Cameo: neutral lighting, plain background, some head movement, 1080p+'], communityInsights: ['character_ids persist indefinitely', 'Cameo achieves 95%+ consistency vs 70-80% prompting alone', 'for 3+ characters, generate separately and composite in post', 'outperforms all competitors: Runway 75-85%, Kling 70-80%, Pika 65-75%'], costEfficiency: '3 cr/s — identical to standard T2V. Character consistency is essentially a free feature. Remarkable value.', comparedTo: { 'sora/text-to-video': 'Same price but with persistent character identity. Always use Characters when characters recur.', 'kling/text-to-video': 'Kling Face Lock only 70-80% vs Sora Characters 95%+.' }, lastResearched: '2026-04-19', sources: ['https://www.aifreeapi.com/en/posts/sora-2-character-consistency', 'https://help.apiyi.com/en/sora-2-character-api-tutorial-create-reusable-characters-en.html'] },
     type: 'market',
     apiModel: 'sora-2-characters',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     options: {
       timestamps: { type: 'string', description: 'Comma-separated timestamps (e.g. "3.55,5.55")' },
       character_user_name: { type: 'string', description: 'Character user name' },
@@ -1349,6 +1354,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: '95%+ character consistency + Pro visual quality (1080p, 25s, sharper textures). The model for professional narrative content: short films, brand campaigns with recurring spokespersons. Same 2-character limit. Character_ids created with standard work in Pro — no recreation needed. API shutdown Sept 2026.', bestFor: ['professional short films with recurring characters', 'brand campaigns with consistent spokesperson', 'narrative content needing both consistency and quality'], weaknesses: ['same 2-character max', 'same ~20s consistency ceiling', '4.5 cr/s expensive for iteration', 'API shutting down Sept 2026'], costEfficiency: '4.5 cr/s — justified for final renders of character content. Create/iterate with standard Characters (3 cr/s), render finals with Pro.', comparedTo: { 'sora/characters': 'Same system, Pro quality. Use standard for dev, Pro for delivery.' }, lastResearched: '2026-04-19', sources: ['https://www.aifreeapi.com/en/posts/sora-2-character-consistency'] },
     type: 'market',
     apiModel: 'sora-2-characters-pro',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     options: {
       origin_task_id: { type: 'string', description: 'Task ID of original video' },
       timestamps: { type: 'string', description: 'Comma-separated timestamps' },
@@ -1366,6 +1372,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'Removes "Made with Sora" watermark using AI detection and pixel reconstruction. Flat 10 credits regardless of length. Also strips C2PA metadata. Handles static and dynamic watermarks, preserves audio sync. Essentially a post-processing tax — mandatory for commercial Sora use. API shutdown Sept 2026.', bestFor: ['cleaning Sora videos for commercial use', 'client delivery', 'batch processing'], weaknesses: ['only for Sora content', 'adds processing time', 'API shutting down Sept 2026'], costEfficiency: 'Flat 10 cr — negligible overhead. Adds ~1 cr/s for 10s videos.', comparedTo: {}, lastResearched: '2026-04-19', sources: ['https://kie.ai/sora-2-watermark-remover'] },
     type: 'market',
     apiModel: 'sora-watermark-remover',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     options: {
       video_url: { type: 'string', description: 'Sora 2 video URL to remove watermark from' },
       upload_method: { type: 'string', enum: ['s3', 'oss'], default: 's3' },
@@ -2046,6 +2053,7 @@ const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'Genuinely unique — no other AI video model offers multi-scene keyframe control. Define up to 5 keyframes, each with own scene prompt, and model generates coherent video with auto transitions and maintained world state. Transformative for narrative content. At 6 cr/s the most expensive Sora model, 3-5x slower generation. 3-frame storyboards are sweet spot. Being discontinued — API shutdown Sept 2026.', bestFor: ['multi-scene narrative sequences', 'commercial storyboard animation', 'music video scene transitions', 'product walkthroughs with multiple angles', 'proof-of-concept animatics'], weaknesses: ['most expensive Sora at 6 cr/s', '3-5x slower generation', 'max 5 keyframes', 'character drift between keyframes', '4-5 frame storyboards have high failure rates', 'API shutting down Sept 2026'], promptTechniques: ['copy character descriptions VERBATIM across all keyframes', 'include camera directions per keyframe', 'start with 2-frame storyboards before attempting 3-5', 'write each keyframe 2-4 sentences minimum', 'describe transitions through action: "turns to face door" → "door opens revealing garden"'], communityInsights: ['praised as "most director-like control in any AI video tool"', 'combine with Characters for max consistency across keyframes', '3-frame storyboards are sweet spot — reliable without excessive generation time', 'some use Storyboard for rough cut, individual T2V/I2V for polish'], costEfficiency: '6 cr/s premium — 15s 3-keyframe storyboard costs 90 cr. Compare to 3 separate 5s T2V clips at 45 cr but losing continuity. 2x premium buys auto transitions and world state.', comparedTo: { 'sora-pro/text-to-video': 'Pro T2V is single shot. Storyboard is multi-scene. Different tools.', 'veo-3/text-to-video': 'Veo has no storyboard equivalent — Sora Storyboard is a genuine competitive moat.', 'kling-3/video': 'Kling 3.0 multi-shot is similar but less controllable than Sora Storyboard keyframes.' }, lastResearched: '2026-04-19', sources: ['https://soravideo.art/blog/sora-2-storyboard', 'https://filmora.wondershare.com/trending-topic/how-to-use-sora-2-storyboard.html'] },
     type: 'market',
     apiModel: 'sora-2-pro-storyboard',
+    paused: 'Paused upstream on kie.ai ("This interface is temporarily paused", observed 2026-06-11); OpenAI sunsets the Sora API Sept 24, 2026, so it may not return',
     aspectRatios: ['landscape', 'portrait', 'square'],
     options: {
       shots: { type: 'array', description: 'Array of scene objects {Scene: string, duration: number}, 1-10 scenes' },
@@ -2788,7 +2796,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.0.5' };
+const SERVER_INFO = { name: 'kie-art', version: '4.0.6' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2880,7 +2888,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (66+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→wan/flash-image-to-video (2cr/s), wan/turbo (2cr/s). Budget cinematic→sora/text-to-video (3cr/s), hailuo-standard (4cr/s). Image-to-video→veo-3/image-to-video, kling/image-to-video, wan/image-to-video. Lip sync/talking head→kling/ai-avatar-pro, infinitalk/from-audio. Motion control→kling/motion-control, wan/animate-move. Multi-scene→sora/storyboard. Extend video→use veo_extend or runway_extend tools. Upscale→veo_upscale_1080p, veo_upscale_4k. Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (66+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→wan/flash-image-to-video (2cr/s), wan/turbo (2cr/s). Budget cinematic→hailuo-standard (4cr/s) Image-to-video→veo-3/image-to-video, kling/image-to-video, wan/image-to-video. Lip sync/talking head→kling/ai-avatar-pro, infinitalk/from-audio. Motion control→kling/motion-control, wan/animate-move. Multi-scene→kling-3/video (multi-shot) Extend video→use veo_extend or runway_extend tools. Upscale→veo_upscale_1080p, veo_upscale_4k. Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -3549,6 +3557,7 @@ const handleCallTool = async (request) => {
 
         const formatEntries = (entries, isVideo = false) => entries.map(([id, m]) => {
           let line = `**${m.name}** — \`${id}\``;
+          if (m.paused) line += ' ⏸ [PAUSED upstream — do not use]';
           if (isVideo) line += ' [video]';
           if (m.requiresImage) line += ' [requires image]';
           const costPerUnit = PRICING[id] || PRICING[m.apiModel];
@@ -3697,6 +3706,9 @@ const handleCallTool = async (request) => {
         if (!modelDef) {
           const available = Object.keys(VIDEO_MODEL_REGISTRY).join(', ');
           return { content: [{ type: 'text', text: `Unknown video model "${modelId}". Available:\n${available}` }] };
+        }
+        if (modelDef.paused) {
+          return { content: [{ type: 'text', text: `⏸ ${modelDef.name} (${modelId}) is currently unavailable: ${modelDef.paused}. Pick an alternative with list_models — e.g. veo-3 (cinematic + audio), kling-3/video (multi-shot 4K), seedance-2 (creative control), wan/flash (cheapest).` }], isError: true };
         }
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls.` }] };
@@ -4382,7 +4394,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.0.5', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.0.6', sessions: sessions.size }));
       return;
     }
 
