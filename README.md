@@ -1,6 +1,6 @@
 # kie-mcp
 
-A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **45+ image models**, **70+ video models**, and **20+ audio tools** with deep model intelligence built in.
+A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **47+ image models**, **80+ video models**, and **20+ audio tools** with deep model intelligence built in.
 
 ## Why this exists
 
@@ -23,26 +23,27 @@ Just ask Claude things like:
 
 ## Model coverage
 
-### Image (45+)
+### Image (47+)
 - **OpenAI**: GPT Image 2 (NEW), GPT-4o Image, GPT Image 1.5
-- **Google**: Nano Banana 2 / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
+- **Google**: Nano Banana 2 / 2 Lite (NEW) / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
 - **Black Forest Labs**: Flux Kontext Pro/Max, Flux 2 Pro/Flex
 - **ByteDance**: Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
 - **Alibaba**: Wan 2.7 Image / Image Pro
 - **Ideogram**: v3, Character, Edit, Remix, Reframe
 - **Others**: Qwen/Qwen2, Z-Image, Grok Imagine, Recraft, Topaz
 
-### Video (70+)
+### Video (80+)
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
-- **Alibaba HappyHorse 1.0** (NEW): T2V, I2V, R2V, Video Edit — #1 on Artificial Analysis Arena
-- **ByteDance Seedance**: 2.0 / 2.0 Fast / 1.5 Pro (T2V + I2V)
+- **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
+- **ByteDance Seedance**: 2.0 / 2.0 Fast / 2.0 Mini (NEW) / 1.5 Pro
 - **OpenAI Sora 2** ⏸: T2V/I2V, Pro, Characters, Storyboard, Watermark Remover — *paused upstream by kie.ai (June 2026); OpenAI sunsets the Sora API Sept 2026*
-- **Kuaishou Kling**: 3.0, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
+- **Kuaishou Kling**: 3.0, 3.0 Turbo (NEW), 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
 - **Alibaba Wan**: 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
 - **MiniMax Hailuo**: 2.3 Pro/Standard, 02 Pro/Standard
-- **xAI Grok Imagine**: T2V, I2V, Upscale, Extend
+- **xAI Grok Imagine**: Video 1.5 preview (NEW — I2V with native audio, cheapest audio video), T2V, I2V, Upscale, Extend
+- **Avatar / lip-sync**: OmniHuman 1.5 (NEW — audio-driven full-body avatar + free subject-detection utility), Volcengine Video Lip-Sync (NEW — re-dub existing footage), Kling AI Avatar, Infinitalk
 - **Runway**: Aleph, Aleph Edit, Extend
-- **Others**: ByteDance V1 Pro/Lite, Topaz upscale, Infinitalk
+- **Others**: ByteDance V1 Pro/Lite, Topaz upscale
 
 ### Audio (20+)
 - **Suno**: Music Gen, Extend, Cover, Add Instrumental/Vocals, Replace Section, Lyrics, Sounds, Sound Effects, MIDI, Music Video, Cover Art, Mashup, Persona, Timestamped Lyrics, Boost Style, Vocal Separation, WAV
@@ -148,10 +149,10 @@ Try these queries in any MCP client:
 
 ```
 list_models filter="reasoning"          # GPT-4o, Nano Banana, GPT Image 2
-list_models filter="lip-sync"           # Kling Avatar, Infinitalk, Wan Speech
-list_models filter="multi-shot"         # Kling 3.0
-list_models filter="cheapest video"     # Wan Flash, Wan Turbo
-list_models filter="alibaba"            # HappyHorse 1.0 family
+list_models filter="lip-sync"           # OmniHuman 1.5, Volcengine, Kling Avatar, HappyHorse 1.1
+list_models filter="multi-shot"         # Kling 3.0/Turbo
+list_models filter="cheapest video"     # Grok Imagine 1.5, Wan Flash
+list_models filter="alibaba"            # HappyHorse 1.0/1.1 family
 list_models filter="best visual quality" # Veo Quality, Seedance 2.0
 list_models filter="text rendering"     # Ideogram v3, GPT Image 2
 list_models filter="character"          # Ideogram Character, Kling AI Avatar
@@ -162,8 +163,8 @@ list_models filter="character"          # Ideogram Character, Kling AI Avatar
 ```
 server.mjs                      # The whole server (~4000 lines)
 ├── PRICING                     # Credit cost per model
-├── MODEL_REGISTRY              # Image models (45+)
-├── VIDEO_MODEL_REGISTRY        # Video models (70+)
+├── MODEL_REGISTRY              # Image models (47+)
+├── VIDEO_MODEL_REGISTRY        # Video models (80+)
 ├── AUDIO_TOOLS_REGISTRY        # Audio tool metadata
 ├── createMcpServer()           # Factory for stdio + HTTP modes
 └── Tool handlers               # generate_*, list_*, etc.
