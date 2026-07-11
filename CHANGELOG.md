@@ -2,6 +2,22 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.3.0] — 2026-07-11
+
+Agent-feedback pass 4 (#24).
+
+### Added
+
+- **Per-call `download_dir` on all 23 file-writing tools.** Downloads previously always landed in the MCP server's cwd (`<server cwd>/kie/assets/raw/`) regardless of the caller's working directory — every worktree agent needed a copy step, and one stalled outright hunting for its file. Any tool with a `filename` parameter now also accepts `download_dir` (absolute path, created if missing); relative paths are rejected with an explanation, since "relative to what" is exactly the ambiguity that caused the bug. `KIE_PROJECT_ROOT` remains the server-wide default.
+
+### Fixed
+
+- **Path-traversal hygiene**: `filename` is now stripped to its basename everywhere (24 assignment sites + `download_result`) — `filename: "../../x.png"` can no longer write outside the target directory. Multi-take Suno downloads honor `download_dir` too (`downloadSunoTracks` takes an explicit output dir).
+
+### Verified
+
+- Live (2026-07-11, free subject-detection model): relative `download_dir` rejected with the explanatory error; absolute `download_dir` auto-created and used; `filename: "../../escape-attempt.png"` landed as `escape-attempt.png` INSIDE the target dir, nothing written outside.
+
 ## [4.2.1] — 2026-07-11
 
 Agent-feedback pass 3 (#23).
@@ -205,6 +221,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.3.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.0
 [4.2.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.1
 [4.2.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.0
 [4.1.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.1
