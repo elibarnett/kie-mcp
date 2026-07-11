@@ -3289,7 +3289,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.4.0' };
+const SERVER_INFO = { name: 'kie-art', version: '4.4.1' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3319,6 +3319,7 @@ const handleListTools = async () => ({
             items: { type: 'string' },
             description: 'Reference/input image URLs for image-to-image models',
           },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
           filename: {
             type: 'string',
             description: 'Output filename (saved to kie/assets/raw/). Auto-generated if omitted.',
@@ -3406,6 +3407,7 @@ const handleListTools = async () => ({
             items: { type: 'string' },
             description: 'Input image URLs for image-to-video models',
           },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
           filename: {
             type: 'string',
             description: 'Output filename (saved to kie/assets/raw/). Auto-generated if omitted.',
@@ -5049,7 +5051,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.4.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.4.1', sessions: sessions.size }));
       return;
     }
 
