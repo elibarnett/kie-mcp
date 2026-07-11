@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { join, basename, isAbsolute } from 'path';
 import { createServer } from 'http';
 import crypto from 'crypto';
 
@@ -113,6 +113,23 @@ if (!API_KEY) {
 }
 
 if (!existsSync(RAW_DIR)) mkdirSync(RAW_DIR, { recursive: true });
+
+// Per-call output directory (issue #24). The MCP server's cwd is not the
+// caller's — agents in other worktrees need downloads landing in THEIR tree.
+function resolveOutputDir(args) {
+  const dir = args?.download_dir;
+  if (!dir) return RAW_DIR;
+  if (typeof dir !== 'string' || !isAbsolute(dir)) {
+    throw new Error(`download_dir must be an absolute path (got ${JSON.stringify(dir)}). The MCP server's working directory is not the caller's, so a relative path is ambiguous — pass the full path.`);
+  }
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Strip any directory components a caller sneaks into filename (also blocks ../ traversal).
+function sanitizeFilename(name) {
+  return name == null ? name : basename(String(name));
+}
 
 // ─── Pricing Reference ───
 // 1 credit ≈ $0.005 USD. Costs are approximate and may vary with bulk discounts (10% bonus at high tiers).
@@ -3069,7 +3086,7 @@ async function fetchTaskRecord(taskId) {
 }
 
 // Helper to download Suno tracks from sunoData array
-async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3') {
+async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3', outDir = RAW_DIR) {
   // Split the caller's filename into base + extension no matter what shape it
   // arrived in. The old extension-replace regex was a no-op when the filename
   // didn't end in `.${ext}` (no extension, or a different one), which made
@@ -3084,7 +3101,7 @@ async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3') {
     const url = track.audioUrl || track.videoUrl || track.midiUrl || track.wavUrl;
     if (!url) continue;
     const trackName = i === 0 ? `${base}.${outExt}` : `${base}-${i + 1}.${outExt}`;
-    const trackPath = join(RAW_DIR, trackName);
+    const trackPath = join(outDir, trackName);
     if (existsSync(trackPath)) console.error(`[kie-mcp] overwriting existing file: ${trackPath}`);
     await downloadToFile(url, trackPath);
     downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration });
@@ -3134,7 +3151,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.2.1' };
+const SERVER_INFO = { name: 'kie-art', version: '4.3.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3217,6 +3234,7 @@ const handleListTools = async () => ({
         properties: {
           task_id: { type: 'string' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['task_id'],
       },
@@ -3291,6 +3309,7 @@ const handleListTools = async () => ({
           },
           title: { type: 'string', description: 'Track title (optional)' },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['prompt'],
       },
@@ -3316,6 +3335,7 @@ const handleListTools = async () => ({
             description: 'Deprecated — ignored (no Suno equivalent). Kept for backward compatibility.',
           },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['text'],
       },
@@ -3348,6 +3368,7 @@ const handleListTools = async () => ({
             description: 'Language code for multilingual-v2 (e.g. "en", "es", "fr", "ja")',
           },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['text'],
       },
@@ -3378,6 +3399,7 @@ const handleListTools = async () => ({
           },
           language_code: { type: 'string', description: 'Language code (e.g. "en")' },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['dialogue'],
       },
@@ -3390,6 +3412,7 @@ const handleListTools = async () => ({
         properties: {
           audio_url: { type: 'string', description: 'Audio URL to process (max 10MB)' },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['audio_url'],
       },
@@ -3409,6 +3432,7 @@ const handleListTools = async () => ({
           model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
           defaultParamFlag: { type: 'boolean', default: false, description: 'Use default params from original track' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['audioId', 'prompt'],
       },
@@ -3429,6 +3453,7 @@ const handleListTools = async () => ({
           negativeTags: { type: 'string', description: 'Tags to avoid in the cover' },
           vocalGender: { type: 'string', description: 'Vocal gender preference' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['uploadUrl'],
       },
@@ -3445,6 +3470,7 @@ const handleListTools = async () => ({
           negativeTags: { type: 'string' },
           model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['uploadUrl'],
       },
@@ -3462,6 +3488,7 @@ const handleListTools = async () => ({
           negativeTags: { type: 'string' },
           model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['prompt', 'uploadUrl'],
       },
@@ -3482,6 +3509,7 @@ const handleListTools = async () => ({
           negativeTags: { type: 'string' },
           fullLyrics: { type: 'string', description: 'Full lyrics for context' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['taskId', 'audioId', 'prompt', 'infillStartS', 'infillEndS'],
       },
@@ -3506,6 +3534,7 @@ const handleListTools = async () => ({
           taskId: { type: 'string', description: 'Task ID of the Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['taskId', 'audioId'],
       },
@@ -3520,6 +3549,7 @@ const handleListTools = async () => ({
           audioId: { type: 'string', description: 'Audio ID from sunoData' },
           type: { type: 'string', enum: ['separate_vocal', 'split_stem'], default: 'separate_vocal', description: 'separate_vocal=vocals+instrumental, split_stem=individual instruments' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['taskId', 'audioId'],
       },
@@ -3533,6 +3563,7 @@ const handleListTools = async () => ({
           taskId: { type: 'string', description: 'Task ID of the Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData (optional)' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['taskId'],
       },
@@ -3548,6 +3579,7 @@ const handleListTools = async () => ({
           author: { type: 'string', description: 'Author name for video credits' },
           domainName: { type: 'string', description: 'Domain name for video branding' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['taskId', 'audioId'],
       },
@@ -3567,6 +3599,7 @@ const handleListTools = async () => ({
           soundKey: { type: 'string', description: 'Musical key (e.g. "C", "Am")' },
           grabLyrics: { type: 'boolean', default: false },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['prompt'],
       },
@@ -3599,6 +3632,7 @@ const handleListTools = async () => ({
           prompt: { type: 'string', description: 'Optional prompt for mashup direction' },
           model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['audioIds'],
       },
@@ -3634,6 +3668,7 @@ const handleListTools = async () => ({
         properties: {
           taskId: { type: 'string', description: 'Suno task ID from a previous music generation' },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['taskId'],
       },
@@ -3690,6 +3725,7 @@ const handleListTools = async () => ({
           title: { type: 'string' },
           instrumental: { type: 'boolean', default: false },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['uploadUrl'],
       },
@@ -3734,6 +3770,7 @@ const handleListTools = async () => ({
           model: { type: 'string', enum: ['fast', 'quality', 'lite'], default: 'fast' },
           seeds: { type: 'number', description: 'Random seed (10000-99999) for variation control' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['task_id', 'prompt'],
       },
@@ -3747,6 +3784,7 @@ const handleListTools = async () => ({
           task_id: { type: 'string', description: 'Task ID from completed Veo generation' },
           index: { type: 'number', default: 0, description: 'Video index if multiple outputs' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['task_id'],
       },
@@ -3760,6 +3798,7 @@ const handleListTools = async () => ({
           task_id: { type: 'string', description: 'Task ID from completed Veo generation' },
           index: { type: 'number', default: 0, description: 'Video index if multiple outputs' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['task_id'],
       },
@@ -3775,6 +3814,7 @@ const handleListTools = async () => ({
           prompt: { type: 'string', description: 'Description of what happens in the extension' },
           quality: { type: 'string', enum: ['720p', '1080p'], default: '720p' },
           filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['task_id', 'prompt'],
       },
@@ -3806,8 +3846,8 @@ const handleCallTool = async (request) => {
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const safeModelName = modelId.replace(/\//g, '-');
-        const outFilename = filename || `${safeModelName}-${ts}.png`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `${safeModelName}-${ts}.png`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         let taskId;
 
@@ -3859,7 +3899,7 @@ const handleCallTool = async (request) => {
         // Download all results
         const downloadedFiles = [];
         for (let i = 0; i < resultUrls.length; i++) {
-          const path = i === 0 ? outPath : join(RAW_DIR, outFilename.replace(/\.png$/, `-${i + 1}.png`));
+          const path = i === 0 ? outPath : join(resolveOutputDir(args), outFilename.replace(/\.png$/, `-${i + 1}.png`));
           await downloadToFile(resultUrls[i], path);
           downloadedFiles.push(path);
         }
@@ -4038,8 +4078,8 @@ const handleCallTool = async (request) => {
           }
           const sunoData = data.sunoData || data.response?.sunoData;
           if (!sunoData?.length) return { content: [{ type: 'text', text: `Suno task ${args.task_id} succeeded but has no tracks.` }] };
-          const outName = args.filename || entry?.filename || `download-${args.task_id.slice(0, 8)}.mp3`;
-          const files = await downloadSunoTracks(sunoData, outName);
+          const outName = sanitizeFilename(args.filename) || entry?.filename || `download-${args.task_id.slice(0, 8)}.mp3`;
+          const files = await downloadSunoTracks(sunoData, outName, 'mp3', resolveOutputDir(args));
           return { content: [{ type: 'text', text: `Downloaded ${files.length} track(s):\n${files.map((f) => `  → ${f.file}`).join('\n')}` }] };
         }
         const state = data.state || (data.successFlag === 1 ? 'success' : data.successFlag >= 2 ? 'fail' : 'generating');
@@ -4051,8 +4091,8 @@ const handleCallTool = async (request) => {
           return { content: [{ type: 'text', text: `No result URLs for task ${args.task_id}` }] };
         }
         // Prefer the filename recorded when the task was created (right extension)
-        const outName = args.filename || entry?.filename || `download-${args.task_id.slice(0, 8)}.png`;
-        const outPath = join(RAW_DIR, outName);
+        const outName = sanitizeFilename(args.filename) || entry?.filename || `download-${args.task_id.slice(0, 8)}.png`;
+        const outPath = join(resolveOutputDir(args), outName);
         await downloadToFile(urls[0], outPath);
         if (entry) entry.status = 'success';
         return { content: [{ type: 'text', text: `Downloaded to: ${outPath}` }] };
@@ -4093,8 +4133,8 @@ const handleCallTool = async (request) => {
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const safeModelName = modelId.replace(/\//g, '-');
-        const outFilename = filename || `${safeModelName}-${ts}.mp4`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `${safeModelName}-${ts}.mp4`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         let taskId;
 
@@ -4134,7 +4174,7 @@ const handleCallTool = async (request) => {
         const { prompt, model = 'V5', instrumental = true, style, title, filename } = args;
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `music-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `music-${ts}.mp3`;
 
         const body = { prompt, model, customMode: false, instrumental };
         if (style) body.style = style;
@@ -4151,7 +4191,7 @@ const handleCallTool = async (request) => {
         const sunoData = pollResult.sunoData;
         if (!sunoData || sunoData.length === 0) return { content: [{ type: 'text', text: `Music task ${taskId} completed but no tracks returned.` }] };
 
-        const downloadedFiles = await downloadSunoTracks(sunoData, outFilename);
+        const downloadedFiles = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
 
         return {
           content: [{
@@ -4175,7 +4215,7 @@ const handleCallTool = async (request) => {
         const { text, duration_seconds, filename } = args;
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `sfx-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `sfx-${ts}.mp3`;
 
         // Suno has no duration parameter — fold the target length into the prompt
         const prompt = duration_seconds !== undefined
@@ -4192,7 +4232,7 @@ const handleCallTool = async (request) => {
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `SFX task ${taskId} done but no results.` }] };
 
-        const files = await downloadSunoTracks(sunoData, outFilename);
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ SFX generated (via Suno V5)!\nText: "${text}"\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
@@ -4200,8 +4240,8 @@ const handleCallTool = async (request) => {
         const { text, voice_id, model: ttsModel = 'turbo-2-5', speed, language_code, filename } = args;
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `tts-${ts}.mp3`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `tts-${ts}.mp3`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         const apiModel = ttsModel === 'multilingual-v2' ? 'elevenlabs/text-to-speech-multilingual-v2' : 'elevenlabs/text-to-speech-turbo-2-5';
         // kie.ai requires a voice (422 "voiceId cannot be empty" without one) despite docs claiming a server-side default
@@ -4227,8 +4267,8 @@ const handleCallTool = async (request) => {
         const { dialogue, stability, language_code, filename } = args;
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `dialogue-${ts}.mp3`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `dialogue-${ts}.mp3`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         const input = { dialogue: dialogue.map((line) => ({ ...line, voice: resolveVoice(line.voice) })) };
         if (stability !== undefined) input.stability = stability;
@@ -4252,8 +4292,8 @@ const handleCallTool = async (request) => {
         const { audio_url, filename } = args;
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `isolated-${ts}.mp3`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `isolated-${ts}.mp3`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/audio-isolation', input: { audio_url } });
         const taskId = result.data?.taskId || result.taskId;
@@ -4273,7 +4313,7 @@ const handleCallTool = async (request) => {
       case 'extend_music': {
         const { audioId, prompt, style, title, continueAt, model, defaultParamFlag, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `extend-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `extend-${ts}.mp3`;
         const body = { audioId, prompt };
         if (style) body.style = style;
         if (title) body.title = title;
@@ -4287,14 +4327,14 @@ const handleCallTool = async (request) => {
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Extend task ${taskId} completed but no tracks.` }] };
-        const files = await downloadSunoTracks(sunoData, outFilename);
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Music extended!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
       case 'cover_audio': {
         const { uploadUrl, prompt, customMode, instrumental, model, style, title, negativeTags, vocalGender, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `cover-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `cover-${ts}.mp3`;
         const body = { uploadUrl };
         if (prompt) body.prompt = prompt;
         if (customMode !== undefined) body.customMode = customMode;
@@ -4311,14 +4351,14 @@ const handleCallTool = async (request) => {
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Cover task ${taskId} completed but no tracks.` }] };
-        const files = await downloadSunoTracks(sunoData, outFilename);
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Audio cover created!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
       case 'add_instrumental': {
         const { uploadUrl, title, tags, negativeTags, model, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `instrumental-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `instrumental-${ts}.mp3`;
         const body = { uploadUrl };
         if (title) body.title = title;
         if (tags) body.tags = tags;
@@ -4329,14 +4369,14 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-instrumental', prompt: uploadUrl.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
-        const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename);
+        const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Instrumental added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
       case 'add_vocals': {
         const { prompt, uploadUrl, title, style, negativeTags, model, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `vocals-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `vocals-${ts}.mp3`;
         const body = { prompt, uploadUrl };
         if (title) body.title = title;
         if (style) body.style = style;
@@ -4347,14 +4387,14 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-vocals', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
-        const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename);
+        const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Vocals added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
       case 'replace_section': {
         const { taskId: origTaskId, audioId, prompt, infillStartS, infillEndS, tags, title, negativeTags, fullLyrics, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `replace-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `replace-${ts}.mp3`;
         const body = { taskId: origTaskId, audioId, prompt, infillStartS, infillEndS };
         if (tags) body.tags = tags;
         if (title) body.title = title;
@@ -4365,7 +4405,7 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/replace-section', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
-        const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename);
+        const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Section replaced!\nTask ID: ${taskId}\nRange: ${infillStartS}s-${infillEndS}s\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
@@ -4384,8 +4424,8 @@ const handleCallTool = async (request) => {
       case 'convert_to_wav': {
         const { taskId: origTaskId, audioId, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `wav-${ts}.wav`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `wav-${ts}.wav`;
+        const outPath = join(resolveOutputDir(args), outFilename);
         const body = { taskId: origTaskId, audioId };
         const result = await sunoCreate('/api/v1/wav/generate', body);
         const taskId = result.data?.taskId || result.taskId;
@@ -4401,7 +4441,7 @@ const handleCallTool = async (request) => {
       case 'separate_vocals': {
         const { taskId: origTaskId, audioId, type: sepType = 'separate_vocal', filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `stems-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `stems-${ts}.mp3`;
         const body = { taskId: origTaskId, audioId, type: sepType };
         const result = await sunoCreate('/api/v1/vocal-removal/generate', body);
         const taskId = result.data?.taskId || result.taskId;
@@ -4410,15 +4450,15 @@ const handleCallTool = async (request) => {
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Separation task ${taskId} done but no results.\n${JSON.stringify(pollResult)}` }] };
-        const files = await downloadSunoTracks(sunoData, outFilename);
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Vocals separated (${sepType})!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
       case 'generate_midi': {
         const { taskId: origTaskId, audioId, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `midi-${ts}.mid`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `midi-${ts}.mid`;
+        const outPath = join(resolveOutputDir(args), outFilename);
         const body = { taskId: origTaskId };
         if (audioId) body.audioId = audioId;
         const result = await sunoCreate('/api/v1/midi/generate', body);
@@ -4435,8 +4475,8 @@ const handleCallTool = async (request) => {
       case 'create_music_video': {
         const { taskId: origTaskId, audioId, author, domainName, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `musicvideo-${ts}.mp4`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `musicvideo-${ts}.mp4`;
+        const outPath = join(resolveOutputDir(args), outFilename);
         const body = { taskId: origTaskId, audioId };
         if (author) body.author = author;
         if (domainName) body.domainName = domainName;
@@ -4454,7 +4494,7 @@ const handleCallTool = async (request) => {
       case 'generate_sounds': {
         const { prompt, model = 'V5', soundLoop, soundTempo, soundKey, grabLyrics, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `sound-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `sound-${ts}.mp3`;
         const body = { prompt, model };
         if (soundLoop !== undefined) body.soundLoop = soundLoop;
         if (soundTempo !== undefined) body.soundTempo = soundTempo;
@@ -4468,7 +4508,7 @@ const handleCallTool = async (request) => {
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Sounds task ${taskId} done but no results.` }] };
-        const files = await downloadSunoTracks(sunoData, outFilename);
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Sound generated!\nTask ID: ${taskId}${soundLoop ? ' (loopable)' : ''}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
@@ -4492,7 +4532,7 @@ const handleCallTool = async (request) => {
       case 'generate_mashup': {
         const { taskId, audioIds, prompt, model, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `mashup-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `mashup-${ts}.mp3`;
         const body = { audioIds };
         if (taskId) body.taskId = taskId;
         if (prompt) body.prompt = prompt;
@@ -4504,7 +4544,7 @@ const handleCallTool = async (request) => {
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Mashup task ${newTaskId} done but no tracks.` }] };
-        const files = await downloadSunoTracks(sunoData, outFilename);
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Mashup created!\nTask ID: ${newTaskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
@@ -4523,8 +4563,8 @@ const handleCallTool = async (request) => {
       case 'generate_cover_art': {
         const { taskId, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `cover-art-${ts}.png`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `cover-art-${ts}.png`;
+        const outPath = join(resolveOutputDir(args), outFilename);
         const result = await sunoCreate('/api/v1/suno/cover/generate', { taskId });
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
@@ -4570,7 +4610,7 @@ const handleCallTool = async (request) => {
       case 'upload_extend_audio': {
         const { uploadUrl, prompt, continueAt, model, style, title, instrumental, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `upload-extend-${ts}.mp3`;
+        const outFilename = sanitizeFilename(filename) || `upload-extend-${ts}.mp3`;
         const body = { uploadUrl };
         if (prompt) body.prompt = prompt;
         if (continueAt !== undefined) body.continueAt = continueAt;
@@ -4585,7 +4625,7 @@ const handleCallTool = async (request) => {
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Extend task ${newTaskId} done but no tracks.` }] };
-        const files = await downloadSunoTracks(sunoData, outFilename);
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Audio extended!\nTask ID: ${newTaskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
@@ -4644,8 +4684,8 @@ const handleCallTool = async (request) => {
       case 'veo_extend': {
         const { task_id, prompt, model = 'fast', seeds, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `veo-extend-${ts}.mp4`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `veo-extend-${ts}.mp4`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         const body = { taskId: task_id, prompt, model };
         if (seeds !== undefined) body.seeds = seeds;
@@ -4667,8 +4707,8 @@ const handleCallTool = async (request) => {
       case 'veo_upscale_1080p': {
         const { task_id, index = 0, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `veo-1080p-${ts}.mp4`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `veo-1080p-${ts}.mp4`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         // 1080p uses GET; kie returns code 500 during processing (kieRequest would
         // throw), then code 200 + data.resultUrl on success. Use the tolerant fetch.
@@ -4690,8 +4730,8 @@ const handleCallTool = async (request) => {
       case 'veo_upscale_4k': {
         const { task_id, index = 0, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `veo-4k-${ts}.mp4`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `veo-4k-${ts}.mp4`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         // 4K uses POST; first call kicks off the upscale (billed immediately), then
         // every subsequent POST polls. kie returns code 422 with msg "...processing..."
@@ -4720,8 +4760,8 @@ const handleCallTool = async (request) => {
       case 'runway_extend': {
         const { task_id, prompt, quality = '720p', filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const outFilename = filename || `runway-extend-${ts}.mp4`;
-        const outPath = join(RAW_DIR, outFilename);
+        const outFilename = sanitizeFilename(filename) || `runway-extend-${ts}.mp4`;
+        const outPath = join(resolveOutputDir(args), outFilename);
 
         const body = { taskId: task_id, prompt, quality };
         const result = await kieRequest('POST', '/api/v1/runway/extend', body);
@@ -4805,7 +4845,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.2.1', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.3.0', sessions: sessions.size }));
       return;
     }
 
