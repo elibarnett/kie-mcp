@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.4.1] — 2026-07-11
+
+### Fixed
+
+- **`download_dir` was missing from the `generate_image` and `generate_video` tool schemas** — the 4.3.0 insertion matched only single-line `filename` schema declarations, and these two tools (the highest-traffic ones) declare `filename` as a multi-line block, so agents couldn't discover the parameter. The handlers already honored `download_dir` (verified live), so this is a discoverability fix, not a behavior change; both schemas now advertise it like the other 21 file-writing tools.
+
 ## [4.4.0] — 2026-07-11
 
 Agent-feedback pass 10 of 10 (#30) — closes out the July field-report batch.
@@ -310,6 +316,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.4.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.1
 [4.4.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.0
 [4.3.5]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.5
 [4.3.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.4
