@@ -125,6 +125,7 @@ Configure your MCP client to use the resulting URL:
 | `KIE_PROJECT_ROOT` | no | Where generated files are saved (default: current working dir). Files go to `$KIE_PROJECT_ROOT/kie/assets/raw/` |
 | `KIE_MCP_PORT` | no | Port for HTTP mode (default: 3100) |
 | `KIE_CALLBACK_URL` | no | Callback URL sent with Suno generation requests (kie.ai requires the field; results are fetched by polling regardless). Defaults to an inert placeholder — set this only if you want to receive the callbacks yourself |
+| `KIE_POLL_BUDGET_IMAGE` / `_VIDEO` / `_AUDIO` / `_SPEECH` | no | Blocking-mode polling budget per tool category, in seconds (defaults: 600 / 900 / 300 / 300). Per-call `max_wait_seconds` takes precedence. For long generations prefer `wait: false` (async mode): the tool returns the `task_id` immediately; poll with `check_task`, fetch with `download_result` |
 
 ## Tools available
 
