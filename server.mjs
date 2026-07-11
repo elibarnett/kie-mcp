@@ -349,6 +349,54 @@ const PRICING_ESTIMATED = new Set([
   'veo/4k',
 ]);
 
+
+// Prompt length caps per API slug, scraped from docs.kie.ai schema maxLength
+// fields on 2026-07-11 (issue #27) — kie rejects over-limit prompts with a
+// bare 422, so we enforce them client-side with a clear message instead.
+// Absent = docs state no limit; per-entry maxPromptChars (set inline in the
+// registry) takes precedence over this table. Only documented values here —
+// no guesses.
+const PROMPT_CAPS = {
+  // 800 — the tightest documented caps in the catalog
+  'qwen2/text-to-image': 800,
+  'qwen2/image-edit': 800,
+  'wan/2-5-text-to-video': 800,
+  'wan/2-5-image-to-video': 800,
+  // 1500
+  'hailuo/02-text-to-video-pro': 1500,
+  'hailuo/02-text-to-video-standard': 1500,
+  'hailuo/02-image-to-video-pro': 1500,
+  'hailuo/02-image-to-video-standard': 1500,
+  'wan/2-6-flash-image-to-video': 1500,
+  'wan/2-6-flash-video-to-video': 1500,
+  // 2000-3000
+  'qwen/image-edit': 2000,
+  'seedream/5-lite-text-to-image': 3000,
+  // 5000 — the common ceiling
+  'google/imagen4': 5000, 'google/imagen4-fast': 5000, 'google/imagen4-ultra': 5000,
+  'google/nano-banana': 5000, 'google/nano-banana-edit': 5000,
+  'ideogram/v3-text-to-image': 5000, 'ideogram/v3-edit': 5000, 'ideogram/v3-remix': 5000,
+  'ideogram/character': 5000, 'ideogram/character-edit': 5000, 'ideogram/character-remix': 5000,
+  'qwen/text-to-image': 5000, 'qwen/image-to-image': 5000,
+  'wan/2-7-image': 5000, 'wan/2-7-image-pro': 5000,
+  'wan/2-6-text-to-video': 5000, 'wan/2-6-image-to-video': 5000, 'wan/2-6-video-to-video': 5000,
+  'wan/2-7-text-to-video': 5000, 'wan/2-7-image-to-video': 5000, 'wan/2-7-videoedit': 5000, 'wan/2-7-r2v': 5000,
+  'wan/2-2-a14b-text-to-video-turbo': 5000, 'wan/2-2-a14b-image-to-video-turbo': 5000, 'wan/2-2-a14b-speech-to-video-turbo': 5000,
+  'hailuo/2-3-image-to-video-pro': 5000, 'hailuo/2-3-image-to-video-standard': 5000,
+  'kling/v2-1-standard': 5000, 'kling/v2-1-pro': 5000,
+  'kling/v2-1-master-text-to-video': 5000, 'kling/v2-1-master-image-to-video': 5000,
+  'kling/ai-avatar-standard': 5000, 'kling/ai-avatar-pro': 5000,
+  'infinitalk/from-audio': 5000,
+  'happyhorse/text-to-video': 5000, 'happyhorse/image-to-video': 5000,
+  'happyhorse/reference-to-video': 5000, 'happyhorse/video-edit': 5000,
+  'grok-imagine/text-to-video': 5000, // stated in prose, not schema
+  // 10000+
+  'bytedance/v1-pro-text-to-video': 10000, 'bytedance/v1-pro-image-to-video': 10000,
+  'bytedance/v1-pro-fast-image-to-video': 10000,
+  'bytedance/v1-lite-text-to-video': 10000, 'bytedance/v1-lite-image-to-video': 10000,
+  'bytedance/seedance-2': 20000, 'bytedance/seedance-2-fast': 20000,
+};
+
 function getCostEstimate(modelId, durationSec) {
   const perUnit = PRICING[modelId];
   if (perUnit === 0) return 'free (0 credits)';
@@ -366,12 +414,14 @@ function getCostEstimate(modelId, durationSec) {
 // Runs the cheap checks the MCP SDK's low-level Server doesn't enforce: aspectRatios
 // membership, options-level enum / min / max, and per-model prompt length caps
 // (`modelDef.maxPromptChars`). Keeps API roundtrips for real failures.
-function validateModelOptions(modelDef, args, model_options) {
+function validateModelOptions(modelDef, args, model_options, modelId) {
   if (modelDef.aspectRatios?.length && args.aspect_ratio && !modelDef.aspectRatios.includes(args.aspect_ratio)) {
     return `aspect_ratio "${args.aspect_ratio}" not supported by this model. Allowed: ${modelDef.aspectRatios.join(', ')}`;
   }
-  if (modelDef.maxPromptChars && typeof args.prompt === 'string' && args.prompt.length > modelDef.maxPromptChars) {
-    return `prompt exceeds max ${modelDef.maxPromptChars} chars (got ${args.prompt.length})`;
+  // Entries without an explicit apiModel use their registry key as the API slug
+  const promptCap = modelDef.maxPromptChars ?? PROMPT_CAPS[modelDef.apiModel] ?? PROMPT_CAPS[modelId];
+  if (promptCap && typeof args.prompt === 'string' && args.prompt.length > promptCap) {
+    return `prompt exceeds this model's documented max of ${promptCap} chars (got ${args.prompt.length}) — kie.ai would reject it with a bare 422. Shorten the prompt or pick a model with a higher cap (seedance-2 family takes 20000).`;
   }
   const opts = modelDef.options || {};
   for (const [k, spec] of Object.entries(opts)) {
@@ -3200,7 +3250,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.3.2' };
+const SERVER_INFO = { name: 'kie-art', version: '4.3.3' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3889,7 +3939,7 @@ const handleCallTool = async (request) => {
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls (image-to-image model).` }] };
         }
-        const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options);
+        const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options, modelId);
         if (validationError) {
           return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${validationError}` }] };
         }
@@ -4176,7 +4226,7 @@ const handleCallTool = async (request) => {
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls.` }] };
         }
-        const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options);
+        const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options, modelId);
         if (validationError) {
           return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${validationError}` }] };
         }
@@ -4925,7 +4975,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.3.2', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.3.3', sessions: sessions.size }));
       return;
     }
 
