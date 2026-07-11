@@ -328,6 +328,10 @@ The MCP went through 4 major internal iterations before this release:
 [4.2.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.0
 [4.1.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.1
 [4.1.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.0
+[4.0.6]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.6
+[4.0.5]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.5
+[4.0.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.4
+[4.0.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.3
 [4.0.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.2
 [4.0.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.1
 [4.0.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.0

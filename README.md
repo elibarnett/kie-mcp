@@ -178,6 +178,18 @@ Each model entry has:
 - `buildBody` / `buildInput` (request builders)
 - **`research`** (Averiguare verdicts, prompt techniques, weaknesses, comparisons, sources)
 
+## Releasing
+
+Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). To cut a release:
+
+1. Bump the version in `package.json`, `server.json` (both the top-level `version` and `packages[0].version`), and `server.mjs` (`SERVER_INFO` + the `/health` handler), and add a `## [X.Y.Z]` section to `CHANGELOG.md`. Merge to `main`.
+2. Tag and push:
+   ```bash
+   git tag vX.Y.Z && git push origin vX.Y.Z
+   ```
+
+The workflow verifies the tag matches every in-repo version string, publishes to npm with provenance (`NPM_TOKEN` repo secret), and creates the GitHub Release using the matching CHANGELOG section as the notes. A tag whose version doesn't match the code fails fast without publishing. `workflow_dispatch` is an emergency manual publish of the current `package.json` version.
+
 ## Credits
 
 - Built with the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
