@@ -2921,6 +2921,16 @@ async function pollOnce(method, path) {
   }
 }
 
+// Tag an error with the task it belongs to so the top-level handler can append
+// recovery guidance. stillRunning=true means the task was NOT observed to fail —
+// it likely completes upstream (and is billed), so callers must poll, not re-submit.
+function taskError(message, taskId, stillRunning = false) {
+  const err = new Error(message);
+  err.taskId = taskId;
+  err.taskStillRunning = stillRunning;
+  return err;
+}
+
 async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
   const dedicatedEndpoint = modelId && getPollEndpoint(modelId);
   const start = Date.now();
@@ -2952,13 +2962,13 @@ async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
             return normalized;
           }
           if (data.successFlag >= 2) {
-            throw new Error(`Task failed (flag=${data.successFlag}): ${data.errorMessage || data.failMsg || 'Unknown'}`);
+            throw taskError(`Task failed (flag=${data.successFlag}): ${data.errorMessage || data.failMsg || 'Unknown'}`, taskId);
           }
         }
         // state-based models: Runway (same format as market models)
         else if (data.state) {
           if (data.state === 'success') return data;
-          if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
+          if (data.state === 'fail') throw taskError(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`, taskId);
         }
       }
     } else {
@@ -2967,12 +2977,12 @@ async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
       if (result) {
         const data = result.data || result;
         if (data.state === 'success') return data;
-        if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
+        if (data.state === 'fail') throw taskError(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`, taskId);
       }
     }
     await new Promise((r) => setTimeout(r, 3000));
   }
-  throw new Error(`Task ${taskId} timed out after ${maxWaitMs / 1000}s`);
+  throw taskError(`Task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
 }
 
 // Shared Suno polling — all Suno endpoints use the same poll pattern
@@ -2989,12 +2999,45 @@ async function pollSunoTask(taskId, maxWaitMs = 300000) {
         return d;
       }
       if (d.status === 'CREATE_TASK_FAILED' || d.status === 'GENERATE_AUDIO_FAILED')
-        throw new Error(`Suno task failed: ${d.errorMessage || d.status}`);
-      if (d.status === 'SENSITIVE_WORD_ERROR') throw new Error('Content filtered by Suno.');
+        throw taskError(`Suno task failed: ${d.errorMessage || d.status}`, taskId);
+      if (d.status === 'SENSITIVE_WORD_ERROR') throw taskError('Content filtered by Suno.', taskId);
     }
     await new Promise((r) => setTimeout(r, 4000));
   }
-  throw new Error(`Suno task ${taskId} timed out after ${maxWaitMs / 1000}s`);
+  throw taskError(`Suno task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
+}
+
+// Resolve a task record regardless of which API family created it.
+// Tries the endpoint implied by taskHistory first, then falls back through
+// market (/jobs/recordInfo) and Suno (/generate/record-info). Needed so
+// check_task / download_result work as the recovery path for ALL tools
+// (Suno tasks are invisible to /jobs/recordInfo). See issue #21.
+async function fetchTaskRecord(taskId) {
+  const entry = taskHistory.find((t) => t.taskId === taskId);
+  const attempts = [];
+  const dedicated = entry?.model && getPollEndpoint(entry.model);
+  if (dedicated) attempts.push({ source: 'dedicated', path: `${dedicated}?taskId=${taskId}` });
+  if (entry?.model?.startsWith('suno')) {
+    attempts.push({ source: 'suno', path: `/api/v1/generate/record-info?taskId=${taskId}` });
+    attempts.push({ source: 'market', path: `/api/v1/jobs/recordInfo?taskId=${taskId}` });
+  } else {
+    attempts.push({ source: 'market', path: `/api/v1/jobs/recordInfo?taskId=${taskId}` });
+    attempts.push({ source: 'suno', path: `/api/v1/generate/record-info?taskId=${taskId}` });
+  }
+  let lastErr = null;
+  for (const a of attempts) {
+    try {
+      const result = await kieRequest('GET', a.path);
+      const data = result.data || result;
+      // A hit must look like a real record (state/status/successFlag present)
+      if (data && (data.state !== undefined || data.status !== undefined || data.successFlag !== undefined)) {
+        return { source: a.source, data, entry };
+      }
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw new Error(`Task ${taskId} not found on any endpoint (market, suno${dedicated ? ', dedicated' : ''}).${lastErr ? ` Last error: ${lastErr.message}` : ''}`);
 }
 
 // Helper to download Suno tracks from sunoData array
@@ -3054,7 +3097,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.1.0' };
+const SERVER_INFO = { name: 'kie-art', version: '4.1.1' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3894,19 +3937,26 @@ const handleCallTool = async (request) => {
       }
 
       case 'check_task': {
-        const result = await kieRequest('GET', `/api/v1/jobs/recordInfo?taskId=${args.task_id}`);
-        const data = result.data || result;
+        const { source, data } = await fetchTaskRecord(args.task_id);
+        // Normalize the three record shapes into one state word
+        const state = data.state
+          || (data.status === 'SUCCESS' || data.status === 'FIRST_SUCCESS' ? 'success'
+            : data.status?.includes('FAILED') || data.status === 'SENSITIVE_WORD_ERROR' ? 'fail'
+            : data.status ? 'generating'
+            : data.successFlag === 1 ? 'success' : data.successFlag >= 2 ? 'fail' : 'generating');
         return {
           content: [{
             type: 'text',
             text: [
-              `Task: ${data.taskId}`,
-              `State: ${data.state}`,
+              `Task: ${data.taskId || args.task_id}`,
+              `State: ${state}${data.status ? ` (${data.status})` : ''}`,
+              `Source: ${source}`,
               `Progress: ${data.progress || 0}%`,
               `Model: ${data.model || 'N/A'}`,
               `Cost time: ${data.costTime ? data.costTime / 1000 + 's' : 'N/A'}`,
-              data.failMsg ? `Error: ${data.failMsg}` : '',
+              data.failMsg || data.errorMessage ? `Error: ${data.failMsg || data.errorMessage}` : '',
               data.resultJson ? `Result: ${JSON.stringify(data.resultJson)}` : '',
+              state === 'success' ? `Retrieve with: download_result task_id=${args.task_id}` : '',
             ].filter(Boolean).join('\n'),
           }],
         };
@@ -3928,18 +3978,31 @@ const handleCallTool = async (request) => {
       }
 
       case 'download_result': {
-        const result = await kieRequest('GET', `/api/v1/jobs/recordInfo?taskId=${args.task_id}`);
-        const data = result.data || result;
-        if (data.state !== 'success') {
-          return { content: [{ type: 'text', text: `Task is "${data.state}", not yet downloadable.` }] };
+        const { source, data, entry } = await fetchTaskRecord(args.task_id);
+        // Suno-family results: sunoData tracks (possibly nested under response)
+        if (source === 'suno') {
+          if (data.status !== 'SUCCESS' && data.status !== 'FIRST_SUCCESS') {
+            return { content: [{ type: 'text', text: `Task is "${data.status}", not yet downloadable.` }] };
+          }
+          const sunoData = data.sunoData || data.response?.sunoData;
+          if (!sunoData?.length) return { content: [{ type: 'text', text: `Suno task ${args.task_id} succeeded but has no tracks.` }] };
+          const outName = args.filename || entry?.filename || `download-${args.task_id.slice(0, 8)}.mp3`;
+          const files = await downloadSunoTracks(sunoData, outName);
+          return { content: [{ type: 'text', text: `Downloaded ${files.length} track(s):\n${files.map((f) => `  → ${f.file}`).join('\n')}` }] };
+        }
+        const state = data.state || (data.successFlag === 1 ? 'success' : data.successFlag >= 2 ? 'fail' : 'generating');
+        if (state !== 'success') {
+          return { content: [{ type: 'text', text: `Task is "${state}", not yet downloadable.` }] };
         }
         const urls = extractResultUrls(data);
         if (urls.length === 0) {
           return { content: [{ type: 'text', text: `No result URLs for task ${args.task_id}` }] };
         }
-        const outName = args.filename || `download-${args.task_id.slice(0, 8)}.png`;
+        // Prefer the filename recorded when the task was created (right extension)
+        const outName = args.filename || entry?.filename || `download-${args.task_id.slice(0, 8)}.png`;
         const outPath = join(RAW_DIR, outName);
         await downloadToFile(urls[0], outPath);
+        if (entry) entry.status = 'success';
         return { content: [{ type: 'text', text: `Downloaded to: ${outPath}` }] };
       }
 
@@ -4095,6 +4158,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start TTS generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
+        taskHistory.push({ taskId, model: apiModel, prompt: text.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollTask(taskId, 60000);
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `TTS task ${taskId} done but no URLs found.` }] };
@@ -4118,6 +4182,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start dialogue generation.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
+        taskHistory.push({ taskId, model: 'elevenlabs/text-to-dialogue-v3', prompt: dialogue[0]?.text?.slice(0, 80) || 'dialogue', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollTask(taskId, 120000);
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Dialogue task ${taskId} done but no URLs found.` }] };
@@ -4137,6 +4202,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start audio isolation.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
+        taskHistory.push({ taskId, model: 'elevenlabs/audio-isolation', prompt: audio_url.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollTask(taskId, 120000);
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Audio isolation task ${taskId} done but no URLs found.` }] };
@@ -4252,6 +4318,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/lyrics', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId, model: 'suno/lyrics', prompt: prompt.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, 60000);
         const lyrics = pollResult.sunoData?.[0]?.text || pollResult.text || JSON.stringify(pollResult);
         return { content: [{ type: 'text', text: `✅ Lyrics generated!\nTask ID: ${taskId}\n\n${lyrics}` }] };
@@ -4266,6 +4333,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/wav/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId, model: 'suno/wav', prompt: `wav of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, 120000);
         const wavUrl = pollResult.sunoData?.[0]?.audioUrl || pollResult.wavUrl;
         if (!wavUrl) return { content: [{ type: 'text', text: `WAV task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
@@ -4281,6 +4349,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/vocal-removal/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId, model: 'suno/vocal-removal', prompt: sepType, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, 120000);
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Separation task ${taskId} done but no results.\n${JSON.stringify(pollResult)}` }] };
@@ -4298,6 +4367,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/midi/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId, model: 'suno/midi', prompt: `midi of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, 120000);
         const midiUrl = pollResult.sunoData?.[0]?.midiUrl || pollResult.midiUrl;
         if (!midiUrl) return { content: [{ type: 'text', text: `MIDI task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
@@ -4316,6 +4386,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/mp4/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId, model: 'suno/mp4', prompt: `music video of ${audioId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, 300000);
         const videoUrl = pollResult.sunoData?.[0]?.videoUrl || pollResult.videoUrl;
         if (!videoUrl) return { content: [{ type: 'text', text: `Music video task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
@@ -4354,6 +4425,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/generate-persona', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId: newTaskId, model: 'suno/persona', prompt: personaName, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(newTaskId, 120000);
         const personaId = pollResult.personaId || pollResult.data?.personaId;
         return { content: [{ type: 'text', text: `✅ Persona created!\nTask ID: ${newTaskId}\nPersona ID: ${personaId || 'see result'}\nName: ${personaName}\n\nUse this Persona ID in future generate_music calls for character consistency.` }] };
@@ -4398,6 +4470,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/suno/cover/generate', { taskId });
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId: newTaskId, model: 'suno/cover-art', prompt: `cover art for ${taskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(newTaskId, 120000);
         const urls = pollResult.images || pollResult.data?.images || (pollResult.imageUrl ? [pollResult.imageUrl] : []);
         if (!urls.length) return { content: [{ type: 'text', text: `Cover art task ${newTaskId} done but no images.\n${JSON.stringify(pollResult, null, 2)}` }] };
@@ -4467,6 +4540,7 @@ const handleCallTool = async (request) => {
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/speech-to-text', input });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        taskHistory.push({ taskId, model: 'elevenlabs/speech-to-text', prompt: audio_url.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollTask(taskId, 300000);
         const transcription = pollResult.resultJson || pollResult;
         return { content: [{ type: 'text', text: `✅ Transcription complete!\nTask ID: ${taskId}\n\n${typeof transcription === 'string' ? transcription : JSON.stringify(transcription, null, 2)}` }] };
@@ -4611,7 +4685,28 @@ const handleCallTool = async (request) => {
         return { content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
     }
   } catch (error) {
-    return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
+    let text = `Error: ${error.message}`;
+    // Errors tagged with a taskId (poll timeouts / task failures) get recovery
+    // guidance so callers never re-submit (and re-bill) a task that may still
+    // be running upstream. See issue #21.
+    if (error.taskId) {
+      const entry = taskHistory.find((t) => t.taskId === error.taskId);
+      if (entry) entry.status = error.taskStillRunning ? 'timeout' : 'failed';
+      if (error.taskStillRunning) {
+        text += [
+          ``,
+          ``,
+          `⚠️ The task may still be RUNNING upstream and has likely been billed — do NOT retry the generation.`,
+          `Recover the result instead:`,
+          `  1. check_task task_id=${error.taskId}   (repeat until state is success/fail)`,
+          `  2. download_result task_id=${error.taskId}${entry?.filename ? ` filename=${entry.filename}` : ''}`,
+          `The task also appears in list_tasks.`,
+        ].join('\n');
+      } else {
+        text += `\n\nTask ID: ${error.taskId} — the task failed upstream (failed tasks are typically not billed; verify with check_credits). Inspect with check_task task_id=${error.taskId}.`;
+      }
+    }
+    return { content: [{ type: 'text', text }], isError: true };
   }
 };
 
@@ -4652,7 +4747,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.1.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.1.1', sessions: sessions.size }));
       return;
     }
 
