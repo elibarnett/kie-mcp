@@ -3200,7 +3200,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.3.1' };
+const SERVER_INFO = { name: 'kie-art', version: '4.3.2' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3444,7 +3444,8 @@ const handleListTools = async () => ({
           },
           stability: {
             type: 'number',
-            description: 'Voice stability (0, 0.5, or 1.0)',
+            enum: [0, 0.5, 1],
+            description: 'Voice stability — kie accepts exactly 0 (creative), 0.5 (natural), or 1 (robust)',
           },
           language_code: { type: 'string', description: 'Language code (e.g. "en")' },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
@@ -4319,11 +4320,41 @@ const handleCallTool = async (request) => {
         const outFilename = sanitizeFilename(filename) || `dialogue-${ts}.mp3`;
         const outPath = join(resolveOutputDir(args), outFilename);
 
-        const input = { dialogue: dialogue.map((line) => ({ ...line, voice: resolveVoice(line.voice) })) };
-        if (stability !== undefined) input.stability = stability;
+        // Validate every segment's voice client-side (issue #26). Accept the
+        // `voice_id` alias — agents copy the param name from generate_tts, and
+        // the old code silently fell back to the default voice for those
+        // segments, collapsing multi-speaker dialogue onto one voice.
+        const resolvedDialogue = dialogue.map((line, i) => {
+          const v = line.voice ?? line.voice_id;
+          if (!v) {
+            const catalog = ELEVENLABS_VOICES.map((x) => `${x.name}${x.vibe ? ` — ${x.vibe}` : ''} (${x.id})`).join('\n');
+            throw new Error(`dialogue[${i}] has no voice. Every line needs a "voice" (name like "Bella" or kie voice ID) so speakers are distinguishable. Allowed voices:\n${catalog}`);
+          }
+          const { voice_id: _alias, ...rest } = line;
+          return { ...rest, voice: resolveVoice(v) };  // resolveVoice throws with the catalog on unknown values
+        });
+        const input = { dialogue: resolvedDialogue };
+        if (stability !== undefined) {
+          // kie's dialogue endpoint accepts exactly 0 / 0.5 / 1 and otherwise
+          // returns a bare "422: refer to the documentation" — catch it here.
+          if (![0, 0.5, 1].includes(stability)) {
+            return { content: [{ type: 'text', text: `Invalid stability ${stability} — kie.ai's text-to-dialogue-v3 accepts exactly 0 (creative), 0.5 (natural), or 1 (robust).` }], isError: true };
+          }
+          input.stability = stability;
+        }
         if (language_code) input.language_code = language_code;
 
-        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/text-to-dialogue-v3', input });
+        let result;
+        try {
+          result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/text-to-dialogue-v3', input });
+        } catch (err) {
+          // kie's dialogue 422s carry no detail ("refer to the documentation") —
+          // append the endpoint's actual constraints so callers can self-correct.
+          if (err.kieCode === 422) {
+            err.message += `\nDialogue endpoint constraints: dialogue = array of { text, voice } (voice from the curated catalog — names or IDs, see generate_tts errors for the list); stability one of 0 / 0.5 / 1; language_code optional ISO code. Total text is billed at ~14 credits per 1000 characters.`;
+          }
+          throw err;
+        }
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start dialogue generation.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
@@ -4894,7 +4925,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.3.1', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.3.2', sessions: sessions.size }));
       return;
     }
 

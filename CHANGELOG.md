@@ -2,6 +2,21 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.3.2] — 2026-07-11
+
+Agent-feedback pass 6 (#26).
+
+### Fixed
+
+- **`generate_dialogue`'s unhelpful 422s tracked to their real causes and closed.** Investigation showed per-segment voices WERE already validated against the catalog (4.0.5) — the bare `422: refer to the documentation` came from elsewhere:
+  - **`voice_id` in a segment (generate_tts's param name) was silently ignored** — the segment fell back to the default voice, collapsing multi-speaker dialogue onto one voice with no error. Segments now accept `voice`/`voice_id` interchangeably, and a segment with NEITHER throws the full-catalog error naming the segment index instead of silently defaulting.
+  - **`stability` accepts exactly 0 / 0.5 / 1 upstream** but had no client-side check — anything else (e.g. 0.7) became kie's bare 422. Now validated client-side with a clear message; schema carries the enum.
+  - Any remaining upstream 422 from the dialogue endpoint gets the endpoint's constraints appended so callers can self-correct without doc-diving.
+
+### Verified
+
+- Live (2026-07-11): bogus voice in segment 2 → full catalog client-side, zero API calls; `voice_id` alias accepted and task submitted; `stability: 0.7` → clear enum error; segment with no voice → `dialogue[1] has no voice` + catalog.
+
 ## [4.3.1] — 2026-07-11
 
 Agent-feedback pass 5 (#25).
@@ -238,6 +253,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.3.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.2
 [4.3.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.1
 [4.3.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.0
 [4.2.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.1
