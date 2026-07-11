@@ -2213,7 +2213,7 @@ const VIDEO_MODEL_REGISTRY = {
       mode: { type: 'string', enum: ['normal', 'quality'], default: 'normal' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, duration: opts.duration || '6', resolution: opts.resolution || '480p', mode: opts.mode || 'normal' };
+      return { prompt, aspect_ratio: aspectRatio, duration: String(opts.duration || '6'), resolution: opts.resolution || '480p', mode: opts.mode || 'normal' };
     },
   },
   'grok-imagine/image-to-video': {
@@ -2230,7 +2230,7 @@ const VIDEO_MODEL_REGISTRY = {
       mode: { type: 'string', enum: ['normal', 'quality'], default: 'normal' },
     },
     buildInput(prompt, _ar, imageUrls, opts) {
-      return { prompt, image_urls: imageUrls, duration: opts.duration || '6', resolution: opts.resolution || '480p', mode: opts.mode || 'normal' };
+      return { prompt, image_urls: imageUrls, duration: String(opts.duration || '6'), resolution: opts.resolution || '480p', mode: opts.mode || 'normal' };
     },
   },
   'grok-imagine/upscale': {
@@ -3250,7 +3250,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.3.3' };
+const SERVER_INFO = { name: 'kie-art', version: '4.3.4' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -4226,6 +4226,18 @@ const handleCallTool = async (request) => {
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls.` }] };
         }
+        // Coerce duration to the type this model's option spec declares (issue
+        // #28) — kie is silently type-strict per model (5 fails where "5" works
+        // and vice versa), and callers can't be expected to track which is which.
+        const durSpec = modelDef.options?.duration;
+        if (durSpec && model_options.duration !== undefined && model_options.duration !== null) {
+          const wantsString = durSpec.type === 'string' || (durSpec.enum?.length && durSpec.enum.every((e) => typeof e === 'string'));
+          const coerced = wantsString ? String(model_options.duration) : Number(model_options.duration);
+          if (!wantsString && Number.isNaN(coerced)) {
+            return { content: [{ type: 'text', text: `Invalid input for "${modelId}": duration ${JSON.stringify(model_options.duration)} is not a number.` }] };
+          }
+          model_options.duration = coerced;
+        }
         const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options, modelId);
         if (validationError) {
           return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${validationError}` }] };
@@ -4975,7 +4987,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.3.3', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.3.4', sessions: sessions.size }));
       return;
     }
 

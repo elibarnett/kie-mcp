@@ -2,6 +2,18 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.3.4] — 2026-07-11
+
+Agent-feedback pass 8 (#28).
+
+### Fixed
+
+- **`duration` is now coerced to whatever type each model actually wants.** kie is silently type-strict per model — `5` fails where `"5"` works and vice versa, and the registry mixed string-enum durations (kling 2.x/3.x, legacy grok: `'5'`,`'10'`) with numeric ones (happyhorse, seedance, grok 1.5: 3–15). `generate_video` now coerces `model_options.duration` to the declared option type BEFORE validation, so enum/min/max checks also see the right type; a non-numeric value against a numeric spec gets a clear client-side error. The two legacy grok buildInputs additionally `String()` their defaults (belt and braces).
+
+### Verified
+
+- Live (2026-07-11, zero-cost bogus-URL creations with wire capture): `duration: 10` (number) on legacy grok I2V → body sent `"duration":"10"`, accepted; `duration: "5"` (string) on HappyHorse I2V → body sent `"duration":5`, accepted; `duration: "abc"` → client-side `is not a number`, no API call.
+
 ## [4.3.3] — 2026-07-11
 
 Agent-feedback pass 7 (#27).
@@ -270,6 +282,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.3.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.4
 [4.3.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.3
 [4.3.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.2
 [4.3.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.1
