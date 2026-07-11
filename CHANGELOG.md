@@ -2,6 +2,23 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.3.3] — 2026-07-11
+
+Agent-feedback pass 7 (#27).
+
+### Added
+
+- **Documented prompt caps enforced client-side for 50 models.** Scraped every market model's docs page for the prompt `maxLength` (same &quot;-escaped-JSON technique as the 4.1.0 pass) and shipped the results as a `PROMPT_CAPS` table consulted by the validator — over-limit prompts now fail instantly with the actual cap and the count, instead of burning a roundtrip on kie's bare 422. Notable footguns found: **qwen2 and Wan 2.5 cap at 800 chars**, Hailuo 02 and Wan 2.6 Flash at 1500, qwen image-edit at 2000; the common ceiling is 5000; ByteDance V1 takes 10000 and Seedance 2 20000. Models whose docs state no limit are deliberately absent — no guessed numbers.
+- Validator lookup order: per-entry `maxPromptChars` → `PROMPT_CAPS[apiModel]` → `PROMPT_CAPS[registry key]` (entries without an explicit apiModel use their key as the API slug).
+
+### Notes
+
+- The field report's "~500 chars" could not be reproduced against any currently-documented limit — the closest candidates are the 800-char qwen2/Wan-2.5 caps, or the since-paused Sora family. If a bare 422 on a long prompt still appears, the model's cap is undocumented; report the model id.
+
+### Verified
+
+- Live (2026-07-11): 990-char prompt on qwen2 → client-side "documented max of 800" (zero API calls); 1610-char prompt on hailuo/text-to-video → "documented max of 1500".
+
 ## [4.3.2] — 2026-07-11
 
 Agent-feedback pass 6 (#26).
@@ -253,6 +270,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.3.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.3
 [4.3.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.2
 [4.3.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.1
 [4.3.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.0
