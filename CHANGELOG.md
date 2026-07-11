@@ -2,6 +2,23 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.3.1] — 2026-07-11
+
+Agent-feedback pass 5 (#25).
+
+### Added
+
+- **Machine-readable error taxonomy.** Every upstream failure is now prefixed with a bucket agents can key retry logic off, instead of string-matching kie's prose: `[retryable]` (429/455/5xx transient, "try again later", "server is busy"), `[fatal-client]` (401/402/404/422/433/505 and kie's 500-coded validation messages like "not within the range of allowed options" — retrying unchanged will fail identically), `[fatal-task]` (generation failed after submission — typically not billed, safe to retry with changed inputs), and `[recoverable]` (poll timeout — task may still succeed; poll, don't resubmit; pairs with the #21 recovery block).
+- **One automatic retry (2s backoff) for `[retryable]` failures of task CREATION only** — creation failed means nothing was billed, so the retry is safe; nothing that might have partially succeeded is ever retried. Field reports showed intermittent Suno 500 flickers needing manual retry-up-to-3 even on good days.
+
+### Fixed
+
+- **Mid-poll transient flickers no longer kill a running task.** `pollOnce` previously tolerated only malformed-JSON responses; a stray 429/455/5xx from a recordInfo endpoint aborted the whole poll. Retryable-bucket errors are now logged and retried next iteration (the poll budget still bounds total wait).
+
+### Verified
+
+- Live (2026-07-11): garbage task_id → `[fatal-client] … 422: recordInfo is null`; bogus-URL Volcengine generation → `[fatal-task] Task failed …` + task_id line, 0 credits consumed. Note kie's prose for that failure is literally "server is busy" — which is why buckets derive from task state and code, not message text alone.
+
 ## [4.3.0] — 2026-07-11
 
 Agent-feedback pass 4 (#24).
@@ -221,6 +238,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.3.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.1
 [4.3.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.0
 [4.2.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.1
 [4.2.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.0
