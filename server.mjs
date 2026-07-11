@@ -2840,7 +2840,41 @@ class KieMalformedResponseError extends Error {
   }
 }
 
-async function kieRequest(method, path, body) {
+// ── Error taxonomy (issue #25) ──────────────────────────────────────────────
+// Agents key retry logic off a machine-readable prefix instead of string-
+// matching upstream prose. Three buckets:
+//   [retryable]    transient upstream conditions — safe to retry the SAME call
+//   [fatal-client] the request itself is wrong (validation, credits, auth) —
+//                  retrying unchanged will fail identically; fix the input
+//   [fatal-task]   the generation failed server-side after submission —
+//                  typically not billed; safe to retry with changed inputs
+// Poll timeouts use [recoverable] (see #21): the task may still succeed —
+// poll with check_task, do NOT resubmit.
+// kie.ai status codes (per docs): 200 OK, 401 auth, 402 credits, 404 not
+// found, 422 validation, 429 rate limit, 433 sub-key limit, 455 maintenance,
+// 500 server error, 501 generation failed, 505 feature disabled.
+const RETRYABLE_CODES = new Set([429, 455, 500, 502, 503, 504]);
+const FATAL_CLIENT_CODES = new Set([400, 401, 402, 404, 405, 413, 422, 433, 505]);
+function classifyKieCode(code, msg = '') {
+  const m = String(msg).toLowerCase();
+  // kie overloads 500 for both transient hiccups and permanent validation
+  // failures — the message disambiguates the known validation shapes.
+  if (code === 500 && (m.includes('required') || m.includes('not within the range') || m.includes('allowed options') || m.includes('invalid'))) {
+    return 'fatal-client';
+  }
+  if (RETRYABLE_CODES.has(code) || m.includes('try again later') || m.includes('server is busy')) return 'retryable';
+  if (FATAL_CLIENT_CODES.has(code)) return 'fatal-client';
+  return 'retryable'; // unknown upstream conditions default to retry-safe reads
+}
+function kieError(code, msg, raw) {
+  const bucket = classifyKieCode(code, msg);
+  const err = new Error(`[${bucket}] kie.ai API error code ${code}: ${msg || JSON.stringify(raw)}`);
+  err.kieCode = code;
+  err.bucket = bucket;
+  return err;
+}
+
+async function kieRequest(method, path, body, _retried = false) {
   const url = `${API_BASE}${path}`;
   const opts = {
     method,
@@ -2857,11 +2891,20 @@ async function kieRequest(method, path, body) {
     throw new KieMalformedResponseError(text, res.status);
   }
   console.error(`[kie-mcp] ${method} ${path} → HTTP ${res.status}, code=${json.code}, msg=${json.msg}, keys=${Object.keys(json).join(',')}`);
-  if (res.status !== 200) {
-    throw new Error(`kie.ai API HTTP error ${res.status}: ${JSON.stringify(json)}`);
-  }
-  if (json.code && json.code !== 200) {
-    throw new Error(`kie.ai API error code ${json.code}: ${json.msg || JSON.stringify(json)}`);
+  const failCode = res.status !== 200 ? res.status : (json.code && json.code !== 200 ? json.code : null);
+  if (failCode) {
+    const err = kieError(failCode, json.msg, json);
+    // One automatic retry with backoff, ONLY for retryable failures of task
+    // CREATION — creation failed, so nothing was billed; never retry anything
+    // that might have partially succeeded. Field reports showed intermittent
+    // Suno 500 flickers needing manual retry-up-to-3 even on good days.
+    const isCreation = method === 'POST' && (path === '/api/v1/jobs/createTask' || path.startsWith('/api/v1/generate') || path.startsWith('/api/v1/lyrics') || path.startsWith('/api/v1/wav') || path.startsWith('/api/v1/midi') || path.startsWith('/api/v1/mp4') || path.startsWith('/api/v1/vocal-removal') || path.startsWith('/api/v1/suno'));
+    if (err.bucket === 'retryable' && isCreation && !_retried) {
+      console.error(`[kie-mcp] retryable failure on creation (${failCode}) — retrying once in 2s`);
+      await new Promise((r) => setTimeout(r, 2000));
+      return kieRequest(method, path, body, true);
+    }
+    throw err;
   }
   return json;
 }
@@ -2934,6 +2977,12 @@ async function pollOnce(method, path) {
       console.error(`[kie-mcp] transient malformed poll response (${path}); retrying next iteration.`);
       return null;
     }
+    // Transient upstream flickers (429/455/5xx) mid-poll shouldn't abort a task
+    // that is still running — the surrounding maxWaitMs still bounds total wait.
+    if (err.bucket === 'retryable') {
+      console.error(`[kie-mcp] transient poll failure (${err.message.slice(0, 120)}); retrying next iteration.`);
+      return null;
+    }
     throw err;
   }
 }
@@ -2942,7 +2991,7 @@ async function pollOnce(method, path) {
 // recovery guidance. stillRunning=true means the task was NOT observed to fail —
 // it likely completes upstream (and is billed), so callers must poll, not re-submit.
 function taskError(message, taskId, stillRunning = false) {
-  const err = new Error(message);
+  const err = new Error(`[${stillRunning ? 'recoverable' : 'fatal-task'}] ${message}`);
   err.taskId = taskId;
   err.taskStillRunning = stillRunning;
   return err;
@@ -3151,7 +3200,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.3.0' };
+const SERVER_INFO = { name: 'kie-art', version: '4.3.1' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -4845,7 +4894,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.3.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.3.1', sessions: sessions.size }));
       return;
     }
 
