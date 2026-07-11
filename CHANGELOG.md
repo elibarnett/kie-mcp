@@ -2,6 +2,20 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.1.1] — 2026-07-11
+
+Agent-feedback pass 1 of the July batch (#21): timeouts must never cost a re-bill.
+
+### Fixed
+
+- **Poll timeouts now return an actionable recovery path instead of a dead end.** Field reports showed agents re-submitting (and re-billing) generations whose first attempt succeeded upstream after the MCP's poll budget expired. Every error thrown from `pollTask`/`pollSunoTask` now carries its `taskId`; the top-level handler appends an explicit recovery block — "the task may still be RUNNING upstream and has likely been billed — do NOT retry" plus literal `check_task task_id=…` → `download_result task_id=… filename=…` steps. Task-failed errors get a shorter task_id + check_credits pointer.
+- **`check_task` / `download_result` now work for every tool family, making them a universal recovery path.** Both previously queried only `/api/v1/jobs/recordInfo`, which can miss Suno-family tasks. A new `fetchTaskRecord` resolver tries the endpoint implied by the session's task history first, then falls back through market and Suno (`/api/v1/generate/record-info`) endpoints, normalizing the three record shapes (state / status / successFlag) into one. `download_result` additionally understands Suno `sunoData` track results (downloads all takes) and defaults the filename to the one recorded at task creation, so the extension is right.
+- **11 handlers polled without registering in `taskHistory`** (generate_tts, generate_dialogue, audio_isolation, generate_lyrics, convert_to_wav, separate_vocals, generate_midi, create_music_video, generate_persona, generate_cover_art, speech_to_text) — their tasks were invisible to `list_tasks` and lost on timeout. All now push before polling; the error handler also flips the entry's status to `timeout`/`failed` so `list_tasks` reflects reality.
+
+### Verified
+
+- Live end-to-end (2026-07-11): a TTS generation with an artificially shrunk 8s poll budget timed out with the full recovery block, then `check_task` reported success and `download_result` retrieved the 38KB MP3 — no second generation, no double billing. A Suno-created lyrics task was also resolved by `check_task` from a fresh server process (empty task history), proving the endpoint-fallback path.
+
 ## [4.1.0] — 2026-07-02
 
 New-model pass: 10 new registry entries covering the kie.ai models that landed June 2026, all researched in the house Averiguare style, with docs-scraped input schemas and empirical pricing where cheap enough to probe.
@@ -166,6 +180,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.1.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.1
 [4.1.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.0
 [4.0.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.2
 [4.0.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.1
