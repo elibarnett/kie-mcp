@@ -2,6 +2,20 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.3.5] — 2026-07-11
+
+Agent-feedback pass 9 (#29).
+
+### Fixed
+
+- **`upload_file` base64 docs were backwards** — the schema said "with MIME prefix" but the upstream endpoint only accepts RAW base64, so agents following the docs failed. Both forms now work: a `data:<mime>;base64,` prefix is detected and stripped, and its MIME type infers the file extension when `file_name` is omitted. Schema descriptions corrected.
+- **Non-public `file_url`s now fail fast with an explanation.** localhost/127.x/10.x/192.168.x/172.16-31.x/`.local`/`.internal` URLs are rejected client-side ("kie.ai's servers cannot reach this — use base64_data for local files"); genuine upstream fetch failures get the public-reachability note appended instead of a bare error dump.
+- **`URL: undefined` in every base64 upload response** (pre-existing): the upload API returns `downloadUrl` but the success message only read the absent `fileUrl`. Now falls back correctly and shows filename/size, plus the ~3-day expiry when the API omits `expiresAt`.
+
+### Verified
+
+- Live (2026-07-11): raw base64 → uploaded; `data:image/png;base64,…` → uploaded with auto-inferred `.png` name and a real URL in the response; `http://localhost:3000/x.png` → client-side rejection, no upstream call.
+
 ## [4.3.4] — 2026-07-11
 
 Agent-feedback pass 8 (#28).
@@ -282,6 +296,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.3.5]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.5
 [4.3.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.4
 [4.3.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.3
 [4.3.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.2

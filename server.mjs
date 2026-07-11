@@ -3250,7 +3250,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.3.4' };
+const SERVER_INFO = { name: 'kie-art', version: '4.3.5' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3851,8 +3851,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          file_url: { type: 'string', description: 'URL of file to upload (for URL method)' },
-          base64_data: { type: 'string', description: 'Base64-encoded file data with MIME prefix (for base64 method)' },
+          file_url: { type: 'string', description: 'URL of file to upload — must be PUBLICLY reachable by kie.ai servers (no localhost/private IPs, no auth-gated or expired links). For local files use base64_data' },
+          base64_data: { type: 'string', description: 'Base64-encoded file data — raw base64 or a full data: URI; a data:<mime>;base64, prefix is stripped automatically (and used to infer the file extension if file_name is omitted)' },
           upload_path: { type: 'string', description: 'Storage directory (e.g. "images", "audio", "video")', default: 'uploads' },
           file_name: { type: 'string', description: 'Custom filename (optional)' },
         },
@@ -4793,6 +4793,16 @@ const handleCallTool = async (request) => {
         const UPLOAD_BASE = 'https://kieai.redpandaai.co';
 
         if (file_url) {
+          // kie's servers fetch the URL — anything not publicly reachable fails
+          // with an opaque upstream error. Catch the obvious cases first (#29).
+          let host = '';
+          try { host = new URL(file_url).hostname; } catch { return { content: [{ type: 'text', text: `file_url is not a valid URL: ${file_url}` }], isError: true }; }
+          const isPrivate = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)
+            || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+            || host.endsWith('.local') || host.endsWith('.internal');
+          if (isPrivate) {
+            return { content: [{ type: 'text', text: `file_url points at a private/local address (${host}) that kie.ai's servers cannot reach — the URL must be PUBLICLY accessible. For local files, read the file and use base64_data instead.` }], isError: true };
+          }
           const body = { fileUrl: file_url, uploadPath: upload_path };
           if (file_name) body.fileName = file_name;
           const res = await fetch(`${UPLOAD_BASE}/api/file-url-upload`, {
@@ -4801,21 +4811,34 @@ const handleCallTool = async (request) => {
             body: JSON.stringify(body),
           });
           const result = await res.json();
-          if (!result.success && result.code !== 200) return { content: [{ type: 'text', text: `Upload failed: ${JSON.stringify(result)}` }] };
-          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl}\nDownload: ${result.data?.downloadUrl}\nExpires: ${result.data?.expiresAt}` }] };
+          if (!result.success && result.code !== 200) {
+            return { content: [{ type: 'text', text: `Upload failed: ${JSON.stringify(result)}\nNote: kie.ai's servers must be able to fetch this URL — it needs to be publicly reachable (no auth, not expired). For local or private files, use base64_data.` }], isError: true };
+          }
+          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || ''} (${result.data?.fileSize ?? '?'} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}` }] };
         }
 
         if (base64_data) {
-          const body = { base64Data: base64_data, uploadPath: upload_path };
+          // Upstream wants RAW base64 — a data: URI prefix makes it fail. Accept
+          // both: strip the prefix, and use its MIME type for the filename
+          // extension when the caller didn't name the file (#29).
+          let raw = base64_data;
+          let inferredExt = null;
+          const dataUri = base64_data.match(/^data:([\w.+-]+\/([\w.+-]+));base64,(.*)$/s);
+          if (dataUri) {
+            inferredExt = dataUri[2].replace('jpeg', 'jpg').replace('mpeg', 'mp3');
+            raw = dataUri[3];
+          }
+          const body = { base64Data: raw, uploadPath: upload_path };
           if (file_name) body.fileName = file_name;
+          else if (inferredExt) body.fileName = `upload-${Date.now()}.${inferredExt}`;
           const res = await fetch(`${UPLOAD_BASE}/api/file-base64-upload`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
           });
           const result = await res.json();
-          if (!result.success && result.code !== 200) return { content: [{ type: 'text', text: `Upload failed: ${JSON.stringify(result)}` }] };
-          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl}\nDownload: ${result.data?.downloadUrl}\nExpires: ${result.data?.expiresAt}` }] };
+          if (!result.success && result.code !== 200) return { content: [{ type: 'text', text: `Upload failed: ${JSON.stringify(result)}` }], isError: true };
+          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || ''} (${result.data?.fileSize ?? '?'} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}` }] };
         }
 
         return { content: [{ type: 'text', text: 'Provide either file_url or base64_data to upload.' }] };
@@ -4987,7 +5010,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.3.4', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.3.5', sessions: sessions.size }));
       return;
     }
 
