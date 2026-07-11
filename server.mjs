@@ -3070,13 +3070,22 @@ async function fetchTaskRecord(taskId) {
 
 // Helper to download Suno tracks from sunoData array
 async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3') {
+  // Split the caller's filename into base + extension no matter what shape it
+  // arrived in. The old extension-replace regex was a no-op when the filename
+  // didn't end in `.${ext}` (no extension, or a different one), which made
+  // every take resolve to the SAME path — take 2 silently overwrote take 1
+  // on multi-take results (Suno music returns 2). See issue #23.
+  const m = outFilename.match(/^(.+)\.([A-Za-z0-9]{1,5})$/);
+  const base = m ? m[1] : outFilename;
+  const outExt = m ? m[2] : ext;
   const downloadedFiles = [];
   for (let i = 0; i < sunoData.length; i++) {
     const track = sunoData[i];
     const url = track.audioUrl || track.videoUrl || track.midiUrl || track.wavUrl;
     if (!url) continue;
-    const trackName = outFilename.replace(new RegExp(`\\.${ext}$`), i === 0 ? `.${ext}` : `-${i + 1}.${ext}`);
+    const trackName = i === 0 ? `${base}.${outExt}` : `${base}-${i + 1}.${outExt}`;
     const trackPath = join(RAW_DIR, trackName);
+    if (existsSync(trackPath)) console.error(`[kie-mcp] overwriting existing file: ${trackPath}`);
     await downloadToFile(url, trackPath);
     downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration });
   }
@@ -3125,7 +3134,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.2.0' };
+const SERVER_INFO = { name: 'kie-art', version: '4.2.1' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -4796,7 +4805,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.2.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.2.1', sessions: sessions.size }));
       return;
     }
 

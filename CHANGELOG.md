@@ -2,6 +2,18 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.2.1] — 2026-07-11
+
+Agent-feedback pass 3 (#23).
+
+### Fixed
+
+- **Multi-take Suno results no longer silently overwrite each other.** `downloadSunoTracks` derived take 2's filename by regex-replacing the expected extension — a no-op whenever the caller's `filename` had no extension (or a different one), so every take resolved to the SAME path and take 2 clobbered take 1 (Suno music returns 2 takes; agents lost one per generation). The helper now splits base/extension itself and always emits `base.ext`, `base-2.ext`, … regardless of input shape — one fix covers all 10 call sites (music, sfx, sounds, extend, cover, add-instrumental/vocals, replace-section, mashup, stems, upload-extend, download_result). Overwrites of pre-existing files are now logged to stderr.
+
+### Verified
+
+- Live repro (2026-07-11): `generate_sfx filename="overwrite-repro"` (no extension — the failing shape) produced `overwrite-repro.mp3` **and** `overwrite-repro-2.mp3` with distinct contents (134KB / 43KB).
+
 ## [4.2.0] — 2026-07-11
 
 Agent-feedback pass 2 (#22): kill the watchdog-stall class.
@@ -193,6 +205,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.2.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.1
 [4.2.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.0
 [4.1.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.1
 [4.1.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.0
