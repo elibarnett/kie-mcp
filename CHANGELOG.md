@@ -2,6 +2,19 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.2.0] — 2026-07-11
+
+Agent-feedback pass 2 (#22): kill the watchdog-stall class.
+
+### Added
+
+- **Async mode (`wait: false`)** on the seven high-traffic generation tools (`generate_image`, `generate_video`, `generate_music`, `generate_sfx`, `generate_sounds`, `generate_tts`, `generate_dialogue`): the tool submits the task and returns immediately (<1s) with the task_id, target filename, and the check_task → download_result steps. Long generations no longer hold a blocking tool call open for minutes — the pattern that was tripping agents' no-progress watchdogs. Blocking mode stays the default.
+- **One poll-budget table replaces 25 hardcoded numbers.** Defaults per category: image 600s, video 900s, audio 300s, speech 300s — overridable globally via `KIE_POLL_BUDGET_<CATEGORY>` env vars and per call via `max_wait_seconds` (30–3600). The worst offenders are gone: `generate_tts` polled for only **60s** against a queue that routinely runs 2–3 min/clip, `generate_dialogue`/`audio_isolation` for 120s, and several Suno tools (lyrics 60s, wav/stems/midi 120s) below realistic queue times. Field reports showed exactly these tools timing out on generations that later succeeded.
+
+### Verified
+
+- Live (2026-07-11): `generate_image wait:false` returned in 435ms with the task_id; `check_task` polled waiting→success; `download_result` fetched the 540KB PNG. Schema for `wait`/`max_wait_seconds` visible over `tools/list`.
+
 ## [4.1.1] — 2026-07-11
 
 Agent-feedback pass 1 of the July batch (#21): timeouts must never cost a re-bill.
@@ -180,6 +193,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.2.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.2.0
 [4.1.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.1
 [4.1.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.1.0
 [4.0.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.0.2

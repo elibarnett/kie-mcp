@@ -2931,6 +2931,34 @@ function taskError(message, taskId, stillRunning = false) {
   return err;
 }
 
+// Poll budgets by tool category, in seconds. One table instead of 25 hardcoded
+// numbers (the old spread ran from an indefensible 60s for TTS to 900s for video).
+// Override globally with KIE_POLL_BUDGET_<CATEGORY>=seconds, or per call with
+// max_wait_seconds. See issue #22.
+const POLL_BUDGET_DEFAULTS = { image: 600, video: 900, audio: 300, speech: 300 };
+function pollBudgetMs(category, args) {
+  const perCall = Number(args?.max_wait_seconds);
+  if (perCall > 0) return Math.min(3600, Math.max(30, perCall)) * 1000;
+  const env = Number(process.env[`KIE_POLL_BUDGET_${category.toUpperCase()}`]);
+  if (env > 0) return env * 1000;
+  return POLL_BUDGET_DEFAULTS[category] * 1000;
+}
+
+// Async-mode response: task submitted, caller polls on their own schedule.
+function submitOnly(taskId, label, filename) {
+  return { content: [{ type: 'text', text: [
+    `🚀 Task submitted (wait=false) — not waiting for completion.`,
+    `Model/tool: ${label}`,
+    `Task ID: ${taskId}`,
+    filename ? `Target filename: ${filename}` : '',
+    ``,
+    `Next steps:`,
+    `  1. check_task task_id=${taskId}   (poll until State: success)`,
+    `  2. download_result task_id=${taskId}${filename ? ` filename=${filename}` : ''}`,
+    `The task is also tracked in list_tasks.`,
+  ].filter(Boolean).join('\n') }] };
+}
+
 async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
   const dedicatedEndpoint = modelId && getPollEndpoint(modelId);
   const start = Date.now();
@@ -3097,7 +3125,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.1.1' };
+const SERVER_INFO = { name: 'kie-art', version: '4.2.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3109,6 +3137,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           prompt: { type: 'string', description: 'Text prompt describing the image to generate' },
           model: {
             type: 'string',
@@ -3193,6 +3223,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           prompt: { type: 'string', description: 'Video description prompt' },
           model: {
             type: 'string',
@@ -3227,6 +3259,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           prompt: {
             type: 'string',
             description: 'Music description (e.g. "upbeat Celtic fantasy adventure, flute and drums, heroic")',
@@ -3258,6 +3292,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           text: {
             type: 'string',
             description: 'Sound description (e.g. "magical sparkle chime, fairy-like, short 0.5s")',
@@ -3281,6 +3317,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           text: { type: 'string', description: 'Text to synthesize into speech' },
           voice_id: {
             type: 'string',
@@ -3311,6 +3349,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           dialogue: {
             type: 'array',
             items: {
@@ -3509,6 +3549,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           prompt: { type: 'string', description: 'Sound description (e.g. "ambient rain on a tin roof, soft thunder")' },
           model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
           soundLoop: { type: 'boolean', default: false, description: 'Whether the sound should loop seamlessly' },
@@ -3789,9 +3831,10 @@ const handleCallTool = async (request) => {
           createdAt: new Date().toISOString(),
         };
         taskHistory.push(taskEntry);
+        if (args.wait === false) return submitOnly(taskId, modelId, outFilename);
 
         // Poll until done — pass modelId so dedicated endpoints use their own polling URL
-        const result = await pollTask(taskId, 600000, modelId);
+        const result = await pollTask(taskId, pollBudgetMs('image', args), modelId);
         const resultUrls = extractResultUrls(result);
 
         if (resultUrls.length === 0) {
@@ -4061,10 +4104,11 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed to create video task — no taskId returned.\nCheck model "${modelId}" is valid.` }] };
 
         taskHistory.push({ taskId, model: modelId, prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, modelId, outFilename);
 
         // Use dedicated poll endpoint if available, otherwise generic market polling
         const pollEndpoint = modelDef.pollEndpoint || null;
-        const pollResult = await pollTask(taskId, 900000, pollEndpoint ? modelId : null); // 15min max for video
+        const pollResult = await pollTask(taskId, pollBudgetMs('video', args), pollEndpoint ? modelId : null);
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Task ${taskId} done but no result URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
@@ -4092,8 +4136,9 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start music generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         taskHistory.push({ taskId, model: `suno-${model}`, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, `suno-${model}`, outFilename);
 
-        const pollResult = await pollSunoTask(taskId);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
         if (!sunoData || sunoData.length === 0) return { content: [{ type: 'text', text: `Music task ${taskId} completed but no tracks returned.` }] };
 
@@ -4133,7 +4178,8 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start SFX generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         taskHistory.push({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId);
+        if (args.wait === false) return submitOnly(taskId, 'suno/sounds', outFilename);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `SFX task ${taskId} done but no results.` }] };
 
@@ -4159,7 +4205,8 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start TTS generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         taskHistory.push({ taskId, model: apiModel, prompt: text.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollTask(taskId, 60000);
+        if (args.wait === false) return submitOnly(taskId, apiModel, outFilename);
+        const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `TTS task ${taskId} done but no URLs found.` }] };
 
@@ -4183,7 +4230,8 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start dialogue generation.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         taskHistory.push({ taskId, model: 'elevenlabs/text-to-dialogue-v3', prompt: dialogue[0]?.text?.slice(0, 80) || 'dialogue', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollTask(taskId, 120000);
+        if (args.wait === false) return submitOnly(taskId, 'elevenlabs/text-to-dialogue-v3', outFilename);
+        const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Dialogue task ${taskId} done but no URLs found.` }] };
 
@@ -4203,7 +4251,7 @@ const handleCallTool = async (request) => {
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start audio isolation.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         taskHistory.push({ taskId, model: 'elevenlabs/audio-isolation', prompt: audio_url.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollTask(taskId, 120000);
+        const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Audio isolation task ${taskId} done but no URLs found.` }] };
 
@@ -4227,7 +4275,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/extend', prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Extend task ${taskId} completed but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename);
@@ -4251,7 +4299,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/cover', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Cover task ${taskId} completed but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename);
@@ -4271,7 +4319,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-instrumental', prompt: uploadUrl.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename);
         return { content: [{ type: 'text', text: `✅ Instrumental added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
@@ -4289,7 +4337,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-vocals', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename);
         return { content: [{ type: 'text', text: `✅ Vocals added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
@@ -4307,7 +4355,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/replace-section', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename);
         return { content: [{ type: 'text', text: `✅ Section replaced!\nTask ID: ${taskId}\nRange: ${infillStartS}s-${infillEndS}s\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
@@ -4319,7 +4367,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/lyrics', prompt: prompt.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, 60000);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const lyrics = pollResult.sunoData?.[0]?.text || pollResult.text || JSON.stringify(pollResult);
         return { content: [{ type: 'text', text: `✅ Lyrics generated!\nTask ID: ${taskId}\n\n${lyrics}` }] };
       }
@@ -4334,7 +4382,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/wav', prompt: `wav of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, 120000);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const wavUrl = pollResult.sunoData?.[0]?.audioUrl || pollResult.wavUrl;
         if (!wavUrl) return { content: [{ type: 'text', text: `WAV task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
         await downloadToFile(wavUrl, outPath);
@@ -4350,7 +4398,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/vocal-removal', prompt: sepType, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, 120000);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Separation task ${taskId} done but no results.\n${JSON.stringify(pollResult)}` }] };
         const files = await downloadSunoTracks(sunoData, outFilename);
@@ -4368,7 +4416,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/midi', prompt: `midi of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, 120000);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const midiUrl = pollResult.sunoData?.[0]?.midiUrl || pollResult.midiUrl;
         if (!midiUrl) return { content: [{ type: 'text', text: `MIDI task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
         await downloadToFile(midiUrl, outPath);
@@ -4387,7 +4435,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/mp4', prompt: `music video of ${audioId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, 300000);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const videoUrl = pollResult.sunoData?.[0]?.videoUrl || pollResult.videoUrl;
         if (!videoUrl) return { content: [{ type: 'text', text: `Music video task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
         await downloadToFile(videoUrl, outPath);
@@ -4407,7 +4455,8 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId);
+        if (args.wait === false) return submitOnly(taskId, 'suno/sounds', outFilename);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Sounds task ${taskId} done but no results.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename);
@@ -4426,7 +4475,7 @@ const handleCallTool = async (request) => {
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/persona', prompt: personaName, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(newTaskId, 120000);
+        const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const personaId = pollResult.personaId || pollResult.data?.personaId;
         return { content: [{ type: 'text', text: `✅ Persona created!\nTask ID: ${newTaskId}\nPersona ID: ${personaId || 'see result'}\nName: ${personaName}\n\nUse this Persona ID in future generate_music calls for character consistency.` }] };
       }
@@ -4443,7 +4492,7 @@ const handleCallTool = async (request) => {
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/mashup', prompt: prompt?.slice(0, 80) || 'mashup', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(newTaskId);
+        const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Mashup task ${newTaskId} done but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename);
@@ -4471,7 +4520,7 @@ const handleCallTool = async (request) => {
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/cover-art', prompt: `cover art for ${taskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(newTaskId, 120000);
+        const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const urls = pollResult.images || pollResult.data?.images || (pollResult.imageUrl ? [pollResult.imageUrl] : []);
         if (!urls.length) return { content: [{ type: 'text', text: `Cover art task ${newTaskId} done but no images.\n${JSON.stringify(pollResult, null, 2)}` }] };
         await downloadToFile(urls[0], outPath);
@@ -4524,7 +4573,7 @@ const handleCallTool = async (request) => {
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/upload-extend', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(newTaskId);
+        const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Extend task ${newTaskId} done but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename);
@@ -4541,7 +4590,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'elevenlabs/speech-to-text', prompt: audio_url.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollTask(taskId, 300000);
+        const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const transcription = pollResult.resultJson || pollResult;
         return { content: [{ type: 'text', text: `✅ Transcription complete!\nTask ID: ${taskId}\n\n${typeof transcription === 'string' ? transcription : JSON.stringify(transcription, null, 2)}` }] };
       }
@@ -4598,7 +4647,7 @@ const handleCallTool = async (request) => {
 
         taskHistory.push({ taskId, model: 'veo/extend', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
 
-        const pollResult = await pollTask(taskId, 900000, 'veo-3/text-to-video');
+        const pollResult = await pollTask(taskId, pollBudgetMs('video', args), 'veo-3/text-to-video');
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Extend task ${taskId} done but no URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
@@ -4673,7 +4722,7 @@ const handleCallTool = async (request) => {
         taskHistory.push({ taskId, model: 'runway/extend', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
 
         // Runway uses its own poll endpoint
-        const pollResult = await pollTask(taskId, 600000, 'runway/text-to-video');
+        const pollResult = await pollTask(taskId, pollBudgetMs('video', args), 'runway/text-to-video');
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Extend task ${taskId} done but no URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
@@ -4747,7 +4796,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.1.1', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.2.0', sessions: sessions.size }));
       return;
     }
 
