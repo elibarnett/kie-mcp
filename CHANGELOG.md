@@ -2,6 +2,20 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.4.0] — 2026-07-11
+
+Agent-feedback pass 10 of 10 (#30) — closes out the July field-report batch.
+
+### Added
+
+- **Internal concurrency gate for task creation.** Field reports measured failure rates climbing with parallel generations, forcing agents to self-throttle to sequential. Creation calls (createTask + all Suno-family creates) now pass through a semaphore (default 4 in flight, `KIE_MAX_CONCURRENT` to tune); excess calls queue with a stderr log instead of failing. Polling and downloads are unthrottled.
+- **Bounded submission retries while holding the slot**: 429/433 rate-limit responses and `[retryable]` failures retry the submission up to 2 more times (2s, 5s backoff) — safe because a failed creation billed nothing; nothing post-submission is ever auto-retried. Supersedes the single-retry from 4.3.1 with the same guarantee.
+- `kieRequest` refactored into `kieAttempt` (single HTTP try) + gate/retry orchestration; non-creation calls bypass both.
+
+### Verified
+
+- Live (2026-07-11): 8 simultaneous free subject-detection generations → 8/8 succeeded, exactly 4 queued behind the cap-4 gate (stderr `concurrency gate` events), none surfaced a rate-limit error.
+
 ## [4.3.5] — 2026-07-11
 
 Agent-feedback pass 9 (#29).
@@ -296,6 +310,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.4.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.0
 [4.3.5]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.5
 [4.3.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.4
 [4.3.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.3
