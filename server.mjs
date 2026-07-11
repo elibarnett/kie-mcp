@@ -2924,7 +2924,35 @@ function kieError(code, msg, raw) {
   return err;
 }
 
-async function kieRequest(method, path, body, _retried = false) {
+// Concurrency gate for task-creation calls (issue #30): kie rate-limits
+// concurrent generations per account (429, plus a documented ~20-generation
+// cap) and field reports measured failure rates climbing with parallelism.
+// Queue excess creations here instead of surfacing upstream failures.
+// Tune with KIE_MAX_CONCURRENT (default 4).
+const MAX_CONCURRENT = Math.max(1, Number(process.env.KIE_MAX_CONCURRENT) || 4);
+let creationsInFlight = 0;
+const creationQueue = [];
+async function withCreationSlot(fn) {
+  if (creationsInFlight >= MAX_CONCURRENT) {
+    console.error(`[kie-mcp] concurrency gate: ${creationsInFlight} creations in flight (cap ${MAX_CONCURRENT}) — queued`);
+    await new Promise((resolve) => creationQueue.push(resolve));
+  }
+  creationsInFlight++;
+  try {
+    return await fn();
+  } finally {
+    creationsInFlight--;
+    const next = creationQueue.shift();
+    if (next) next();
+  }
+}
+
+function isCreationCall(method, path) {
+  return method === 'POST' && (path === '/api/v1/jobs/createTask' || path.startsWith('/api/v1/generate/') || path === '/api/v1/generate' || path.startsWith('/api/v1/lyrics') || path.startsWith('/api/v1/wav') || path.startsWith('/api/v1/midi') || path.startsWith('/api/v1/mp4') || path.startsWith('/api/v1/vocal-removal') || path.startsWith('/api/v1/suno'));
+}
+
+// Single HTTP attempt against the kie API. Throws bucket-classified errors.
+async function kieAttempt(method, path, body) {
   const url = `${API_BASE}${path}`;
   const opts = {
     method,
@@ -2942,21 +2970,32 @@ async function kieRequest(method, path, body, _retried = false) {
   }
   console.error(`[kie-mcp] ${method} ${path} → HTTP ${res.status}, code=${json.code}, msg=${json.msg}, keys=${Object.keys(json).join(',')}`);
   const failCode = res.status !== 200 ? res.status : (json.code && json.code !== 200 ? json.code : null);
-  if (failCode) {
-    const err = kieError(failCode, json.msg, json);
-    // One automatic retry with backoff, ONLY for retryable failures of task
-    // CREATION — creation failed, so nothing was billed; never retry anything
-    // that might have partially succeeded. Field reports showed intermittent
-    // Suno 500 flickers needing manual retry-up-to-3 even on good days.
-    const isCreation = method === 'POST' && (path === '/api/v1/jobs/createTask' || path.startsWith('/api/v1/generate') || path.startsWith('/api/v1/lyrics') || path.startsWith('/api/v1/wav') || path.startsWith('/api/v1/midi') || path.startsWith('/api/v1/mp4') || path.startsWith('/api/v1/vocal-removal') || path.startsWith('/api/v1/suno'));
-    if (err.bucket === 'retryable' && isCreation && !_retried) {
-      console.error(`[kie-mcp] retryable failure on creation (${failCode}) — retrying once in 2s`);
-      await new Promise((r) => setTimeout(r, 2000));
-      return kieRequest(method, path, body, true);
-    }
-    throw err;
-  }
+  if (failCode) throw kieError(failCode, json.msg, json);
   return json;
+}
+
+async function kieRequest(method, path, body) {
+  if (!isCreationCall(method, path)) return kieAttempt(method, path, body);
+  // Creations go through the concurrency gate and get bounded submission
+  // retries WHILE HOLDING THE SLOT — creation failed means nothing was
+  // billed, so retrying the submission is safe (issues #25/#30). 429/433
+  // rate-limit responses retry too: that's the gate's whole reason to exist.
+  return withCreationSlot(async () => {
+    const delays = [2000, 5000];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await kieAttempt(method, path, body);
+      } catch (err) {
+        const rateLimited = err.kieCode === 429 || err.kieCode === 433;
+        if ((err.bucket === 'retryable' || rateLimited) && attempt < delays.length) {
+          console.error(`[kie-mcp] ${rateLimited ? 'rate-limited' : 'retryable failure'} on creation (${err.kieCode}) — retry ${attempt + 1}/${delays.length} in ${delays[attempt] / 1000}s`);
+          await new Promise((r) => setTimeout(r, delays[attempt]));
+          continue;
+        }
+        throw err;
+      }
+    }
+  });
 }
 
 // All async Suno-family create endpoints go through here so the required
@@ -3250,7 +3289,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.3.5' };
+const SERVER_INFO = { name: 'kie-art', version: '4.4.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -5010,7 +5049,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.3.5', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.4.0', sessions: sessions.size }));
       return;
     }
 
