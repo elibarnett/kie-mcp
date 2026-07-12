@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.6.1] — 2026-07-12
+
+### Changed
+
+- **Split the model registries, pricing, and voice catalog out of `server.mjs`** into `data/*.mjs` (#46): `registry-image.mjs`, `registry-video.mjs`, `registry-audio.mjs`, `pricing.mjs`, `voices.mjs`. `server.mjs` shrank from ~5480 to ~2740 lines and imports (and re-exports) them, so model-catalog PRs are now reviewable data diffs instead of edits buried in one huge file. Behavior is byte-identical — `tools/list` and `list_models` output verified unchanged before/after, all 32 unit tests pass, and the modules are added to the npm `files` list so they ship with the package. No functional change.
+
 ## [4.6.0] — 2026-07-12
 
 ### Added
@@ -383,6 +389,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.6.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.1
 [4.6.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.0
 [4.5.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.2
 [4.5.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.1

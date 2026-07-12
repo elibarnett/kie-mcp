@@ -164,14 +164,20 @@ list_models filter="character"          # Ideogram Character, Kling AI Avatar
 ## Architecture
 
 ```
-server.mjs                      # The whole server (~4000 lines)
-├── PRICING                     # Credit cost per model
-├── MODEL_REGISTRY              # Image models (47+)
-├── VIDEO_MODEL_REGISTRY        # Video models (80+)
-├── AUDIO_TOOLS_REGISTRY        # Audio tool metadata
+server.mjs                      # Transport, helpers, tool handlers (~2700 lines)
 ├── createMcpServer()           # Factory for stdio + HTTP modes
-└── Tool handlers               # generate_*, list_*, etc.
+├── Tool handlers               # generate_*, list_*, etc.
+└── helpers                     # polling, recovery, pricing, validation, download
+
+data/                           # Pure data, imported (and re-exported) by server.mjs
+├── registry-image.mjs          # MODEL_REGISTRY — image models (47+)
+├── registry-video.mjs          # VIDEO_MODEL_REGISTRY — video models (80+)
+├── registry-audio.mjs          # AUDIO_TOOLS_REGISTRY — audio tool metadata
+├── pricing.mjs                 # PRICING, PRICING_ESTIMATED, PROMPT_CAPS
+└── voices.mjs                  # ELEVENLABS_VOICES catalog
 ```
+
+The registries and pricing live in `data/*.mjs` so model-catalog changes are reviewable diffs instead of edits buried in a 5000-line file; `server.mjs` imports and re-exports them (tests and downstream keep importing from `server.mjs`).
 
 Each model entry has:
 - `name`, `description`, `capabilities` (tags), `pricing` (credits)
