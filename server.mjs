@@ -8,6 +8,13 @@ import { writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs'
 import { join, basename, isAbsolute } from 'path';
 import { createServer } from 'http';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+// True only when this file is the process entrypoint (node server.mjs / npx
+// kie-mcp), false when imported by tests. Gates the side effects — the missing-
+// key exit and the transport startup — so the module can be imported to unit-
+// test the pure helpers. See issue #41.
+const isMainModule = !!process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
 const API_BASE = 'https://api.kie.ai';
 const API_KEY = process.env.KIE_API_KEY;
@@ -107,7 +114,7 @@ function resolveVoice(value) {
   throw new Error(`Voice "${value}" is not in kie.ai's allowed voice set (arbitrary ElevenLabs voice IDs are rejected upstream). Pick a name or ID from:\n${catalog}`);
 }
 
-if (!API_KEY) {
+if (isMainModule && !API_KEY) {
   console.error('KIE_API_KEY environment variable is required');
   process.exit(1);
 }
@@ -407,6 +414,18 @@ function getCostEstimate(modelId, durationSec) {
   // Per-second video models
   const total = Math.round(perUnit * durationSec);
   return `~${total} credits (~$${(total * 0.005).toFixed(2)}) for ${durationSec}s${note}`;
+}
+
+// Coerce a duration value to the type a model's `options.duration` spec declares
+// (issue #28). Returns { value } on success, or { error } when a numeric spec
+// receives a non-number. A null/undefined spec or value passes the raw through.
+function coerceDuration(durSpec, raw) {
+  if (!durSpec || raw === undefined || raw === null) return { value: raw };
+  const wantsString = durSpec.type === 'string' || (durSpec.enum?.length && durSpec.enum.every((e) => typeof e === 'string'));
+  if (wantsString) return { value: String(raw) };
+  const n = Number(raw);
+  if (Number.isNaN(n)) return { error: `duration ${JSON.stringify(raw)} is not a number.` };
+  return { value: n };
 }
 
 // Validate user-supplied args/model_options against the model's declared schema.
@@ -3224,22 +3243,25 @@ async function fetchTaskRecord(taskId) {
 }
 
 // Helper to download Suno tracks from sunoData array
-async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3', outDir = RAW_DIR) {
-  // Split the caller's filename into base + extension no matter what shape it
-  // arrived in. The old extension-replace regex was a no-op when the filename
-  // didn't end in `.${ext}` (no extension, or a different one), which made
-  // every take resolve to the SAME path — take 2 silently overwrote take 1
-  // on multi-take results (Suno music returns 2). See issue #23.
+// Filename for the index-th Suno take. Splits base/extension from the caller's
+// filename no matter what shape it arrived in — the old extension-replace regex
+// was a no-op when the filename didn't end in `.${ext}` (no extension, or a
+// different one), collapsing every take onto the SAME path so take 2 silently
+// overwrote take 1 on multi-take results (Suno music returns 2). See issue #23.
+function sunoTrackName(outFilename, index, ext = 'mp3') {
   const m = outFilename.match(/^(.+)\.([A-Za-z0-9]{1,5})$/);
   const base = m ? m[1] : outFilename;
   const outExt = m ? m[2] : ext;
+  return index === 0 ? `${base}.${outExt}` : `${base}-${index + 1}.${outExt}`;
+}
+
+async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3', outDir = RAW_DIR) {
   const downloadedFiles = [];
   for (let i = 0; i < sunoData.length; i++) {
     const track = sunoData[i];
     const url = track.audioUrl || track.videoUrl || track.midiUrl || track.wavUrl;
     if (!url) continue;
-    const trackName = i === 0 ? `${base}.${outExt}` : `${base}-${i + 1}.${outExt}`;
-    const trackPath = join(outDir, trackName);
+    const trackPath = join(outDir, sunoTrackName(outFilename, i, ext));
     if (existsSync(trackPath)) console.error(`[kie-mcp] overwriting existing file: ${trackPath}`);
     await downloadToFile(url, trackPath);
     downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration });
@@ -3289,7 +3311,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.4.1' };
+const SERVER_INFO = { name: 'kie-art', version: '4.4.2' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -4270,14 +4292,10 @@ const handleCallTool = async (request) => {
         // Coerce duration to the type this model's option spec declares (issue
         // #28) — kie is silently type-strict per model (5 fails where "5" works
         // and vice versa), and callers can't be expected to track which is which.
-        const durSpec = modelDef.options?.duration;
-        if (durSpec && model_options.duration !== undefined && model_options.duration !== null) {
-          const wantsString = durSpec.type === 'string' || (durSpec.enum?.length && durSpec.enum.every((e) => typeof e === 'string'));
-          const coerced = wantsString ? String(model_options.duration) : Number(model_options.duration);
-          if (!wantsString && Number.isNaN(coerced)) {
-            return { content: [{ type: 'text', text: `Invalid input for "${modelId}": duration ${JSON.stringify(model_options.duration)} is not a number.` }] };
-          }
-          model_options.duration = coerced;
+        if (model_options.duration !== undefined && model_options.duration !== null) {
+          const durRes = coerceDuration(modelDef.options?.duration, model_options.duration);
+          if (durRes.error) return { content: [{ type: 'text', text: `Invalid input for "${modelId}": ${durRes.error}` }] };
+          model_options.duration = durRes.value;
         }
         const validationError = validateModelOptions(modelDef, { aspect_ratio, prompt }, model_options, modelId);
         if (validationError) {
@@ -5031,6 +5049,9 @@ const httpFlag = args.includes('--http') || args.some(a => a.startsWith('--port'
 const portArg = args.find(a => a.startsWith('--port='));
 const PORT = portArg ? parseInt(portArg.split('=')[1]) : parseInt(process.env.KIE_MCP_PORT || '3100');
 
+// Only stand up a transport when run as the entrypoint — importing this module
+// (e.g. from unit tests) must not start a server. See issue #41.
+if (isMainModule) {
 if (httpFlag) {
   // HTTP Streamable mode — supports multiple concurrent sessions
   const sessions = new Map();
@@ -5051,7 +5072,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.4.1', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.4.2', sessions: sessions.size }));
       return;
     }
 
@@ -5102,3 +5123,28 @@ if (httpFlag) {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
+} // end isMainModule
+
+// ─── Exports for tests (issue #41) ───
+// Pure/near-pure helpers and the registries, importable without starting a
+// server. Importing this module is side-effect-free except for creating the
+// (gitignored) RAW_DIR.
+export {
+  extractResultUrls,
+  classifyKieCode,
+  sanitizeFilename,
+  resolveOutputDir,
+  pollBudgetMs,
+  validateModelOptions,
+  getCostEstimate,
+  coerceDuration,
+  sunoTrackName,
+  resolveVoice,
+  PRICING,
+  PRICING_ESTIMATED,
+  PROMPT_CAPS,
+  MODEL_REGISTRY,
+  VIDEO_MODEL_REGISTRY,
+  ELEVENLABS_VOICES,
+  RAW_DIR,
+};
