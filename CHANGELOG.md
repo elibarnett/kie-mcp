@@ -2,6 +2,17 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.4.3] — 2026-07-11
+
+### Changed
+
+- **`generate_image` / `generate_video` success messages now report the ACTUAL credits charged** (`creditsConsumed` from the completed task) instead of a PRICING-table estimate, tagged `[actual]`. The estimate was wrong whenever the caller deviated from the default config — e.g. Seedance 2 Mini at 480p charges 38 credits but the table default (720p) estimated ~82. Falls back to the labeled estimate only when kie omits the field. `check_task` shows the same actual cost line.
+- Added a `[pricing-drift]` stderr warning when the actual charge diverges >25% from the table rate, so registry numbers can be corrected over time (feeds the drift watch, #44).
+
+### Verified
+
+- Live (2026-07-11): free subject-detection → `Cost: 0 credits [actual]`; nano-banana-2-lite → `Cost: 4 credits [actual]` (the real charge). New unit tests cover the actual-vs-estimate selection, the free/0 case, the drift-log threshold, and the estimate fallback.
+
 ## [4.4.2] — 2026-07-11
 
 Test infrastructure (#41). No user-facing behavior change.
@@ -330,6 +341,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.4.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.3
 [4.4.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.2
 [4.4.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.1
 [4.4.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.0
