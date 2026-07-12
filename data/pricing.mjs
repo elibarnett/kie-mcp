@@ -88,8 +88,8 @@ export const PRICING = {
   'wan/2-7-image-to-video': 5,
   'wan/2-7-video-edit': 5,
   'wan/2-7-reference-to-video': 5,
-  'wan/2-5-text-to-video': 3,
-  'wan/2-5-image-to-video': 3,
+  'wan/2-5-text-to-video': 12,        // kie published: 12 cr/s @720p (default), 20 @1080p. Was 3
+  'wan/2-5-image-to-video': 12,
   'wan/flash-video-to-video': 2,
   'hailuo/text-to-video': 8,
   'hailuo/text-to-video-standard': 4,
@@ -112,7 +112,7 @@ export const PRICING = {
   'kling/ai-avatar-pro': 10,
   'grok-imagine/text-to-video': 3,
   'grok-imagine/image-to-video': 3,
-  'grok-imagine/upscale': 5,          // flat
+  'grok-imagine/upscale': 10,         // flat — kie published 10 cr/upscale (was 5)
   'grok-imagine/extend': 3,
   'bytedance/v1-pro-text-to-video': 6,
   'bytedance/v1-pro-image-to-video': 6,
@@ -122,10 +122,10 @@ export const PRICING = {
   'topaz/video-upscale': 8,           // flat
   'infinitalk/from-audio': 4,
   // ── HappyHorse 1.0 (NEW April 2026) ──
-  'happyhorse/text-to-video': 8,       // pricing not officially disclosed yet — estimate based on competitive positioning
-  'happyhorse/image-to-video': 8,
-  'happyhorse/reference-to-video': 8,
-  'happyhorse/video-edit': 10,
+  'happyhorse/text-to-video': 48,      // kie published (2026-07-12): 28 cr/s @720p, 48 @1080p (default). Was an 8 cr/s guess
+  'happyhorse/image-to-video': 48,
+  'happyhorse/reference-to-video': 48,
+  'happyhorse/video-edit': 48,       // 28 @720p / 48 @1080p (default)
   // ── HappyHorse 1.1 (June 2026) — kie published: 22.5 cr/s @720p, 29 cr/s @1080p; default is 1080p ──
   'happyhorse-1-1/text-to-video': 29,
   'happyhorse-1-1/image-to-video': 29,
@@ -185,6 +185,8 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'wan/2-5-text-to-video',
+  'wan/2-5-image-to-video',
   'suno/voice-generate',
   'suno/voice-regenerate',
   'happyhorse/text-to-video',
