@@ -46,7 +46,7 @@ Just ask Claude things like:
 - **Others**: ByteDance V1 Pro/Lite, Topaz upscale
 
 ### Audio (20+)
-- **Suno**: Music Gen, Extend, Cover, Add Instrumental/Vocals, Replace Section, Lyrics, Sounds, Sound Effects, MIDI, Music Video, Cover Art, Mashup, Persona, Timestamped Lyrics, Boost Style, Vocal Separation, WAV
+- **Suno**: Music Gen, Extend, Cover, Add Instrumental/Vocals, Replace Section, Lyrics, Sounds, Sound Effects, MIDI, Music Video, Cover Art, Mashup, Persona, Timestamped Lyrics, Boost Style, Vocal Separation, WAV, Custom Voice cloning (experimental)
 - **ElevenLabs**: TTS (Turbo 2.5 + Multilingual V2), Text-to-Dialogue V3, Audio Isolation, Speech-to-Text
 
 ### Utility
@@ -135,6 +135,7 @@ generate_image, generate_video, generate_music, generate_sfx,
 generate_tts, generate_dialogue, generate_sounds, generate_lyrics,
 generate_persona, generate_mashup, generate_cover_art,
 generate_midi, create_music_video,
+prepare_voice_clone, create_voice_clone, regenerate_voice_clone,
 create_omni_voice, create_omni_character,
 extend_music, cover_audio, upload_extend_audio,
 add_instrumental, add_vocals, replace_section,

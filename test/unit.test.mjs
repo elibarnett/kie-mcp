@@ -264,6 +264,10 @@ test('normalizeTaskState — every record shape → one word (issue #53)', () =>
   assert.equal(normalizeTaskState({ successFlag: 'SUCCESS' }), 'success', 'specialized string');
   assert.equal(normalizeTaskState({ successFlag: 'PENDING' }), 'generating', 'specialized pending');
   assert.equal(normalizeTaskState({ errorCode: 'X' }), 'fail');
+  // Voice API uses lowercase statuses (#20)
+  assert.equal(normalizeTaskState({ status: 'success' }), 'success', 'voice lowercase success');
+  assert.equal(normalizeTaskState({ status: 'processing_validate_fail' }), 'fail', 'voice fail variant');
+  assert.equal(normalizeTaskState({ status: 'wait_validating' }), 'generating', 'voice mid-flow');
   assert.equal(normalizeTaskState({}), 'generating', 'unknown → generating');
 });
 
