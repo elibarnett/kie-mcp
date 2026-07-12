@@ -2,6 +2,16 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.5.0] — 2026-07-11
+
+### Added
+
+- **`wait: false` async mode extended to the slow music-family Suno tools** (#45): `extend_music`, `cover_audio`, `add_instrumental`, `add_vocals`, `replace_section`, `upload_extend_audio`, `generate_mashup`. Like the 4.2.0 set, they now submit and return the task_id in ~0.5s (verified: 457ms) instead of blocking for minutes; recover with `check_task` → `download_result`. Each also gained the `max_wait_seconds` blocking-budget override.
+
+### Notes
+
+- Deliberately EXCLUDED `convert_to_wav`, `create_music_video`, `generate_midi`, and `separate_vocals`: these create via specialized kie endpoints whose result records live on specialized record endpoints (e.g. WAV is on `/api/v1/wav/record-info`, not the `/generate/record-info` that `check_task`/`download_result` query), so their async outputs aren't recoverable yet. Worse, this endpoint drift means their BLOCKING paths are likely broken too — filed as #53. They'll get `wait:false` once #53 teaches the recovery path those endpoints.
+
 ## [4.4.3] — 2026-07-11
 
 ### Changed
@@ -341,6 +351,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.5.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.0
 [4.4.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.3
 [4.4.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.2
 [4.4.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.1

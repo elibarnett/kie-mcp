@@ -3332,7 +3332,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.4.3' };
+const SERVER_INFO = { name: 'kie-art', version: '4.5.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3608,6 +3608,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           audioId: { type: 'string', description: 'Audio ID from a previous Suno generation (from sunoData)' },
           prompt: { type: 'string', description: 'Prompt for the extension' },
           style: { type: 'string', description: 'Style tags for the extension' },
@@ -3627,6 +3629,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           uploadUrl: { type: 'string', description: 'URL of audio to cover' },
           prompt: { type: 'string', description: 'Description of desired cover style' },
           customMode: { type: 'boolean', default: false },
@@ -3648,6 +3652,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           uploadUrl: { type: 'string', description: 'URL of vocal audio' },
           title: { type: 'string' },
           tags: { type: 'string', description: 'Style tags for the instrumental' },
@@ -3665,6 +3671,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           prompt: { type: 'string', description: 'Lyrics or vocal description' },
           uploadUrl: { type: 'string', description: 'URL of instrumental audio' },
           title: { type: 'string' },
@@ -3683,6 +3691,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           taskId: { type: 'string', description: 'Task ID of the original Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData' },
           prompt: { type: 'string', description: 'Prompt for the replacement section' },
@@ -3811,6 +3821,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           taskId: { type: 'string', description: 'Source task ID' },
           audioIds: { type: 'array', items: { type: 'string' }, description: 'Up to 2 audio IDs to mashup' },
           prompt: { type: 'string', description: 'Optional prompt for mashup direction' },
@@ -3901,6 +3913,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           uploadUrl: { type: 'string', description: 'URL of the audio file to extend' },
           prompt: { type: 'string', description: 'Description of the extension content' },
           continueAt: { type: 'number', description: 'Timestamp in seconds where to start the extension' },
@@ -4547,6 +4561,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/extend', prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/extend', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Extend task ${taskId} completed but no tracks.` }] };
@@ -4571,6 +4586,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/cover', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/cover', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Cover task ${taskId} completed but no tracks.` }] };
@@ -4591,6 +4607,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-instrumental', prompt: uploadUrl.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/add-instrumental', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Instrumental added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
@@ -4609,6 +4626,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/add-vocals', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/add-vocals', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Vocals added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
@@ -4627,6 +4645,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId, model: 'suno/replace-section', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/replace-section', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
         return { content: [{ type: 'text', text: `✅ Section replaced!\nTask ID: ${taskId}\nRange: ${infillStartS}s-${infillEndS}s\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
@@ -4764,6 +4783,7 @@ const handleCallTool = async (request) => {
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/mashup', prompt: prompt?.slice(0, 80) || 'mashup', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(newTaskId, 'suno/mashup', outFilename);
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Mashup task ${newTaskId} done but no tracks.` }] };
@@ -4845,6 +4865,7 @@ const handleCallTool = async (request) => {
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         taskHistory.push({ taskId: newTaskId, model: 'suno/upload-extend', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(newTaskId, 'suno/upload-extend', outFilename);
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Extend task ${newTaskId} done but no tracks.` }] };
@@ -5094,7 +5115,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.4.3', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.5.0', sessions: sessions.size }));
       return;
     }
 
