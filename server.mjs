@@ -302,6 +302,10 @@ const PRICING = {
   'suno/generate-sounds': 5,
   'suno/generate-persona': 5,
   'suno/generate-mashup': 8,
+  // ── Suno Voice API (custom voice cloning, #20) ──
+  'suno/voice-validate': 0,    // "Generate Voice" — free (kie marketing 2026-07-12)
+  'suno/voice-generate': 5,    // estimate — pricing not disclosed; flagged below
+  'suno/voice-regenerate': 5,  // estimate
   'suno/boost-style': 2,
   'suno/timestamped-lyrics': 2,
   'suno/cover-art': 4,
@@ -329,6 +333,8 @@ const PRICING = {
 // config per tier. HappyHorse + Gemini Omni rates were never officially disclosed by
 // kie.ai (research-derived); flagged for the same reason.
 const PRICING_ESTIMATED = new Set([
+  'suno/voice-generate',
+  'suno/voice-regenerate',
   'happyhorse/text-to-video',
   'happyhorse/image-to-video',
   'happyhorse/reference-to-video',
@@ -2909,6 +2915,10 @@ const AUDIO_TOOLS_REGISTRY = {
   'get_timestamped_lyrics': { name: 'Suno Timestamped Lyrics', pricingKey: 'suno/timestamped-lyrics', category: 'music', description: 'Get word-level timestamped lyrics from a Suno track for karaoke/captioning', capabilities: ['lyrics', 'audio-processing', 'latest'] },
   'generate_cover_art': { name: 'Suno Cover Art', pricingKey: 'suno/cover-art', category: 'music', description: 'Generate album cover art for an existing Suno music track', capabilities: ['music-generation', 'cover-art'] },
   'upload_extend_audio': { name: 'Suno Upload & Extend Audio', pricingKey: 'suno/upload-extend', category: 'music', description: 'Extend an uploaded audio file (not a Suno track) with new AI-generated content', capabilities: ['music-generation', 'music-editing'] },
+  // ── Suno Voice API — custom voice cloning (EXPERIMENTAL, #20) ──
+  'prepare_voice_clone': { name: 'Suno Voice — Prepare (validate)', pricingKey: 'suno/voice-validate', category: 'music', description: 'STEP 1 of Suno custom-voice cloning (FREE). Submit a clean vocal sample; kie validates it and moves the task to wait_validating, then delivers a verification phrase to your KIE_CALLBACK_URL for the voice owner to read aloud. ⚠️ Only clone a voice you own or have explicit permission to use. EXPERIMENTAL — completion (create_voice_clone) is not verified end-to-end.', capabilities: ['voice', 'character', 'experimental', 'latest', 'new'] },
+  'create_voice_clone': { name: 'Suno Voice — Create (generate)', pricingKey: 'suno/voice-generate', category: 'music', description: 'STEP 2 — after the voice owner records the verification phrase from step 1, submit that recording (verify_url) + metadata to finish the voice. On success returns a voiceId usable in generate_music. EXPERIMENTAL/unverified — the phrase is delivered via callback, so a real KIE_CALLBACK_URL is required.', capabilities: ['voice', 'character', 'experimental', 'latest', 'new'] },
+  'regenerate_voice_clone': { name: 'Suno Voice — Regenerate', pricingKey: 'suno/voice-regenerate', category: 'music', description: 'Retry a failed/incomplete custom-voice task by its task_id.', capabilities: ['voice', 'experimental', 'latest', 'new'] },
   // ── Gemini Omni character creation (May 2026) ──
   'create_omni_voice': { name: 'Gemini Omni Voice Creator', pricingKey: 'gemini-omni/voice-create', category: 'character', description: 'Create a reusable voice ID for Gemini Omni video. Returns kieAudioId for use in audio_ids array.', capabilities: ['character', 'voice', 'video', 'latest', 'new'] },
   'create_omni_character': { name: 'Gemini Omni Character Creator', pricingKey: 'gemini-omni/character-create', category: 'character', description: 'Create a reusable visual character ID for Gemini Omni video. Returns characterId from image + optional voice.', capabilities: ['character', 'multimodal', 'video', 'latest', 'new'] },
@@ -3283,6 +3293,10 @@ const SUNO_RECORD_ENDPOINTS = {
   'suno/mp4': '/api/v1/mp4/record-info',
   'suno/midi': '/api/v1/midi/record-info',
   'suno/vocal-removal': '/api/v1/vocal-removal/record-info',
+  // Voice API tasks (#20) — record has voiceId/status, no downloadable file.
+  'suno/voice-validate': '/api/v1/voice/record-info',
+  'suno/voice-generate': '/api/v1/voice/record-info',
+  'suno/voice-regenerate': '/api/v1/voice/record-info',
 };
 
 // Recursively collect every http(s) URL string reachable in a value. Used to
@@ -3323,6 +3337,25 @@ async function downloadUrlList(urls, outFilename, ext, outDir) {
     files.push(p);
   }
   return files;
+}
+
+// Poll the Suno Voice API record endpoint until the task reaches one of
+// `targetStates` (or a terminal failure). Status flow: wait_processing →
+// processing_validate → wait_validating → success | fail | processing_validate_fail.
+// Returns the record `data` (has voiceId on success). See issue #20.
+async function pollVoiceUntil(taskId, targetStates, maxWaitMs = 300000) {
+  const start = Date.now();
+  const fails = new Set(['fail', 'processing_validate_fail']);
+  while (Date.now() - start < maxWaitMs) {
+    const poll = await pollOnce('GET', `/api/v1/voice/record-info?taskId=${taskId}`);
+    if (poll) {
+      const d = poll.data || poll;
+      if (targetStates.includes(d.status)) return d;
+      if (fails.has(d.status)) throw taskError(`Voice task failed (${d.status}): ${d.errorMessage || d.errorCode || 'unknown'}`, taskId);
+    }
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+  throw taskError(`Voice task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
 }
 
 async function pollSunoTask(taskId, maxWaitMs = 300000) {
@@ -3447,9 +3480,12 @@ function extractResultUrls(result) {
 // `successFlag` (wav/mp4/midi/vocal-removal — issue #53).
 function normalizeTaskState(data) {
   if (data.state) return data.state;
-  if (data.status === 'SUCCESS' || data.status === 'FIRST_SUCCESS') return 'success';
-  if (data.status?.includes('FAILED') || data.status === 'SENSITIVE_WORD_ERROR') return 'fail';
-  if (data.status) return 'generating';
+  if (data.status) {
+    const st = String(data.status).toLowerCase();  // Suno music is UPPER, Voice API is lower
+    if (st === 'success' || st === 'first_success') return 'success';
+    if (st.includes('fail') || st === 'sensitive_word_error') return 'fail';
+    return 'generating';
+  }
   if (data.successFlag === 'SUCCESS' || data.successFlag === 1) return 'success';
   if (data.successFlag === 'PENDING' || data.successFlag === 'PROCESSING') return 'generating';
   if (data.errorCode || (typeof data.successFlag === 'number' && data.successFlag >= 2)) return 'fail';
@@ -3471,7 +3507,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.5.2' };
+const SERVER_INFO = { name: 'kie-art', version: '4.6.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3992,6 +4028,49 @@ const handleListTools = async () => ({
       },
     },
     {
+      name: 'prepare_voice_clone',
+      description: 'EXPERIMENTAL (#20) — STEP 1 of Suno custom-voice cloning (FREE). Submit a clean vocal sample; polls to `wait_validating`, after which kie sends a verification phrase to your KIE_CALLBACK_URL for the voice owner to read aloud (then use create_voice_clone). ⚠️ Only clone a voice you OWN or have explicit permission to use. The completion step is not verified end-to-end and needs a real callback URL.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          voice_url: { type: 'string', description: 'Public URL of a clean vocal sample (the voice to clone). Must be reachable by kie servers.' },
+          vocal_start_s: { type: 'number', default: 0, description: 'Start of the vocal segment, seconds' },
+          vocal_end_s: { type: 'number', default: 10, description: 'End of the vocal segment, seconds' },
+          language: { type: 'string', default: 'en', description: 'Language of the vocal (e.g. "en")' },
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return the task_id immediately.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600 },
+        },
+        required: ['voice_url'],
+      },
+    },
+    {
+      name: 'create_voice_clone',
+      description: 'EXPERIMENTAL (#20) — STEP 2 — after the voice owner records the verification phrase from prepare_voice_clone, submit that recording to finish the voice. On success returns a voiceId usable in generate_music. Unverified end-to-end.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string', description: 'task_id from prepare_voice_clone (must be at wait_validating)' },
+          verify_url: { type: 'string', description: 'Public URL of the voice owner\'s recording of the verification phrase' },
+          voice_name: { type: 'string', description: 'Name for the custom voice' },
+          description: { type: 'string', description: 'Optional description' },
+          style: { type: 'string', description: 'Optional style hint, e.g. "Pop, Female Vocal"' },
+          singer_skill_level: { type: 'string', enum: ['beginner', 'intermediate', 'professional'], description: 'Optional' },
+          wait: { type: 'boolean', default: true },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600 },
+        },
+        required: ['task_id', 'verify_url', 'voice_name'],
+      },
+    },
+    {
+      name: 'regenerate_voice_clone',
+      description: 'EXPERIMENTAL (#20) — retry a failed/incomplete custom-voice task by its task_id.',
+      inputSchema: {
+        type: 'object',
+        properties: { task_id: { type: 'string', description: 'Voice task_id to retry' } },
+        required: ['task_id'],
+      },
+    },
+    {
       name: 'get_timestamped_lyrics',
       description: 'NEW — Get word-level timestamped lyrics from a Suno track. Useful for karaoke, captioning, or sync.',
       inputSchema: {
@@ -4388,8 +4467,10 @@ const handleCallTool = async (request) => {
               `Cost time: ${data.costTime ? data.costTime / 1000 + 's' : 'N/A'}`,
               typeof data.creditsConsumed === 'number' ? `Cost: ${data.creditsConsumed} credits (~$${(data.creditsConsumed * 0.005).toFixed(3)}) [actual]` : '',
               data.failMsg || data.errorMessage ? `Error: ${data.failMsg || data.errorMessage}` : '',
+              data.voiceId ? `Voice ID: ${data.voiceId} (use in generate_music)` : '',
+              data.status === 'wait_validating' ? `Next: the voice owner records the verification phrase (sent to your KIE_CALLBACK_URL), then call create_voice_clone with verify_url.` : '',
               data.resultJson ? `Result: ${JSON.stringify(data.resultJson)}` : '',
-              state === 'success' ? `Retrieve with: download_result task_id=${args.task_id}` : '',
+              state === 'success' && !data.voiceId ? `Retrieve with: download_result task_id=${args.task_id}` : '',
             ].filter(Boolean).join('\n'),
           }],
         };
@@ -4946,6 +5027,50 @@ const handleCallTool = async (request) => {
         return { content: [{ type: 'text', text: `✅ Mashup created!\nTask ID: ${newTaskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
+      // ── Suno Voice API — custom voice cloning (EXPERIMENTAL, #20) ──
+      case 'prepare_voice_clone': {
+        const { voice_url, vocal_start_s = 0, vocal_end_s = 10, language = 'en' } = args;
+        const body = { voiceUrl: voice_url, vocalStartS: vocal_start_s, vocalEndS: vocal_end_s, language };
+        const result = await sunoCreate('/api/v1/voice/validate', body);
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        trackTask({ taskId, model: 'suno/voice-validate', prompt: `voice clone: ${voice_url.slice(0, 60)}`, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/voice-validate', null);
+        const rec = await pollVoiceUntil(taskId, ['wait_validating', 'success'], pollBudgetMs('audio', args));
+        return { content: [{ type: 'text', text: [
+          `✅ Voice sample validated (task ${taskId}, status: ${rec.status}).`,
+          rec.voiceId ? `Voice ID: ${rec.voiceId} — usable in generate_music.` : '',
+          rec.status === 'wait_validating' ? `⏳ Next: kie sent a verification phrase to your KIE_CALLBACK_URL. The voice OWNER records themselves reading it, upload that recording, then call create_voice_clone task_id=${taskId} verify_url=<recording> voice_name=<name>.` : '',
+          `⚠️ Only clone a voice you own or have explicit permission to use.`,
+        ].filter(Boolean).join('\n') }] };
+      }
+
+      case 'create_voice_clone': {
+        const { task_id, verify_url, voice_name, description, style, singer_skill_level } = args;
+        const body = { taskId: task_id, verifyUrl: verify_url, voiceName: voice_name };
+        if (description) body.description = description;
+        if (style) body.style = style;
+        if (singer_skill_level) body.singerSkillLevel = singer_skill_level;
+        const result = await sunoCreate('/api/v1/voice/generate', body);
+        const taskId = result.data?.taskId || result.taskId || task_id;
+        trackTask({ taskId, model: 'suno/voice-generate', prompt: `voice: ${voice_name}`, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/voice-generate', null);
+        const rec = await pollVoiceUntil(taskId, ['success'], pollBudgetMs('audio', args));
+        return { content: [{ type: 'text', text: [
+          `✅ Custom voice created!`,
+          `Voice ID: ${rec.voiceId || '(check_task for status)'} — use as the voice in generate_music.`,
+          `Task ID: ${taskId}`,
+        ].join('\n') }] };
+      }
+
+      case 'regenerate_voice_clone': {
+        const { task_id } = args;
+        const result = await sunoCreate('/api/v1/voice/regenerate', { taskId: task_id });
+        const newTaskId = result.data?.taskId || result.taskId || task_id;
+        trackTask({ taskId: newTaskId, model: 'suno/voice-regenerate', prompt: `regenerate voice ${task_id}`, status: 'polling', createdAt: new Date().toISOString() });
+        return { content: [{ type: 'text', text: `✅ Voice regeneration started.\nTask ID: ${newTaskId}\nPoll with check_task; complete with create_voice_clone if it reaches wait_validating.` }] };
+      }
+
       case 'boost_style': {
         const { content } = args;
         const result = await kieRequest('POST', '/api/v1/style/generate', { content });
@@ -5270,7 +5395,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.5.2', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.6.0', sessions: sessions.size }));
       return;
     }
 

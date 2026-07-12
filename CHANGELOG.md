@@ -2,6 +2,17 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.6.0] — 2026-07-12
+
+### Added
+
+- **Suno custom-voice cloning tools** (#20, EXPERIMENTAL): `prepare_voice_clone` (validate a vocal sample — FREE), `create_voice_clone` (finish the voice from the owner's verification recording → `voiceId` for `generate_music`), and `regenerate_voice_clone`. `check_task` recovers voice tasks via the `/api/v1/voice/record-info` endpoint and surfaces the `voiceId` / next-step. These wrap kie's consent-gated cloning flow: submit a sample → kie sends a verification phrase to your `KIE_CALLBACK_URL` → the voice **owner** records it → you submit that recording. **⚠️ Only clone a voice you own or have explicit permission to use.**
+
+### Notes
+
+- The FREE `prepare_voice_clone` path is verified live end-to-end (validate → `wait_validating` → `check_task` shows the next step). The `create_voice_clone` completion step is **not verified end-to-end** — it needs a real `KIE_CALLBACK_URL` (the verification phrase is callback-delivered) and a human recording, so it ships experimental. `create/regenerate` pricing is a 5-credit estimate (`PRICING_ESTIMATED`); validate is free.
+- `check-voice` was intentionally **not** shipped — its endpoint requires an undocumented `suno_user_id` and always 422'd; `check_task` covers "is the voice ready" via task status.
+
 ## [4.5.2] — 2026-07-12
 
 ### Fixed
@@ -372,6 +383,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.6.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.0
 [4.5.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.2
 [4.5.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.1
 [4.5.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.0
