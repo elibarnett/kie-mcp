@@ -416,6 +416,27 @@ function getCostEstimate(modelId, durationSec) {
   return `~${total} credits (~$${(total * 0.005).toFixed(2)}) for ${durationSec}s${note}`;
 }
 
+// Cost line for a COMPLETED task. Prefers the actual `creditsConsumed` kie
+// reports (ground truth — varies with the real resolution/duration/config) over
+// the PRICING-table estimate, which is wrong whenever the caller deviates from
+// the default config (issue #42). Falls back to the labeled estimate when the
+// field is absent. Logs a [pricing-drift] warning when actual diverges >25% from
+// the table so the registry numbers can be corrected (feeds the drift watch, #44).
+function formatCost(modelId, pollResult, durationSec) {
+  const actual = pollResult?.creditsConsumed;
+  if (typeof actual === 'number') {
+    const perUnit = PRICING[modelId];
+    if (typeof perUnit === 'number' && perUnit > 0) {
+      const expected = durationSec ? Math.round(perUnit * durationSec) : perUnit;
+      if (expected > 0 && Math.abs(actual - expected) / expected > 0.25) {
+        console.error(`[pricing-drift] ${modelId}: actual ${actual} cr vs table ${expected} cr${durationSec ? ` (${perUnit}/s × ${durationSec}s)` : ''}`);
+      }
+    }
+    return `${actual} credits (~$${(actual * 0.005).toFixed(3)}) [actual]`;
+  }
+  return getCostEstimate(modelId, durationSec) || 'unknown';
+}
+
 // Coerce a duration value to the type a model's `options.duration` spec declares
 // (issue #28). Returns { value } on success, or { error } when a numeric spec
 // receives a non-number. A null/undefined spec or value passes the raw through.
@@ -3311,7 +3332,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.4.2' };
+const SERVER_INFO = { name: 'kie-art', version: '4.4.3' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -4078,7 +4099,7 @@ const handleCallTool = async (request) => {
               `Model: ${modelDef.name} (${modelId})`,
               `Task ID: ${taskId}`,
               `Cost time: ${result.costTime ? result.costTime / 1000 + 's' : 'N/A'}`,
-              `Est. cost: ${getCostEstimate(modelId) || 'unknown'}`,
+              `Cost: ${formatCost(modelId, result)}`,
               ``,
               `Downloaded ${downloadedFiles.length} file(s):`,
               ...downloadedFiles.map((f) => `  → ${f}`),
@@ -4209,6 +4230,7 @@ const handleCallTool = async (request) => {
               `Progress: ${data.progress || 0}%`,
               `Model: ${data.model || 'N/A'}`,
               `Cost time: ${data.costTime ? data.costTime / 1000 + 's' : 'N/A'}`,
+              typeof data.creditsConsumed === 'number' ? `Cost: ${data.creditsConsumed} credits (~$${(data.creditsConsumed * 0.005).toFixed(3)}) [actual]` : '',
               data.failMsg || data.errorMessage ? `Error: ${data.failMsg || data.errorMessage}` : '',
               data.resultJson ? `Result: ${JSON.stringify(data.resultJson)}` : '',
               state === 'success' ? `Retrieve with: download_result task_id=${args.task_id}` : '',
@@ -4336,7 +4358,7 @@ const handleCallTool = async (request) => {
         return {
           content: [{
             type: 'text',
-            text: [`✅ Video generated!`, `Model: ${modelDef.name}`, `Task ID: ${taskId}`, `Est. cost: ${getCostEstimate(modelId, parseInt(model_options.duration) || 8) || 'unknown'}`, ``, `Downloaded to: ${outPath}`].join('\n'),
+            text: [`✅ Video generated!`, `Model: ${modelDef.name}`, `Task ID: ${taskId}`, `Cost: ${formatCost(modelId, pollResult, parseInt(model_options.duration) || 8)}`, ``, `Downloaded to: ${outPath}`].join('\n'),
           }],
         };
       }
@@ -5072,7 +5094,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.4.2', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.4.3', sessions: sessions.size }));
       return;
     }
 
@@ -5137,6 +5159,7 @@ export {
   pollBudgetMs,
   validateModelOptions,
   getCostEstimate,
+  formatCost,
   coerceDuration,
   sunoTrackName,
   resolveVoice,

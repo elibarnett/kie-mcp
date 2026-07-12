@@ -20,6 +20,7 @@ import {
   pollBudgetMs,
   validateModelOptions,
   getCostEstimate,
+  formatCost,
   coerceDuration,
   sunoTrackName,
   resolveVoice,
@@ -187,6 +188,38 @@ test('getCostEstimate — free, estimate label, per-second', () => {
   const est = getCostEstimate('happyhorse-1-1/text-to-video', 5);
   assert.match(est, /for 5s/, 'per-second includes duration');
   assert.match(est, /estimate/, 'PRICING_ESTIMATED entry is labeled');
+});
+
+test('formatCost — actual creditsConsumed beats estimate (issue #42)', () => {
+  // actual present → uses it, tagged [actual]
+  assert.match(formatCost('nano-banana-2', { creditsConsumed: 4 }), /^4 credits .* \[actual\]$/);
+  // actual 0 (free) is still reported as actual, not skipped
+  assert.match(formatCost('omnihuman-1-5/subject-detection', { creditsConsumed: 0 }), /^0 credits .* \[actual\]$/);
+  // per-second actual differs from the default-config estimate — the #42 example
+  // (seedance-2-mini 480p charged 38, table default is 720p at 20.5/s)
+  const s = formatCost('bytedance/seedance-2-mini', { creditsConsumed: 38 }, 4);
+  assert.match(s, /^38 credits .* \[actual\]$/);
+  // no actual → falls back to the labeled estimate
+  assert.match(formatCost('nano-banana-2', {}), /credits/);
+  assert.match(formatCost('nano-banana-2', {}), /~/, 'estimate keeps the ~ prefix');
+  // unknown model, no actual → 'unknown'
+  assert.equal(formatCost('does-not-exist', {}), 'unknown');
+});
+
+test('formatCost — logs [pricing-drift] only when >25% off table (issue #42/#44)', () => {
+  const logs = [];
+  const orig = console.error;
+  console.error = (...a) => logs.push(a.join(' '));
+  try {
+    // nano-banana-2 table = 4; actual 4 → no drift
+    formatCost('nano-banana-2', { creditsConsumed: 4 });
+    // actual 8 vs table 4 → 100% drift → logged
+    formatCost('nano-banana-2', { creditsConsumed: 8 });
+  } finally {
+    console.error = orig;
+  }
+  assert.equal(logs.filter((l) => l.includes('[pricing-drift]')).length, 1, 'exactly one drift log');
+  assert.match(logs.find((l) => l.includes('[pricing-drift]')), /nano-banana-2/);
 });
 
 test('resolveVoice — name/id acceptance + catalog on miss (issues #26, 4.0.5)', () => {
