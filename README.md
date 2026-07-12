@@ -189,6 +189,10 @@ npm run smoke   # live end-to-end over MCP stdio — needs KIE_API_KEY
 
 `server.mjs` guards its side effects behind a main-module check, so it can be imported by tests (`test/unit.test.mjs`) to exercise the pure helpers without starting a server. `test/harness.mjs` is a reusable stdio JSON-RPC client for driving the real server in smoke/integration checks. CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the syntax check + unit tests on Node 20 and 22 for every push and PR.
 
+### Drift watch
+
+kie.ai changes things without notice — advertised prices, model availability, even API shapes. [`.github/workflows/drift-watch.yml`](.github/workflows/drift-watch.yml) runs [`scripts/drift-watch.mjs`](scripts/drift-watch.mjs) weekly (and on demand) to scan for it: paused/removed slugs, pricing that no longer matches the `PRICING` table, and new models in kie's catalog. Findings land in a single rolling GitHub issue. Add a `KIE_API_KEY` repo secret to enable the per-slug liveness probes (0 credits — empty-input validation errors); the pricing and new-model scans need no secret. Run locally with `node scripts/drift-watch.mjs`.
+
 ## Releasing
 
 Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). To cut a release:
