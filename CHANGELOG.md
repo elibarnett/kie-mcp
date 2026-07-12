@@ -2,6 +2,16 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.5.1] — 2026-07-11
+
+### Added
+
+- **`taskHistory` now persists to disk** (`kie/assets/task-history.jsonl`, gitignored) and reloads on startup (#43). A server restart — or a crash mid-generation, exactly when recovery matters — no longer empties `list_tasks` or loses the model/filename hints the recovery path uses. Every task registration and status change appends a line; on load, entries are deduped by taskId (last write wins, so terminal status is kept) and capped to the most recent 500, with the file compacted when it grows past 4×. All I/O is best-effort and never breaks a generation.
+
+### Verified
+
+- Live (2026-07-11): created a task with `wait:false`, killed the server, started a fresh one → `list_tasks` showed the task and `download_result` **with no filename argument** used the persisted filename to save the result. New unit test covers the dedupe/cap/skip-junk parsing.
+
 ## [4.5.0] — 2026-07-11
 
 ### Added
@@ -351,6 +361,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.5.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.1
 [4.5.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.0
 [4.4.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.3
 [4.4.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.2

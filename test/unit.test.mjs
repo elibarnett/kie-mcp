@@ -23,6 +23,7 @@ import {
   formatCost,
   coerceDuration,
   sunoTrackName,
+  parseTaskLog,
   resolveVoice,
   PROMPT_CAPS,
   RAW_DIR,
@@ -220,6 +221,28 @@ test('formatCost — logs [pricing-drift] only when >25% off table (issue #42/#4
   }
   assert.equal(logs.filter((l) => l.includes('[pricing-drift]')).length, 1, 'exactly one drift log');
   assert.match(logs.find((l) => l.includes('[pricing-drift]')), /nano-banana-2/);
+});
+
+test('parseTaskLog — dedupe by taskId (last wins), skip junk, cap (issue #43)', () => {
+  const log = [
+    JSON.stringify({ taskId: 'a', status: 'polling', filename: 'a.png' }),
+    'not json — skip me',
+    JSON.stringify({ taskId: 'b', status: 'polling' }),
+    JSON.stringify({ taskId: 'a', status: 'downloaded', filename: 'a.png' }), // supersedes first 'a'
+    '',
+  ].join('\n');
+  const out = parseTaskLog(log);
+  assert.equal(out.length, 2, 'two distinct tasks');
+  const a = out.find((e) => e.taskId === 'a');
+  assert.equal(a.status, 'downloaded', 'last write for a taskId wins (terminal status)');
+  // dedup keeps the LATEST position (chronological), so a moves after b
+  assert.deepEqual(out.map((e) => e.taskId), ['b', 'a']);
+  // cap keeps the most recent N
+  const many = Array.from({ length: 50 }, (_, i) => JSON.stringify({ taskId: `t${i}` })).join('\n');
+  const capped = parseTaskLog(many, 10);
+  assert.equal(capped.length, 10);
+  assert.equal(capped[capped.length - 1].taskId, 't49', 'keeps newest');
+  assert.deepEqual(parseTaskLog(''), [], 'empty → empty');
 });
 
 test('resolveVoice — name/id acceptance + catalog on miss (issues #26, 4.0.5)', () => {

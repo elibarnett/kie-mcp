@@ -5,6 +5,7 @@ node_modules/
 # Generated assets (don't commit GBs of generated media)
 kie/assets/raw/*
 !kie/assets/raw/.gitkeep
+kie/assets/task-history.jsonl
 src/assets/raw/*
 !src/assets/raw/.gitkeep
 

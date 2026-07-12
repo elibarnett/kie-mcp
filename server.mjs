@@ -4,7 +4,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync, readdirSync, statSync, appendFileSync, readFileSync } from 'fs';
 import { join, basename, isAbsolute } from 'path';
 import { createServer } from 'http';
 import crypto from 'crypto';
@@ -2916,7 +2916,67 @@ const AUDIO_TOOLS_REGISTRY = {
 
 // ─── Helpers ───
 
+// Session task log. In-memory array, mirrored to an append-only JSONL file so
+// list_tasks and the recovery path (check_task/download_result) survive a
+// server restart — a crash mid-generation is exactly when recovery matters
+// (issue #43). Each push and status change appends a line; on load, entries are
+// deduped by taskId keeping the last occurrence.
 const taskHistory = [];
+const TASK_LOG_PATH = join(PROJECT_ROOT, 'kie/assets/task-history.jsonl');
+const TASK_LOG_CAP = 500; // entries kept in memory / after compaction
+
+// Parse JSONL task-log text into a deduped, capped, chronological array.
+// Pure — the file I/O wrappers below use it, and it's unit-tested. Last write
+// for a given taskId wins (captures the terminal status); malformed lines are
+// skipped.
+function parseTaskLog(text, cap = TASK_LOG_CAP) {
+  const byId = new Map();
+  const noId = [];
+  for (const line of String(text).split('\n')) {
+    if (!line.trim()) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e && e.taskId != null) { byId.delete(e.taskId); byId.set(e.taskId, e); }
+    else if (e) noId.push(e);
+  }
+  const all = [...noId, ...byId.values()];
+  return all.slice(-cap);
+}
+
+// Append one entry to the task log; never throws (persistence must not break a
+// generation). Best-effort.
+function appendTaskLog(entry) {
+  try {
+    if (!existsSync(RAW_DIR)) mkdirSync(RAW_DIR, { recursive: true });
+    appendFileSync(TASK_LOG_PATH, JSON.stringify(entry) + '\n');
+  } catch { /* best-effort */ }
+}
+
+// Push an entry into the in-memory history AND persist it. Replaces bare
+// taskHistory.push at every call site.
+function trackTask(entry) {
+  taskHistory.push(entry);
+  appendTaskLog(entry);
+  return entry;
+}
+
+// Load persisted history into memory at startup, and compact the file if it has
+// grown well past the cap. Best-effort; a missing/corrupt file just starts empty.
+function loadTaskHistory() {
+  try {
+    if (!existsSync(TASK_LOG_PATH)) return;
+    const text = readFileSync(TASK_LOG_PATH, 'utf8');
+    const entries = parseTaskLog(text);
+    trackTask(...entries);
+    // Compact if the raw line count is much larger than what we keep.
+    const lineCount = text.split('\n').filter((l) => l.trim()).length;
+    if (lineCount > TASK_LOG_CAP * 4) {
+      writeFileSync(TASK_LOG_PATH, entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
+    }
+  } catch { /* best-effort */ }
+}
+
+if (isMainModule) loadTaskHistory();
 
 // Thrown when kie.ai returns a 2xx response whose body is not valid JSON.
 // Observed empirically on /api/v1/jobs/recordInfo for tasks in interim
@@ -3332,7 +3392,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.5.0' };
+const SERVER_INFO = { name: 'kie-art', version: '4.5.1' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -4077,7 +4137,7 @@ const handleCallTool = async (request) => {
           status: 'polling',
           createdAt: new Date().toISOString(),
         };
-        taskHistory.push(taskEntry);
+        trackTask(taskEntry);
         if (args.wait === false) return submitOnly(taskId, modelId, outFilename);
 
         // Poll until done — pass modelId so dedicated endpoints use their own polling URL
@@ -4085,7 +4145,7 @@ const handleCallTool = async (request) => {
         const resultUrls = extractResultUrls(result);
 
         if (resultUrls.length === 0) {
-          taskEntry.status = 'no_urls';
+          taskEntry.status = 'no_urls'; appendTaskLog(taskEntry);
           return {
             content: [{
               type: 'text',
@@ -4102,7 +4162,7 @@ const handleCallTool = async (request) => {
           downloadedFiles.push(path);
         }
 
-        taskEntry.status = 'downloaded';
+        taskEntry.status = 'downloaded'; appendTaskLog(taskEntry);
         taskEntry.resultUrls = resultUrls;
 
         return {
@@ -4293,7 +4353,7 @@ const handleCallTool = async (request) => {
         const outName = sanitizeFilename(args.filename) || entry?.filename || `download-${args.task_id.slice(0, 8)}.png`;
         const outPath = join(resolveOutputDir(args), outName);
         await downloadToFile(urls[0], outPath);
-        if (entry) entry.status = 'success';
+        if (entry) { entry.status = 'success'; appendTaskLog(entry); }
         return { content: [{ type: 'text', text: `Downloaded to: ${outPath}` }] };
       }
 
@@ -4359,7 +4419,7 @@ const handleCallTool = async (request) => {
 
         if (!taskId) return { content: [{ type: 'text', text: `Failed to create video task — no taskId returned.\nCheck model "${modelId}" is valid.` }] };
 
-        taskHistory.push({ taskId, model: modelId, prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: modelId, prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, modelId, outFilename);
 
         // Use dedicated poll endpoint if available, otherwise generic market polling
@@ -4391,7 +4451,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start music generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
-        taskHistory.push({ taskId, model: `suno-${model}`, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: `suno-${model}`, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, `suno-${model}`, outFilename);
 
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
@@ -4433,7 +4493,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start SFX generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
-        taskHistory.push({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'suno/sounds', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
@@ -4460,7 +4520,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start TTS generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
-        taskHistory.push({ taskId, model: apiModel, prompt: text.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: apiModel, prompt: text.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, apiModel, outFilename);
         const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const urls = extractResultUrls(pollResult);
@@ -4515,7 +4575,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start dialogue generation.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
-        taskHistory.push({ taskId, model: 'elevenlabs/text-to-dialogue-v3', prompt: dialogue[0]?.text?.slice(0, 80) || 'dialogue', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'elevenlabs/text-to-dialogue-v3', prompt: dialogue[0]?.text?.slice(0, 80) || 'dialogue', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'elevenlabs/text-to-dialogue-v3', outFilename);
         const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const urls = extractResultUrls(pollResult);
@@ -4536,7 +4596,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start audio isolation.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
-        taskHistory.push({ taskId, model: 'elevenlabs/audio-isolation', prompt: audio_url.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'elevenlabs/audio-isolation', prompt: audio_url.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Audio isolation task ${taskId} done but no URLs found.` }] };
@@ -4560,7 +4620,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/extend', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/extend', prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/extend', prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'suno/extend', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
@@ -4585,7 +4645,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/upload-cover', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/cover', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/cover', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'suno/cover', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData;
@@ -4606,7 +4666,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/add-instrumental', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/add-instrumental', prompt: uploadUrl.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/add-instrumental', prompt: uploadUrl.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'suno/add-instrumental', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
@@ -4625,7 +4685,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/add-vocals', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/add-vocals', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/add-vocals', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'suno/add-vocals', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
@@ -4644,7 +4704,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/replace-section', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/replace-section', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/replace-section', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'suno/replace-section', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
@@ -4657,7 +4717,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/lyrics', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/lyrics', prompt: prompt.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/lyrics', prompt: prompt.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const lyrics = pollResult.sunoData?.[0]?.text || pollResult.text || JSON.stringify(pollResult);
         return { content: [{ type: 'text', text: `✅ Lyrics generated!\nTask ID: ${taskId}\n\n${lyrics}` }] };
@@ -4672,7 +4732,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/wav/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/wav', prompt: `wav of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/wav', prompt: `wav of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const wavUrl = pollResult.sunoData?.[0]?.audioUrl || pollResult.wavUrl;
         if (!wavUrl) return { content: [{ type: 'text', text: `WAV task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
@@ -4688,7 +4748,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/vocal-removal/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/vocal-removal', prompt: sepType, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/vocal-removal', prompt: sepType, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Separation task ${taskId} done but no results.\n${JSON.stringify(pollResult)}` }] };
@@ -4706,7 +4766,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/midi/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/midi', prompt: `midi of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/midi', prompt: `midi of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const midiUrl = pollResult.sunoData?.[0]?.midiUrl || pollResult.midiUrl;
         if (!midiUrl) return { content: [{ type: 'text', text: `MIDI task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
@@ -4725,7 +4785,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/mp4/generate', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/mp4', prompt: `music video of ${audioId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/mp4', prompt: `music video of ${audioId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const videoUrl = pollResult.sunoData?.[0]?.videoUrl || pollResult.videoUrl;
         if (!videoUrl) return { content: [{ type: 'text', text: `Music video task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
@@ -4745,7 +4805,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/sounds', body);
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'suno/sounds', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(taskId, 'suno/sounds', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
@@ -4765,7 +4825,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/generate-persona', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId: newTaskId, model: 'suno/persona', prompt: personaName, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId: newTaskId, model: 'suno/persona', prompt: personaName, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const personaId = pollResult.personaId || pollResult.data?.personaId;
         return { content: [{ type: 'text', text: `✅ Persona created!\nTask ID: ${newTaskId}\nPersona ID: ${personaId || 'see result'}\nName: ${personaName}\n\nUse this Persona ID in future generate_music calls for character consistency.` }] };
@@ -4782,7 +4842,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/mashup', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId: newTaskId, model: 'suno/mashup', prompt: prompt?.slice(0, 80) || 'mashup', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId: newTaskId, model: 'suno/mashup', prompt: prompt?.slice(0, 80) || 'mashup', filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(newTaskId, 'suno/mashup', outFilename);
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
@@ -4811,7 +4871,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/suno/cover/generate', { taskId });
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId: newTaskId, model: 'suno/cover-art', prompt: `cover art for ${taskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId: newTaskId, model: 'suno/cover-art', prompt: `cover art for ${taskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const urls = pollResult.images || pollResult.data?.images || (pollResult.imageUrl ? [pollResult.imageUrl] : []);
         if (!urls.length) return { content: [{ type: 'text', text: `Cover art task ${newTaskId} done but no images.\n${JSON.stringify(pollResult, null, 2)}` }] };
@@ -4829,7 +4889,7 @@ const handleCallTool = async (request) => {
         const kieAudioId = data.kieAudioId || data.audio_id || data.id;
         if (!kieAudioId) return { content: [{ type: 'text', text: `Failed.\n${JSON.stringify(result, null, 2)}` }] };
         // Record in taskHistory so list_tasks can recover the ID later in the session.
-        taskHistory.push({ taskId: kieAudioId, model: 'gemini-omni/voice', prompt: voiceName, status: 'success', createdAt: new Date().toISOString() });
+        trackTask({ taskId: kieAudioId, model: 'gemini-omni/voice', prompt: voiceName, status: 'success', createdAt: new Date().toISOString() });
         return { content: [{ type: 'text', text: `✅ Voice character created!\nName: ${voiceName}\nkieAudioId: ${kieAudioId}\n\nUse this ID in generate_video model_options.audio_ids array (only consumed by model='gemini-omni/video').` }] };
       }
 
@@ -4846,7 +4906,7 @@ const handleCallTool = async (request) => {
         const characterId = data.characterId || data.character_id || data.id;
         if (!characterId) return { content: [{ type: 'text', text: `Failed.\n${JSON.stringify(result, null, 2)}` }] };
         // Record in taskHistory so list_tasks can recover the ID later in the session.
-        taskHistory.push({ taskId: characterId, model: 'gemini-omni/character', prompt: character_name || (descriptions ? descriptions.slice(0, 80) : '(unnamed)'), status: 'success', createdAt: new Date().toISOString() });
+        trackTask({ taskId: characterId, model: 'gemini-omni/character', prompt: character_name || (descriptions ? descriptions.slice(0, 80) : '(unnamed)'), status: 'success', createdAt: new Date().toISOString() });
         return { content: [{ type: 'text', text: `✅ Visual character created!\nName: ${character_name || '(unnamed)'}\ncharacterId: ${characterId}\n\nUse this ID in generate_video model_options.character_ids array (only consumed by model='gemini-omni/video').` }] };
       }
 
@@ -4864,7 +4924,7 @@ const handleCallTool = async (request) => {
         const result = await sunoCreate('/api/v1/generate/upload-extend', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId: newTaskId, model: 'suno/upload-extend', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId: newTaskId, model: 'suno/upload-extend', prompt: (prompt || uploadUrl).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
         if (args.wait === false) return submitOnly(newTaskId, 'suno/upload-extend', outFilename);
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const sunoData = pollResult.sunoData || [];
@@ -4882,7 +4942,7 @@ const handleCallTool = async (request) => {
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/speech-to-text', input });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        taskHistory.push({ taskId, model: 'elevenlabs/speech-to-text', prompt: audio_url.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'elevenlabs/speech-to-text', prompt: audio_url.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
         const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const transcription = pollResult.resultJson || pollResult;
         return { content: [{ type: 'text', text: `✅ Transcription complete!\nTask ID: ${taskId}\n\n${typeof transcription === 'string' ? transcription : JSON.stringify(transcription, null, 2)}` }] };
@@ -4961,7 +5021,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
 
-        taskHistory.push({ taskId, model: 'veo/extend', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'veo/extend', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
 
         const pollResult = await pollTask(taskId, pollBudgetMs('video', args), 'veo-3/text-to-video');
         const resultUrls = extractResultUrls(pollResult);
@@ -5035,7 +5095,7 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
 
-        taskHistory.push({ taskId, model: 'runway/extend', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        trackTask({ taskId, model: 'runway/extend', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
 
         // Runway uses its own poll endpoint
         const pollResult = await pollTask(taskId, pollBudgetMs('video', args), 'runway/text-to-video');
@@ -5056,7 +5116,7 @@ const handleCallTool = async (request) => {
     // be running upstream. See issue #21.
     if (error.taskId) {
       const entry = taskHistory.find((t) => t.taskId === error.taskId);
-      if (entry) entry.status = error.taskStillRunning ? 'timeout' : 'failed';
+      if (entry) { entry.status = error.taskStillRunning ? 'timeout' : 'failed'; appendTaskLog(entry); }
       if (error.taskStillRunning) {
         text += [
           ``,
@@ -5115,7 +5175,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.5.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.5.1', sessions: sessions.size }));
       return;
     }
 
@@ -5183,6 +5243,7 @@ export {
   formatCost,
   coerceDuration,
   sunoTrackName,
+  parseTaskLog,
   resolveVoice,
   PRICING,
   PRICING_ESTIMATED,
