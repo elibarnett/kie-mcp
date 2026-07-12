@@ -23,6 +23,8 @@ import {
   formatCost,
   coerceDuration,
   sunoTrackName,
+  collectUrls,
+  normalizeTaskState,
   parseTaskLog,
   resolveVoice,
   PROMPT_CAPS,
@@ -221,6 +223,48 @@ test('formatCost — logs [pricing-drift] only when >25% off table (issue #42/#4
   }
   assert.equal(logs.filter((l) => l.includes('[pricing-drift]')).length, 1, 'exactly one drift log');
   assert.match(logs.find((l) => l.includes('[pricing-drift]')), /nano-banana-2/);
+});
+
+test('collectUrls — gathers http(s) URLs from nested records (issue #53)', () => {
+  // WAV shape: single URL under response
+  assert.deepEqual(collectUrls({ audioWavUrl: 'https://x/a.wav' }), ['https://x/a.wav']);
+  // vocal-removal shape: top-level URLs + nested originData[].audio_url, nulls skipped
+  const vr = {
+    originUrl: null,
+    vocalUrl: 'https://x/v.mp3',
+    instrumentalUrl: 'https://x/i.mp3',
+    drumsUrl: null,
+    originData: [{ audio_url: 'https://x/v.mp3' }, { audio_url: 'https://x/i.mp3' }],
+  };
+  const urls = collectUrls(vr);
+  assert.ok(urls.includes('https://x/v.mp3') && urls.includes('https://x/i.mp3'), 'finds both stems');
+  assert.ok(!urls.includes(null), 'skips nulls');
+  // non-URL strings ignored
+  assert.deepEqual(collectUrls({ a: 'not a url', b: 42, c: 'ftp://x/y' }), []);
+  assert.deepEqual(collectUrls(null), []);
+});
+
+test('extractResultUrls — specialized Suno record via response (issue #53)', () => {
+  assert.deepEqual(extractResultUrls({ response: { audioWavUrl: 'https://x/a.wav' } }), ['https://x/a.wav']);
+  // vocal-removal: dedupes the duplicated top-level + originData URLs
+  const rec = { response: { vocalUrl: 'https://x/v.mp3', instrumentalUrl: 'https://x/i.mp3', originData: [{ audio_url: 'https://x/v.mp3' }] } };
+  const out = extractResultUrls(rec);
+  assert.equal(out.length, 2, 'two unique stems');
+  // must NOT hijack a normal sunoData response
+  assert.deepEqual(extractResultUrls({ response: { sunoData: [{ id: 1 }] } }), []);
+});
+
+test('normalizeTaskState — every record shape → one word (issue #53)', () => {
+  assert.equal(normalizeTaskState({ state: 'success' }), 'success');
+  assert.equal(normalizeTaskState({ status: 'SUCCESS' }), 'success');
+  assert.equal(normalizeTaskState({ status: 'GENERATE_AUDIO_FAILED' }), 'fail');
+  assert.equal(normalizeTaskState({ status: 'PENDING' }), 'generating');
+  assert.equal(normalizeTaskState({ successFlag: 1 }), 'success', 'veo numeric');
+  assert.equal(normalizeTaskState({ successFlag: 2 }), 'fail', 'veo numeric fail');
+  assert.equal(normalizeTaskState({ successFlag: 'SUCCESS' }), 'success', 'specialized string');
+  assert.equal(normalizeTaskState({ successFlag: 'PENDING' }), 'generating', 'specialized pending');
+  assert.equal(normalizeTaskState({ errorCode: 'X' }), 'fail');
+  assert.equal(normalizeTaskState({}), 'generating', 'unknown → generating');
 });
 
 test('parseTaskLog — dedupe by taskId (last wins), skip junk, cap (issue #43)', () => {
