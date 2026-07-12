@@ -2,6 +2,17 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.5.2] — 2026-07-12
+
+### Fixed
+
+- **`convert_to_wav`, `create_music_video`, `generate_midi`, and `separate_vocals` were broken end-to-end** (#53). kie moved these operations' result records to dedicated endpoints (`/api/v1/{wav,mp4,midi,vocal-removal}/record-info`) with a `successFlag` + `response.<urlFields>` shape, but the tools still polled `/api/v1/generate/record-info` — which returns `data: null` for them — so every call timed out despite the output being produced. They now poll the correct endpoint (`pollSunoRecord`), extract result URLs shape-agnostically (`collectUrls` walks `response` for any http(s) URL), and download all of them (`separate_vocals` correctly yields distinct vocal + instrumental stems). `check_task`/`download_result` recover these via the specialized endpoints too, and all four gained `wait: false` async mode now that recovery works.
+- **Multi-task restore from the persisted history log was broken** (regression in 4.5.1's #43). `loadTaskHistory` called `trackTask(...entries)` — but `trackTask` takes a *single* entry (the #43 helper-conversion accidentally rewrote the bulk push), so on restart only the **first** persisted task was restored and it was re-appended to the log each time. Now bulk-pushes all entries without re-appending. Found while testing #53's recovery path.
+
+### Verified
+
+- Live (2026-07-12): WAV task recovered as a single file and a vocal-removal task recovered as two distinct stems (885KB + 2.2MB) via `check_task`/`download_result` on the specialized endpoints; both restored together from a 2-entry persisted log. New unit tests cover `collectUrls`, `normalizeTaskState`, and the specialized-record path through `extractResultUrls`.
+
 ## [4.5.1] — 2026-07-11
 
 ### Added
@@ -361,6 +372,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.5.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.2
 [4.5.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.1
 [4.5.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.0
 [4.4.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.3

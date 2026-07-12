@@ -2967,7 +2967,11 @@ function loadTaskHistory() {
     if (!existsSync(TASK_LOG_PATH)) return;
     const text = readFileSync(TASK_LOG_PATH, 'utf8');
     const entries = parseTaskLog(text);
-    trackTask(...entries);
+    // Bulk-restore into memory WITHOUT re-appending (these lines are already in
+    // the log). NB: must be taskHistory.push, not trackTask — trackTask takes a
+    // single entry and re-persists it, which the #43 helper-conversion sed
+    // wrongly applied here, so only the first persisted task restored. (#53)
+    taskHistory.push(...entries);
     // Compact if the raw line count is much larger than what we keep.
     const lineCount = text.split('\n').filter((l) => l.trim()).length;
     if (lineCount > TASK_LOG_CAP * 4) {
@@ -3269,6 +3273,58 @@ async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
 }
 
 // Shared Suno polling — all Suno endpoints use the same poll pattern
+// Suno operations whose result records live on their OWN record-info endpoint
+// (NOT /generate/record-info, which returns data:null for them) with a
+// `successFlag` + `response.<url fields>` shape. kie moved these at some point;
+// polling /generate/record-info made these tools time out despite producing
+// output. See issue #53.
+const SUNO_RECORD_ENDPOINTS = {
+  'suno/wav': '/api/v1/wav/record-info',
+  'suno/mp4': '/api/v1/mp4/record-info',
+  'suno/midi': '/api/v1/midi/record-info',
+  'suno/vocal-removal': '/api/v1/vocal-removal/record-info',
+};
+
+// Recursively collect every http(s) URL string reachable in a value. Used to
+// pull result URLs out of the specialized Suno records without hardcoding each
+// operation's field names (wav → response.audioWavUrl, vocal-removal →
+// response.{vocalUrl,instrumentalUrl,...} + originData[].audio_url, etc.).
+function collectUrls(node, acc = []) {
+  if (node == null) return acc;
+  if (typeof node === 'string') { if (/^https?:\/\//.test(node)) acc.push(node); return acc; }
+  if (Array.isArray(node)) { for (const v of node) collectUrls(v, acc); return acc; }
+  if (typeof node === 'object') { for (const v of Object.values(node)) collectUrls(v, acc); return acc; }
+  return acc;
+}
+
+// Poll a specialized Suno record endpoint until successFlag === 'SUCCESS'.
+async function pollSunoRecord(taskId, recordPath, maxWaitMs = 300000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const poll = await pollOnce('GET', `${recordPath}?taskId=${taskId}`);
+    if (poll) {
+      const d = poll.data || poll;
+      if (d.errorCode || d.errorMessage) throw taskError(`Suno task failed: ${d.errorMessage || d.errorCode}`, taskId);
+      if (d.successFlag === 'SUCCESS') return d;
+    }
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+  throw taskError(`Suno task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
+}
+
+// Download a flat list of URLs into outDir, naming take 0 = base.ext, take N =
+// base-N.ext (reusing sunoTrackName so multi-stem results don't collide).
+async function downloadUrlList(urls, outFilename, ext, outDir) {
+  const files = [];
+  for (let i = 0; i < urls.length; i++) {
+    const p = join(outDir, sunoTrackName(outFilename, i, ext));
+    if (existsSync(p)) console.error(`[kie-mcp] overwriting existing file: ${p}`);
+    await downloadToFile(urls[i], p);
+    files.push(p);
+  }
+  return files;
+}
+
 async function pollSunoTask(taskId, maxWaitMs = 300000) {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
@@ -3298,6 +3354,10 @@ async function pollSunoTask(taskId, maxWaitMs = 300000) {
 async function fetchTaskRecord(taskId) {
   const entry = taskHistory.find((t) => t.taskId === taskId);
   const attempts = [];
+  // Specialized Suno records (wav/mp4/midi/vocal-removal) live on their own
+  // endpoint — try it first when the task's op is known (issue #53).
+  const special = entry?.model && SUNO_RECORD_ENDPOINTS[entry.model];
+  if (special) attempts.push({ source: 'suno-record', path: `${special}?taskId=${taskId}` });
   const dedicated = entry?.model && getPollEndpoint(entry.model);
   if (dedicated) attempts.push({ source: 'dedicated', path: `${dedicated}?taskId=${taskId}` });
   if (entry?.model?.startsWith('suno')) {
@@ -3372,9 +3432,28 @@ function extractResultUrls(result) {
   if (result.resultUrls) urls = [...urls, ...result.resultUrls];
   // Runway video: videoInfo.videoUrl
   if (result.videoInfo?.videoUrl) urls.push(result.videoInfo.videoUrl);
+  // Specialized Suno records (wav/mp4/midi/vocal-removal) nest result URLs under
+  // `response` with per-op field names — collect them all (issue #53).
+  if (result.response && typeof result.response === 'object' && !result.response.sunoData) {
+    urls.push(...collectUrls(result.response));
+  }
   if (urls.length === 0 && result.url) urls = [result.url];
   // Deduplicate
   return [...new Set(urls)];
+}
+
+// Normalize any task-record shape into one state word: market `state`, Suno
+// `status`, Veo numeric `successFlag`, or specialized-record string
+// `successFlag` (wav/mp4/midi/vocal-removal — issue #53).
+function normalizeTaskState(data) {
+  if (data.state) return data.state;
+  if (data.status === 'SUCCESS' || data.status === 'FIRST_SUCCESS') return 'success';
+  if (data.status?.includes('FAILED') || data.status === 'SENSITIVE_WORD_ERROR') return 'fail';
+  if (data.status) return 'generating';
+  if (data.successFlag === 'SUCCESS' || data.successFlag === 1) return 'success';
+  if (data.successFlag === 'PENDING' || data.successFlag === 'PROCESSING') return 'generating';
+  if (data.errorCode || (typeof data.successFlag === 'number' && data.successFlag >= 2)) return 'fail';
+  return 'generating';
 }
 
 async function downloadToFile(url, destPath) {
@@ -3392,7 +3471,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.5.1' };
+const SERVER_INFO = { name: 'kie-art', version: '4.5.2' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3785,6 +3864,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           taskId: { type: 'string', description: 'Task ID of the Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData' },
           filename: { type: 'string' },
@@ -3799,6 +3880,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           taskId: { type: 'string', description: 'Task ID of the Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData' },
           type: { type: 'string', enum: ['separate_vocal', 'split_stem'], default: 'separate_vocal', description: 'separate_vocal=vocals+instrumental, split_stem=individual instruments' },
@@ -3814,6 +3897,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           taskId: { type: 'string', description: 'Task ID of the Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData (optional)' },
           filename: { type: 'string' },
@@ -3828,6 +3913,8 @@ const handleListTools = async () => ({
       inputSchema: {
         type: 'object',
         properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           taskId: { type: 'string', description: 'Task ID of the Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData' },
           author: { type: 'string', description: 'Author name for video credits' },
@@ -4288,12 +4375,7 @@ const handleCallTool = async (request) => {
 
       case 'check_task': {
         const { source, data } = await fetchTaskRecord(args.task_id);
-        // Normalize the three record shapes into one state word
-        const state = data.state
-          || (data.status === 'SUCCESS' || data.status === 'FIRST_SUCCESS' ? 'success'
-            : data.status?.includes('FAILED') || data.status === 'SENSITIVE_WORD_ERROR' ? 'fail'
-            : data.status ? 'generating'
-            : data.successFlag === 1 ? 'success' : data.successFlag >= 2 ? 'fail' : 'generating');
+        const state = normalizeTaskState(data);
         return {
           content: [{
             type: 'text',
@@ -4341,13 +4423,22 @@ const handleCallTool = async (request) => {
           const files = await downloadSunoTracks(sunoData, outName, 'mp3', resolveOutputDir(args));
           return { content: [{ type: 'text', text: `Downloaded ${files.length} track(s):\n${files.map((f) => `  → ${f.file}`).join('\n')}` }] };
         }
-        const state = data.state || (data.successFlag === 1 ? 'success' : data.successFlag >= 2 ? 'fail' : 'generating');
+        const state = normalizeTaskState(data);
         if (state !== 'success') {
           return { content: [{ type: 'text', text: `Task is "${state}", not yet downloadable.` }] };
         }
         const urls = extractResultUrls(data);
         if (urls.length === 0) {
           return { content: [{ type: 'text', text: `No result URLs for task ${args.task_id}` }] };
+        }
+        // Specialized Suno records (wav/mp4/midi/vocal-removal) can yield multiple
+        // files (e.g. vocal stems) — download them all with non-colliding names (#53).
+        if (source === 'suno-record') {
+          const outName = sanitizeFilename(args.filename) || entry?.filename || `download-${args.task_id.slice(0, 8)}.mp3`;
+          const ext = outName.match(/\.([A-Za-z0-9]{1,5})$/)?.[1] || 'mp3';
+          const files = await downloadUrlList(urls, outName, ext, resolveOutputDir(args));
+          if (entry) { entry.status = 'success'; appendTaskLog(entry); }
+          return { content: [{ type: 'text', text: `Downloaded ${files.length} file(s):\n${files.map((f) => `  → ${f}`).join('\n')}` }] };
         }
         // Prefer the filename recorded when the task was created (right extension)
         const outName = sanitizeFilename(args.filename) || entry?.filename || `download-${args.task_id.slice(0, 8)}.png`;
@@ -4733,10 +4824,11 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         trackTask({ taskId, model: 'suno/wav', prompt: `wav of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
-        const wavUrl = pollResult.sunoData?.[0]?.audioUrl || pollResult.wavUrl;
-        if (!wavUrl) return { content: [{ type: 'text', text: `WAV task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
-        await downloadToFile(wavUrl, outPath);
+        if (args.wait === false) return submitOnly(taskId, 'suno/wav', outFilename);
+        const wavRec = await pollSunoRecord(taskId, SUNO_RECORD_ENDPOINTS['suno/wav'], pollBudgetMs('audio', args));
+        const wavUrls = extractResultUrls(wavRec);
+        if (!wavUrls.length) return { content: [{ type: 'text', text: `WAV task ${taskId} done but no URL found.\n${JSON.stringify(wavRec)}` }] };
+        await downloadToFile(wavUrls[0], outPath);
         return { content: [{ type: 'text', text: `✅ WAV converted!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -4749,11 +4841,12 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         trackTask({ taskId, model: 'suno/vocal-removal', prompt: sepType, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
-        const sunoData = pollResult.sunoData || [];
-        if (!sunoData.length) return { content: [{ type: 'text', text: `Separation task ${taskId} done but no results.\n${JSON.stringify(pollResult)}` }] };
-        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Vocals separated (${sepType})!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        if (args.wait === false) return submitOnly(taskId, 'suno/vocal-removal', outFilename);
+        const vrRec = await pollSunoRecord(taskId, SUNO_RECORD_ENDPOINTS['suno/vocal-removal'], pollBudgetMs('audio', args));
+        const vrUrls = extractResultUrls(vrRec);
+        if (!vrUrls.length) return { content: [{ type: 'text', text: `Separation task ${taskId} done but no results.\n${JSON.stringify(vrRec)}` }] };
+        const files = await downloadUrlList(vrUrls, outFilename, 'mp3', resolveOutputDir(args));
+        return { content: [{ type: 'text', text: `✅ Vocals separated (${sepType})!\nTask ID: ${taskId}\n${files.map(f => `  → ${f}`).join('\n')}` }] };
       }
 
       case 'generate_midi': {
@@ -4767,10 +4860,11 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         trackTask({ taskId, model: 'suno/midi', prompt: `midi of ${audioId || origTaskId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
-        const midiUrl = pollResult.sunoData?.[0]?.midiUrl || pollResult.midiUrl;
-        if (!midiUrl) return { content: [{ type: 'text', text: `MIDI task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
-        await downloadToFile(midiUrl, outPath);
+        if (args.wait === false) return submitOnly(taskId, 'suno/midi', outFilename);
+        const midiRec = await pollSunoRecord(taskId, SUNO_RECORD_ENDPOINTS['suno/midi'], pollBudgetMs('audio', args));
+        const midiUrls = extractResultUrls(midiRec);
+        if (!midiUrls.length) return { content: [{ type: 'text', text: `MIDI task ${taskId} done but no URL found.\n${JSON.stringify(midiRec)}` }] };
+        await downloadToFile(midiUrls[0], outPath);
         return { content: [{ type: 'text', text: `✅ MIDI exported!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -4786,10 +4880,11 @@ const handleCallTool = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         trackTask({ taskId, model: 'suno/mp4', prompt: `music video of ${audioId}`, filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
-        const videoUrl = pollResult.sunoData?.[0]?.videoUrl || pollResult.videoUrl;
-        if (!videoUrl) return { content: [{ type: 'text', text: `Music video task ${taskId} done but no URL found.\n${JSON.stringify(pollResult)}` }] };
-        await downloadToFile(videoUrl, outPath);
+        if (args.wait === false) return submitOnly(taskId, 'suno/mp4', outFilename);
+        const mp4Rec = await pollSunoRecord(taskId, SUNO_RECORD_ENDPOINTS['suno/mp4'], pollBudgetMs('audio', args));
+        const mp4Urls = extractResultUrls(mp4Rec);
+        if (!mp4Urls.length) return { content: [{ type: 'text', text: `Music video task ${taskId} done but no URL found.\n${JSON.stringify(mp4Rec)}` }] };
+        await downloadToFile(mp4Urls[0], outPath);
         return { content: [{ type: 'text', text: `✅ Music video created!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -5175,7 +5270,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.5.1', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.5.2', sessions: sessions.size }));
       return;
     }
 
@@ -5243,6 +5338,8 @@ export {
   formatCost,
   coerceDuration,
   sunoTrackName,
+  collectUrls,
+  normalizeTaskState,
   parseTaskLog,
   resolveVoice,
   PRICING,
