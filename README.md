@@ -178,6 +178,17 @@ Each model entry has:
 - `buildBody` / `buildInput` (request builders)
 - **`research`** (Averiguare verdicts, prompt techniques, weaknesses, comparisons, sources)
 
+## Development
+
+```bash
+npm run check   # node --check server.mjs (syntax)
+npm test        # offline unit tests for the pure helpers (test/*.test.mjs)
+npm run smoke   # live end-to-end over MCP stdio — needs KIE_API_KEY
+                # (spends ~0 credits; uses the free subject-detection model)
+```
+
+`server.mjs` guards its side effects behind a main-module check, so it can be imported by tests (`test/unit.test.mjs`) to exercise the pure helpers without starting a server. `test/harness.mjs` is a reusable stdio JSON-RPC client for driving the real server in smoke/integration checks. CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the syntax check + unit tests on Node 20 and 22 for every push and PR.
+
 ## Releasing
 
 Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml). To cut a release:

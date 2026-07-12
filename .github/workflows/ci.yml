@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Registry sanity (counts + version sync)
+        run: |
+          node --input-type=module -e "
+            import { readFileSync } from 'node:fs';
+            import * as m from './server.mjs';
+            const img = Object.keys(m.MODEL_REGISTRY).length;
+            const vid = Object.keys(m.VIDEO_MODEL_REGISTRY).length;
+            console.log('image models:', img, '| video models:', vid);
+            if (img < 40 || vid < 70) { console.error('registry shrank unexpectedly'); process.exit(1); }
+            const pkg = JSON.parse(readFileSync('./package.json')).version;
+            const srv = JSON.parse(readFileSync('./server.json')).version;
+            if (pkg !== srv) { console.error('version mismatch: package.json '+pkg+' vs server.json '+srv); process.exit(1); }
+            console.log('versions in sync:', pkg);
+          "
+
+  # Live end-to-end smoke against the real kie.ai API. Only runs on manual
+  # dispatch (needs the KIE_API_KEY secret and spends ~0 credits on the free
+  # subject-detection model). Never blocks PRs.
+  smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Live smoke
+        run: npm run smoke
+        env:
+          KIE_API_KEY: ${{ secrets.KIE_API_KEY }}

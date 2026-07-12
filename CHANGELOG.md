@@ -2,6 +2,20 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.4.2] — 2026-07-11
+
+Test infrastructure (#41). No user-facing behavior change.
+
+### Added
+
+- **Offline unit tests** (`test/unit.test.mjs`, `node:test`) for the pure helpers that a long string of bug-fix PRs turned into branchy logic: `extractResultUrls` (all 6+ result shapes), Suno take-naming (#23), `classifyKieCode` buckets (#25), `sanitizeFilename`/`resolveOutputDir` (#24), `pollBudgetMs` precedence (#22), `coerceDuration` (#28), prompt-cap enforcement (#27), `getCostEstimate`, and `resolveVoice`. 21 assertions, ~130ms, no network. `npm test`.
+- **Reusable stdio test harness** (`test/harness.mjs`) — the JSON-RPC client every prior debugging session rewrote by hand — and a **live smoke test** (`test/smoke.mjs`, `npm run smoke`) that runs a full generate → check_task → download_result cycle on the free subject-detection model (~0 credits).
+- **CI** (`.github/workflows/ci.yml`): syntax check + unit tests on Node 20 and 22 for every push/PR, plus a registry-sanity check (model counts + package.json/server.json version sync). An opt-in live-smoke job runs on manual dispatch (needs a `KIE_API_KEY` repo secret).
+
+### Changed
+
+- `server.mjs` now guards its side effects (the missing-key exit and transport startup) behind a main-module check, so importing it for tests no longer starts a server. Two behavior-preserving extractions — `coerceDuration` and `sunoTrackName` — make that logic unit-testable. The runtime server behaves identically.
+
 ## [4.4.1] — 2026-07-11
 
 ### Fixed
@@ -316,6 +330,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.4.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.2
 [4.4.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.1
 [4.4.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.4.0
 [4.3.5]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.3.5
