@@ -2,6 +2,18 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.6.2] — 2026-07-12
+
+### Fixed
+
+- **Corrected stale `PRICING` for models the drift watch (#44) flagged** — kie's advertised rates had moved well past our table:
+  - `happyhorse/*` (1.0 T2V/I2V/R2V/Video Edit): `8`/`10` cr/s (a competitive-positioning guess) → **48** cr/s (kie published 28 @720p, 48 @1080p — the entries' default). These were never officially priced before.
+  - `wan/2-5-text-to-video` / `-image-to-video`: `3` → **12** cr/s (kie published 12 @720p default, 20 @1080p); added to `PRICING_ESTIMATED`.
+  - `grok-imagine/upscale`: `5` → **10** cr (flat, kie published).
+- Refreshed the now-false "8 cr/s estimate" claims in the HappyHorse 1.0 `costEfficiency` research notes to the real published rates. (Verdicts/comparisons still carry their `lastResearched: 2026-05-05` date — a full re-research is a separate task.)
+
+All three clear the drift watch after the fix; the runtime `[actual]` cost from #42 remains ground truth regardless.
+
 ## [4.6.1] — 2026-07-12
 
 ### Changed
@@ -389,6 +401,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.6.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.2
 [4.6.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.1
 [4.6.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.0
 [4.5.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.5.2
