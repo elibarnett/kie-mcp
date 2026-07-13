@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.6.3] — 2026-07-12
+
+### Fixed
+
+- **CRITICAL: the server never started when launched via `npx kie-mcp` or a global bin** (regression in 4.4.2's #41, affected 4.4.2–4.6.2). npx/global installs invoke through a bin symlink (`.bin/kie-mcp → ../kie-mcp/server.mjs`), so `process.argv[1]` was the symlink path while `import.meta.url` resolved to the realpath. The main-module guard's plain `===` compare failed, so the module loaded (no error, no output) but **never connected its stdio transport** — the MCP silently appeared "down". `isEntrypoint()` now resolves symlinks on both sides (`realpathSync`) before comparing, so `node server.mjs`, `npx kie-mcp`, and global-bin invocations all start correctly. Direct-import (tests) still short-circuits, unchanged. Regression-tested with a real symlink.
+
 ## [4.6.2] — 2026-07-12
 
 ### Fixed
@@ -401,6 +407,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.6.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.3
 [4.6.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.2
 [4.6.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.1
 [4.6.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.0

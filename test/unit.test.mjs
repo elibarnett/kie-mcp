@@ -23,6 +23,7 @@ import {
   formatCost,
   coerceDuration,
   sunoTrackName,
+  isEntrypoint,
   collectUrls,
   normalizeTaskState,
   parseTaskLog,
@@ -269,6 +270,31 @@ test('normalizeTaskState — every record shape → one word (issue #53)', () =>
   assert.equal(normalizeTaskState({ status: 'processing_validate_fail' }), 'fail', 'voice fail variant');
   assert.equal(normalizeTaskState({ status: 'wait_validating' }), 'generating', 'voice mid-flow');
   assert.equal(normalizeTaskState({}), 'generating', 'unknown → generating');
+});
+
+test('isEntrypoint — resolves symlinks so npx/global bin still starts (down-bug regression)', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const { symlinkSync, writeFileSync, rmSync, mkdtempSync } = await import('node:fs');
+  const { join: pjoin } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'entrypoint-'));
+  const real = pjoin(dir, 'server.mjs');
+  const link = pjoin(dir, 'kie-mcp');   // like node_modules/.bin/kie-mcp
+  const other = pjoin(dir, 'other.mjs');
+  writeFileSync(real, '// x'); writeFileSync(other, '// y'); symlinkSync(real, link);
+  try {
+    const url = pathToFileURL(real).href;
+    // launched directly
+    assert.equal(isEntrypoint(real, url), true, 'direct path');
+    // launched via the bin symlink (npx / global install) — the bug that made it "down"
+    assert.equal(isEntrypoint(link, url), true, 'symlink path must still count as entrypoint');
+    // a different file is NOT the entrypoint (imported-as-dependency case)
+    assert.equal(isEntrypoint(other, url), false, 'different file');
+    assert.equal(isEntrypoint(undefined, url), false, 'no argv[1]');
+    // nonexistent argv falls back to string compare, doesn't throw
+    assert.equal(isEntrypoint('/nope/x.mjs', url), false, 'nonexistent path safe');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('parseTaskLog — dedupe by taskId (last wins), skip junk, cap (issue #43)', () => {
