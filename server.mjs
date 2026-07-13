@@ -9,6 +9,7 @@ import { join, basename, isAbsolute } from 'path';
 import { createServer } from 'http';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { realpathSync } from 'fs';
 
 import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './data/voices.mjs';
 import { PRICING, PRICING_ESTIMATED, PROMPT_CAPS } from './data/pricing.mjs';
@@ -16,11 +17,25 @@ import { MODEL_REGISTRY } from './data/registry-image.mjs';
 import { VIDEO_MODEL_REGISTRY } from './data/registry-video.mjs';
 import { AUDIO_TOOLS_REGISTRY } from './data/registry-audio.mjs';
 
-// True only when this file is the process entrypoint (node server.mjs / npx
-// kie-mcp), false when imported by tests. Gates the side effects — the missing-
-// key exit and the transport startup — so the module can be imported to unit-
-// test the pure helpers. See issue #41.
-const isMainModule = !!process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+// True when this file is the process entrypoint (`node server.mjs`, `npx
+// kie-mcp`, a global bin, …), false when imported by tests. Gates the side
+// effects — the missing-key exit and the transport startup — so the module can
+// be imported to unit-test the pure helpers. See issue #41.
+//
+// Must resolve symlinks on BOTH sides: npx and global installs launch via a bin
+// symlink (`.bin/kie-mcp -> ../kie-mcp/server.mjs`), so process.argv[1] is the
+// symlink path while import.meta.url is the realpath. A plain === compare fails
+// there and the transport never starts — i.e. the server silently appears
+// "down" for every npx user (regression that shipped 4.4.2–4.6.2).
+function isEntrypoint(argv1, importMetaUrl) {
+  if (!argv1) return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(importMetaUrl));
+  } catch {
+    return argv1 === fileURLToPath(importMetaUrl);
+  }
+}
+const isMainModule = isEntrypoint(process.argv[1], import.meta.url);
 
 const API_BASE = 'https://api.kie.ai';
 const API_KEY = process.env.KIE_API_KEY;
@@ -769,7 +784,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.6.2' };
+const SERVER_INFO = { name: 'kie-art', version: '4.6.3' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2657,7 +2672,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.6.2', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.6.3', sessions: sessions.size }));
       return;
     }
 
@@ -2725,6 +2740,7 @@ export {
   formatCost,
   coerceDuration,
   sunoTrackName,
+  isEntrypoint,
   collectUrls,
   normalizeTaskState,
   parseTaskLog,
