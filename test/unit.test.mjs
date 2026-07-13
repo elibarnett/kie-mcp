@@ -16,6 +16,7 @@ import {
   extractResultUrls,
   classifyKieCode,
   sanitizeFilename,
+  normalizeBase64,
   resolveOutputDir,
   pollBudgetMs,
   validateModelOptions,
@@ -106,6 +107,27 @@ test('sanitizeFilename — strips directory components / traversal (issue #24)',
   assert.equal(sanitizeFilename('a/b/c.mp4'), 'c.mp4');
   assert.equal(sanitizeFilename(undefined), undefined);
   assert.equal(sanitizeFilename(null), null);
+});
+
+test('normalizeBase64 — cleans real-world dirty input, clear errors (issue #62)', () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  // clean raw base64 passes through
+  assert.equal(normalizeBase64(png).data, png);
+  // data: URI → stripped, extension inferred
+  const du = normalizeBase64('data:image/jpeg;base64,' + png);
+  assert.equal(du.data, png);
+  assert.equal(du.ext, 'jpg', 'jpeg → jpg');
+  // whitespace/newlines (wrapped base64) are removed — the likely real fix
+  assert.equal(normalizeBase64(png.slice(0, 40) + '\n' + png.slice(40)).data, png);
+  assert.equal(normalizeBase64('  ' + png + '\r\n').data, png);
+  // base64url → base64 (valid length)
+  assert.equal(normalizeBase64('ab-_').data, 'ab+/', 'base64url -/_ converted to +/');
+  // invalid character → actionable error, not passed to kie
+  const badChar = normalizeBase64('abcd@@@@');
+  assert.match(badChar.error || '', /invalid character/);
+  // truncated (length not %4) → clear "truncated" error
+  assert.match(normalizeBase64('abcde').error || '', /truncated|multiple of 4/);
+  assert.match(normalizeBase64('').error || '', /empty/);
 });
 
 test('resolveOutputDir — absolute required, mkdir, default (issue #24)', () => {

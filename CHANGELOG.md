@@ -2,6 +2,13 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.6.4] — 2026-07-13
+
+### Fixed
+
+- **`upload_file` base64 now tolerates dirty input instead of failing with kie's opaque `atob` error** (#62). kie's uploader rejects any non-conformant base64 with a confusing doubled "Base64 decoding failed: … atob() … invalid base64-encoded data" message. A new `normalizeBase64` step runs before the upload: strips a `data:<mime>;base64,` prefix, removes whitespace/newlines (encoders wrap at 76 cols; the MCP transport can insert them — the most likely real cause), and maps base64url (`-`/`_`) to standard. If the payload is still invalid it returns an **actionable client-side error** ("length N not a multiple of 4 — likely truncated in transit; re-send or use file_url") instead of passing corrupt data to kie. Verified live: clean and newline-wrapped JPEGs upload; a truncated payload returns the clear error.
+- Tool schema note added: very large images can be truncated when passed as a tool argument — prefer `file_url` with a public URL for those.
+
 ## [4.6.3] — 2026-07-12
 
 ### Fixed
@@ -407,6 +414,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.6.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.4
 [4.6.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.3
 [4.6.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.2
 [4.6.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.1
