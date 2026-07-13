@@ -89,6 +89,33 @@ function sanitizeFilename(name) {
   return name == null ? name : basename(String(name));
 }
 
+// Normalize + validate base64 before sending it to kie's uploader, whose atob()
+// rejects anything non-conformant with an opaque doubled "Base64 decoding
+// failed" error (issue #62). Handles the real-world ways a payload arrives
+// dirty: a `data:<mime>;base64,` prefix, whitespace/newlines inserted by
+// encoders or the MCP transport, and base64url (`-`/`_`). Returns
+// { data, ext } on success or { error } with an actionable message — so a
+// truncated/corrupt payload gets a clear "re-send / use file_url" hint instead
+// of kie's soup.
+function normalizeBase64(input) {
+  if (typeof input !== 'string' || !input) return { error: 'base64_data is empty.' };
+  let s = input;
+  let ext = null;
+  const dataUri = s.match(/^data:([\w.+-]+\/([\w.+-]+));base64,(.*)$/s);
+  if (dataUri) { ext = dataUri[2].replace('jpeg', 'jpg').replace('mpeg', 'mp3'); s = dataUri[3]; }
+  s = s.replace(/\s+/g, '');           // drop wrapping/newlines/spaces
+  s = s.replace(/-/g, '+').replace(/_/g, '/');  // base64url → base64
+  const body = s.replace(/=+$/, '');
+  const bad = body.match(/[^A-Za-z0-9+/]/);
+  if (bad) {
+    return { error: `base64_data has an invalid character (${JSON.stringify(bad[0])}) at position ${bad.index} — it was likely corrupted in transit. Re-send the exact base64, or use file_url with a public URL instead.` };
+  }
+  if (s.length % 4 !== 0) {
+    return { error: `base64_data length is ${s.length}, not a multiple of 4 — the payload was likely truncated in transit (large images are especially prone). Re-send the complete base64, or use file_url with a public URL instead.` };
+  }
+  return { data: s, ext };
+}
+
 // ─── Pricing Reference ───
 // 1 credit ≈ $0.005 USD. Costs are approximate and may vary with bulk discounts (10% bonus at high tiers).
 // Video costs scale with duration — listed cost is per-second unless noted as flat.
@@ -784,7 +811,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.6.3' };
+const SERVER_INFO = { name: 'kie-art', version: '4.6.4' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1453,7 +1480,7 @@ const handleListTools = async () => ({
         type: 'object',
         properties: {
           file_url: { type: 'string', description: 'URL of file to upload — must be PUBLICLY reachable by kie.ai servers (no localhost/private IPs, no auth-gated or expired links). For local files use base64_data' },
-          base64_data: { type: 'string', description: 'Base64-encoded file data — raw base64 or a full data: URI; a data:<mime>;base64, prefix is stripped automatically (and used to infer the file extension if file_name is omitted)' },
+          base64_data: { type: 'string', description: 'Base64-encoded file data — raw base64 or a full data: URI. Whitespace and base64url are normalized and the data:<mime>;base64, prefix is stripped automatically (its MIME infers the extension if file_name is omitted). NOTE: very large images can be truncated when passed as a tool argument — if you get a length/invalid error, prefer file_url with a public URL.' },
           upload_path: { type: 'string', description: 'Storage directory (e.g. "images", "audio", "video")', default: 'uploads' },
           file_name: { type: 'string', description: 'Custom filename (optional)' },
         },
@@ -2477,19 +2504,15 @@ const handleCallTool = async (request) => {
         }
 
         if (base64_data) {
-          // Upstream wants RAW base64 — a data: URI prefix makes it fail. Accept
-          // both: strip the prefix, and use its MIME type for the filename
-          // extension when the caller didn't name the file (#29).
-          let raw = base64_data;
-          let inferredExt = null;
-          const dataUri = base64_data.match(/^data:([\w.+-]+\/([\w.+-]+));base64,(.*)$/s);
-          if (dataUri) {
-            inferredExt = dataUri[2].replace('jpeg', 'jpg').replace('mpeg', 'mp3');
-            raw = dataUri[3];
-          }
+          // Normalize + validate before hitting kie (data-URI prefix strip,
+          // whitespace removal, base64url→base64, length/char checks). A clear
+          // client-side error beats kie's opaque doubled-atob failure (#29, #62).
+          const norm = normalizeBase64(base64_data);
+          if (norm.error) return { content: [{ type: 'text', text: `Invalid base64_data: ${norm.error}` }], isError: true };
+          const raw = norm.data;
           const body = { base64Data: raw, uploadPath: upload_path };
           if (file_name) body.fileName = file_name;
-          else if (inferredExt) body.fileName = `upload-${Date.now()}.${inferredExt}`;
+          else if (norm.ext) body.fileName = `upload-${Date.now()}.${norm.ext}`;
           const res = await fetch(`${UPLOAD_BASE}/api/file-base64-upload`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
@@ -2672,7 +2695,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.6.3', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.6.4', sessions: sessions.size }));
       return;
     }
 
@@ -2733,6 +2756,7 @@ export {
   extractResultUrls,
   classifyKieCode,
   sanitizeFilename,
+  normalizeBase64,
   resolveOutputDir,
   pollBudgetMs,
   validateModelOptions,
