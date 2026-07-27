@@ -811,7 +811,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.6.4' };
+const SERVER_INFO = { name: 'kie-art', version: '4.7.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -907,7 +907,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (80+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (2cr/s). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p, NEW). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family is paused upstream by kie.ai (June 2026) — not usable. Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (86+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (2cr/s). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family is paused upstream by kie.ai (June 2026) — not usable. Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1000,6 +1000,27 @@ const handleListTools = async () => ({
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
         required: ['text'],
+      },
+    },
+    {
+      name: 'generate_gemini_tts',
+      description: `NEW — Google Gemini native TTS via kie.ai: style-directed speech from natural-language direction, 30 named voices, up to 2 speakers, inline tone tags like [whispers]/[laughs] (flash model). ~4.2 credits per MINUTE of audio — cheaper than all ElevenLabs tiers. Simple mode: pass text (+ optional voice_name). Dialogue mode: pass speakers + dialogue_turns. model=flash is most expressive (keep expected audio <60s — quality degrades on long takes); model=pro is more stable for multi-minute narration. Downloads to kie/assets/raw/.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600 },
+          model: { type: 'string', enum: ['flash', 'pro'], default: 'flash', description: 'flash = Gemini 3.1 Flash TTS (most expressive, 200+ inline tags, best <60s); pro = Gemini 2.5 Pro TTS (more stable long-form). Same price.' },
+          text: { type: 'string', description: 'Simple mode: the text to speak (single speaker). Inline tone tags like [whispers] work on flash. Ignored if dialogue_turns is set.' },
+          voice_name: { type: 'string', enum: ['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi'], description: 'Simple mode voice (default Zephyr)' },
+          speakers: { type: 'array', description: 'Dialogue mode: 1-2 speakers as [{speaker_id: "Speaker 1", voice_name, audio_profile?, accent?, style?, pace?}]. accent: Neutral|American (Gen)|American (Valley)|American (South)|British (RP)|British (Brixton)|Transatlantic|Australian. style: Vocal Smile|Newscaster|Whisper|Empathetic|Promo/Hype|Deadpan. pace: Natural|Rapid Fire|The Drift|Staccato.' },
+          dialogue_turns: { type: 'array', description: 'Dialogue mode: [{speaker_id, text}] in order; text ≤10000 chars, may contain tone tags' },
+          scene: { type: 'string', description: 'Scene description, e.g. "A quiet, warm room with a fireplace crackling softly."' },
+          sample_context: { type: 'string', description: 'Overall tone/direction, e.g. "Audiobook style narration. Tone is gentle and inviting."' },
+          temperature: { type: 'number', minimum: 0, maximum: 2, description: 'Sampling temperature (default 1)' },
+          filename: { type: 'string', description: 'Output filename (default gemini-tts-<ts>.wav)' },
+          download_dir: { type: 'string', description: 'Absolute directory to save into (created if missing). Defaults to the server\'s kie/assets/raw/.' },
+        },
       },
     },
     {
@@ -1979,6 +2000,39 @@ const handleCallTool = async (request) => {
         return { content: [{ type: 'text', text: `✅ SFX generated (via Suno V5)!\nText: "${text}"\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
       }
 
+      case 'generate_gemini_tts': {
+        const { model: gModel = 'flash', text, voice_name, speakers, dialogue_turns, scene, sample_context, temperature, filename } = args;
+        const apiModel = gModel === 'pro' ? 'google/gemini-2-5-pro-tts' : 'google/gemini-3-1-flash-tts';
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const outFilename = sanitizeFilename(filename) || `gemini-tts-${ts}.wav`;
+        const outPath = join(resolveOutputDir(args), outFilename);
+
+        // Simple mode (text) builds a single-speaker request; dialogue mode passes through.
+        let spk = speakers, turns = dialogue_turns;
+        if (!turns?.length) {
+          if (!text) return { content: [{ type: 'text', text: 'Provide either `text` (simple mode) or `speakers` + `dialogue_turns` (dialogue mode).' }], isError: true };
+          spk = spk?.length ? spk : [{ speaker_id: 'Speaker 1', voice_name: voice_name || 'Zephyr' }];
+          turns = [{ speaker_id: spk[0].speaker_id || 'Speaker 1', text }];
+        }
+        if (spk.length > 2) return { content: [{ type: 'text', text: 'Gemini TTS supports at most 2 speakers per request (upstream hard limit).' }], isError: true };
+        const input = { speakers: spk, dialogue_turns: turns };
+        if (scene) input.scene = scene;
+        if (sample_context) input.sample_context = sample_context;
+        if (temperature !== undefined) input.temperature = temperature;
+
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: apiModel, input });
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start Gemini TTS — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        trackTask({ taskId, model: apiModel, prompt: (turns[0]?.text || '').slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, apiModel, outFilename);
+
+        const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
+        const urls = extractResultUrls(pollResult);
+        if (urls.length === 0) return { content: [{ type: 'text', text: `Gemini TTS task ${taskId} done but no URLs found.\n${JSON.stringify(pollResult).slice(0, 500)}` }] };
+        await downloadToFile(urls[0], outPath);
+        return { content: [{ type: 'text', text: [`✅ Gemini TTS generated!`, `Model: ${apiModel}`, `Task ID: ${taskId}`, `Cost: ${formatCost(apiModel, pollResult)}`, ``, `Downloaded to: ${outPath}`].join('\n') }] };
+      }
+
       case 'generate_tts': {
         const { text, voice_id, model: ttsModel = 'turbo-2-5', speed, language_code, filename } = args;
 
@@ -2695,7 +2749,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.6.4', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.7.0', sessions: sessions.size }));
       return;
     }
 

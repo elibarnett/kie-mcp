@@ -418,6 +418,34 @@ export const VIDEO_MODEL_REGISTRY = {
     },
   },
 
+  'bytedance/seedance-2-5': {
+    name: 'Seedance 2.5 (ByteDance)',
+    description: 'NEW (July 2026) — the anticipated flagship: 30s single-take clips (2x the 2.0 ceiling). kie surface: 480p/720p, 4-30s (probed 2026-07-27). ⏸ NOT YET GENERATING: createTask accepts the slug but every generation fails server-side ("internal error", 0 credits) and kie\'s page still says Coming Soon — entry ships ready for enablement.',
+    capabilities: ['cinematic', 'audio', 'character', 'motion-control', 'music-video', 'lip-sync', 'multi-shot', 'long-form', 'latest', 'new'],
+    research: { verdict: 'Announced on stage at Volcano Engine 2026 (June 23), API opened ~July 16 via BytePlus/Volcano — young and largely vendor-benchmarked. The generational pitch: 30-second native single-shot generation (2x Seedance 2.0), reference capacity jumping to 50 mixed multimodal inputs upstream, audio co-generated in a unified latent space, region-level re-draw editing, and a 3D white-box camera blockout system. Every quality claim (including ByteDance\'s "+20% prompt adherence") is vendor-supplied — no Artificial Analysis entry for 2.5 exists yet, and any circulating Elo is fabricated. NOTE the kie surface is narrower than the marketing: live probes (2026-07-27) show 480p/720p only (no 4K), duration 4-30s, and the Mini-style field set — treat kie\'s 2.5 as "Seedance 2.0 with 30s takes", not the full 50-ref/4K stack. Use 2.0 for benchmarked ship-now work; test 2.5 for long-form consistency.', bestFor: ['long single-take narratives up to 30s without stitching (product demos, branded short drama, continuous-scene ads)', 'reference-driven consistency work across longer takes', 'multilingual dialogue content (11 languages with synchronized lip movement, vendor-claimed)', 'soundscape-in-one-pass generation — prompt the audio directly'], weaknesses: ['no independent benchmarks or Arena Elo as of late July 2026 — all quality claims are ByteDance launch numbers', 'kie exposes only 480p/720p despite the 4K marketing (probed)', '30s generations are computationally heavy — expect long queues; latency/retry rates unverified', 'carryover 2.0 issues not confirmed fixed: aggressive content filters, unreliable on-screen text, close-up hand-object interaction', 'pricing was unpublished at kie launch — see costEfficiency'], promptTechniques: ['write for one continuous take: describe how subject and camera evolve across the whole 30s, not a single instant (SPACE checklist: Subject, Performance, Ambience, Camera, Extra cues)', 'name the camera move in plain language ("slow push-in", "low tracking shot") instead of "cinematic"', 'label every reference\'s role in the prompt', 'prompt the soundscape directly since audio is co-generated', 'don\'t cram multiple sequences into one prompt'], communityInsights: ['reception is cautious optimism — a genuine generational step, but reviewers stress no independent side-by-sides of 30s outputs existed at launch', 'multiple trackers warn any pre-launch Seedance 2.5 Elo is fabricated (quoted numbers are 2.0\'s)', 'expert pattern: "use 2.0 for work that must ship now; test 2.5 if longer storytelling or controlled edits are central" (seedance.tv)', 'copyright controversy shadows the launch — an AI copyright commercialization platform was announced alongside'], costEfficiency: 'kie had no published rate at launch (empty pricingDesc; page said Coming Soon while the slug already routed). Community forecasts ran $0.12-0.50/s; Seedance 2.0 is 25 cr/s @720p on kie, so expect 2.5 at or above that. The MCP measures the ACTUAL charge per generation (creditsConsumed) — trust the [actual] line over the table estimate.', comparedTo: { 'seedance-2/text-to-video': '2.5 doubles native duration (30s vs 15s) and adds region editing; 2.0 remains the benchmarked, arena-proven option (~1229 with-audio T2V Elo, #2 late July).', 'bytedance/seedance-2-mini': 'Mini stays the budget tier; 2.5 is the opposite end — maximum capability, higher per-clip cost.', 'kling-3/video': 'Seedance 2.0 already led Kling 3.0 (~1105) on Arena; 2.5\'s 30s takes extend the duration gap on paper, unverified in practice.', 'veo-3/text-to-video': '2.5\'s 30s single pass is ~4x Veo\'s longest clip; Veo retains native 4K (which kie\'s 2.5 surface lacks).' }, lastResearched: '2026-07-27', sources: ['https://kie.ai/blog/seedance-2-5-release-deep-dive', 'https://www.cined.com/bytedance-seedance-2-5-api-goes-live-30-second-single-shot-clips-50-reference-inputs-and-3d-camera-blockouts/', 'https://www.seedance.tv/blog/seedance-2-5-review-2026', 'https://unifically.com/blogs/seedance-2.5-vs-seedance-2.0', 'https://artificialanalysis.ai/video/leaderboard/text-to-video'] },
+    type: 'market',
+    paused: 'kie accepts the slug but every generation fails server-side ("internal error, please try again later", 0 credits consumed — verified twice 2026-07-27, T2V and I2V). kie\'s page still says Coming Soon; the backend is not enabled yet. Remove this flag when generations succeed',
+    apiModel: 'bytedance/seedance-2-5',
+    maxPromptChars: 20000,
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+    options: {
+      duration: { type: 'number', min: 4, max: 30, default: 5, description: 'Duration in seconds (4-30 — probed live; 30s single takes are the headline feature)' },
+      resolution: { type: 'string', enum: ['480p', '720p'], default: '720p', description: 'kie exposes 480p/720p only (probed 2026-07-27; 1080p/2k/4k rejected)' },
+      generate_audio: { type: 'boolean', default: false, description: 'Co-generate audio (increases cost)' },
+      first_frame_url: { type: 'string', description: 'Optional first frame image URL' },
+      reference_image_urls: { type: 'array', description: 'Reference images for style/character' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio, duration: opts.duration || 5, resolution: opts.resolution || '720p' };
+      if (opts.generate_audio) input.generate_audio = true;
+      if (opts.first_frame_url) input.first_frame_url = opts.first_frame_url;
+      else if (imageUrls?.[0]) input.first_frame_url = imageUrls[0];
+      if (opts.reference_image_urls) input.reference_image_urls = opts.reference_image_urls;
+      else if (imageUrls?.length > 1) input.reference_image_urls = imageUrls.slice(1);
+      return input;
+    },
+  },
+
   // ── Seedance 1.5 (ByteDance — legacy) ──
   'seedance/text-to-video': {
     name: 'Seedance 1.5 Pro (ByteDance)',
@@ -1387,6 +1415,135 @@ export const VIDEO_MODEL_REGISTRY = {
   },
 
   // ── Infinitalk (audio-to-video) ──
+
+  // ── PixVerse V6 (NEW March 2026 — AISphere's budget all-rounder; added July 2026) ──
+  'pixverse-v6/text-to-video': {
+    name: 'PixVerse V6 T2V',
+    description: 'NEW — PixVerse V6 text-to-video: native audio in-pass, 1-15s, up to 1080p, 8 aspect ratios, multi-clip mode. Budget tier (7.2 cr/s @720p no-audio). Note: I2V is its stronger modality.',
+    capabilities: ['animation', 'audio', 'anime', 'multi-shot', 'budget', 'latest', 'new'],
+    research: { verdict: 'PixVerse V6 (released March 30, 2026 by AISphere) is the budget all-rounder of the lineup: native audio in the same pass, single-pass 15-second 1080p, extensive camera controls, and the widest endpoint surface (transition, 7-image Fusion refs, chainable extend) at 4.0-9.6 cr/s. On Artificial Analysis it sits ~Elo 1330, roughly 4th in I2V-no-audio (tied with Grok 1.5 preview) but does NOT crack the T2V top 10 — it is clearly an I2V-first model. Physical realism and complex action lag Seedance 2.0 and Kling 3.0; where it wins is speed (30-60s renders), character consistency via Fusion, per-second billing at any 1-15s duration, and workflow breadth for the price. Right default for social-first, anime/stylized, and character-driven content where iteration volume matters more than the cinematic ceiling.', bestFor: ['fast social-first vertical video (9:16, 21:9) with 30-60s renders', 'anime/stylized content — often cleaner than realistic mode', 'explicit camera direction: dolly, crane, orbit, tracking with adjustable speed', 'cheap iteration volume — per-second billing at any 1-15s duration'], weaknesses: ['T2V is measurably weaker than I2V — absent from the AA T2V top-10 (prefer pixverse-v6/image-to-video with a strong source frame)', 'physical realism and complex action lag Seedance 2.0 and Kling 3.0', 'audio-to-lip-sync unreliable in multi-character scenes (documented voice-casting mismatches)', '1080p ceiling', 'character drift with very complex characters or rapid movement'], promptTechniques: ['V6 reads prompts literally — describe what is visible AND audible: subject, action, camera path, lighting, dialogue, SFX', 'put the core action in the first sentence', 'delete the word "cinematic" — name the specific look instead', 'one camera movement per prompt', 'multi-shot: use "CUT TO:" cues and keep character descriptions verbatim-consistent across shots'], communityInsights: ['massive consumer base: 100M registered users, 16M MAU as of March 2026 (single-source)', 'PixVerse V5.6 previously ranked #2 on the AA leaderboard — the family has a track record near the top', 'community three-way tests: Seedance 2 "is a killer" for action; PixVerse "nails it pretty good" for simple realism but falls short on complex/action scenes', 'unverified single source: fine camera controls take 6+ hours to dial in'], costEfficiency: 'kie published (per second): 360p 4.0/5.6 (no-audio/audio), 540p 5.6/7.2, 720p 7.2/9.6, 1080p 14.4/18.4. Table prices the 720p no-audio default (7.2 cr/s). Half the price of kling/v2-5-turbo, under seedance-2-mini; grok 1.5 (1.6-3 cr/s) stays the absolute cheapest audio option.', comparedTo: { 'grok-imagine-video-1-5-preview': 'Statistically tied on I2V-no-audio Elo (~1330) but Grok is roughly half the price; Grok wins pure cost-per-quality, PixVerse wins workflow breadth (transition, Fusion, extend, camera controls) and T2V capability at all (Grok preview is I2V-only).', 'bytedance/seedance-2-mini': 'Seedance is the action/motion winner with richer multimodal refs; Mini is 9.5 cr/s at just 480p — PixVerse gives 720p+audio around the same spend.', 'kling/v2-5-turbo-text-to-video': 'Kling has the higher cinematic ceiling but 2x the cost on kie and no native audio at that tier.' }, lastResearched: '2026-07-27', sources: ['https://pixverse.ai/en/blog/pixverse-launches-v6-advancing-ai-video-generation', 'https://artificialanalysis.ai/video/leaderboard/image-to-video', 'https://www.atlascloud.ai/blog/guides/pixverse-v6-review', 'https://influencerstudio.com/blog/post/pixverse6-vs-seedance2-kling3', 'https://kie.ai/pixverse-v6'] },
+    type: 'market',
+    apiModel: 'pixverse-v6/text-to-video',
+    maxPromptChars: 5000,
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '2:3', '3:2', '21:9'],
+    options: {
+      duration: { type: 'number', min: 1, max: 15, default: 5, description: 'Duration in seconds (1-15)' },
+      quality: { type: 'string', enum: ['360p', '540p', '720p', '1080p'], default: '720p', description: '360p is ~half price; 1080p is 2x' },
+      generate_audio_switch: { type: 'boolean', default: false, description: 'Co-generate synchronized audio (raises the per-second rate ~33%)' },
+      generate_multi_clip_switch: { type: 'boolean', default: false, description: 'Multi-clip video with camera cuts' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || '16:9', quality: opts.quality || '720p', duration: opts.duration || 5 };
+      if (opts.generate_audio_switch) input.generate_audio_switch = true;
+      if (opts.generate_multi_clip_switch) input.generate_multi_clip_switch = true;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+  'pixverse-v6/image-to-video': {
+    name: 'PixVerse V6 I2V',
+    description: 'PixVerse V6 image-to-video — its STRONGEST modality (~Elo 1330, top-4 I2V-no-audio on Arena). Up to 2 images, viral effect templates via template_id, native audio.',
+    capabilities: ['animation', 'image-to-video', 'audio', 'anime', 'budget', 'latest', 'new'],
+    research: { verdict: 'The strongest PixVerse modality — ~Elo 1330, ~4th place I2V-no-audio on the Artificial Analysis arena (behind Gemini Omni Flash and Seedance 2.0, tied with Grok 1.5 preview). Accepts up to 2 images and a template_id for PixVerse\'s viral consumer effect templates (dances, product-in-fluffy-factory, birthday memes — preview any at https://static.aiquickdraw.com/tools/example/<template_id>.mp4). When template_id is set, duration is fixed by the template. Fast renders and per-second billing make it the iteration workhorse of the family.', bestFor: ['image-to-video animation on a budget — the family\'s benchmarked strength', 'viral/social effect templates (TikTok-style dances, product memes) via template_id', 'animating stylized/anime stills', 'quick product-shot animation with in-pass audio'], weaknesses: ['complex action still lags Seedance/Kling', 'template_id fixes duration (do not pass duration with it)', 'max 2 input images ≤20MB each', 'lip-sync casting unreliable with multiple characters'], promptTechniques: ['describe motion and audio, not the image content', 'templates: pass template_id and exactly the number of images its effect_type requires', 'keep the motion prompt short when the source image is strong'], communityInsights: ['the template system is the consumer-app viral engine, exposed via API — unusual among kie models', 'community: I2V clearly ahead of T2V for this family'], costEfficiency: 'Same published tiers as T2V: 720p no-audio default = 7.2 cr/s.', comparedTo: { 'grok-imagine-video-1-5-preview': 'Tied on Arena Elo; Grok is cheaper, PixVerse adds templates, 2-image input, and 1080p.', 'wan/flash-image-to-video': 'Wan Flash (2 cr/s) is cheaper still but no audio and weaker consistency.' }, lastResearched: '2026-07-27', sources: ['https://artificialanalysis.ai/video/leaderboard/image-to-video', 'https://www.atlascloud.ai/blog/guides/pixverse-v6-review', 'https://kie.ai/pixverse-v6'] },
+    type: 'market',
+    apiModel: 'pixverse-v6/image-to-video',
+    maxPromptChars: 5000,
+    requiresImage: true,
+    options: {
+      duration: { type: 'number', min: 1, max: 15, default: 5, description: 'Duration 1-15s. Do NOT set together with template_id (template fixes duration)' },
+      quality: { type: 'string', enum: ['360p', '540p', '720p', '1080p'], default: '720p' },
+      generate_audio_switch: { type: 'boolean', default: false },
+      generate_multi_clip_switch: { type: 'boolean', default: false },
+      template_id: { type: 'string', description: 'PixVerse viral effect template ID (preview: https://static.aiquickdraw.com/tools/example/<id>.mp4). Fixes duration; upload the number of images the template\'s effect_type requires' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { prompt, image_urls: imageUrls.slice(0, 2), quality: opts.quality || '720p' };
+      if (opts.template_id) input.template_id = opts.template_id;
+      else input.duration = opts.duration || 5;
+      if (opts.generate_audio_switch) input.generate_audio_switch = true;
+      if (opts.generate_multi_clip_switch) input.generate_multi_clip_switch = true;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+  'pixverse-v6/transition': {
+    name: 'PixVerse V6 Transition',
+    description: 'PixVerse V6 first→last frame morphing: give a start image + end image + a prompt describing how the transition unfolds. 1-15s, optional audio. No direct equivalent elsewhere in the registry.',
+    capabilities: ['animation', 'transition', 'image-to-video', 'audio', 'budget', 'latest', 'new'],
+    research: { verdict: 'First/last-frame morphing endpoint: a required start image, an end image, and a prompt describing how the transition unfolds — marketed for fashion changes, transformation effects, storytelling beats, and music-video cuts. Nothing else in the registry does exactly this as a dedicated endpoint (Seedance takes first+last frames but as generation constraints, not a morph brief). Same 1-15s / 360p-1080p / optional-audio envelope as the rest of V6.', bestFor: ['transformation effects (outfit/character/product morphs)', 'music-video beat transitions', 'before/after product reveals', 'storytelling scene-to-scene bridges'], weaknesses: ['morph quality depends heavily on structural similarity between the two frames', 'inherits V6\'s action-realism limits', 'no aspect_ratio control — follows the input frames'], promptTechniques: ['describe the JOURNEY between the frames, not the endpoints ("the dress dissolves into rose petals that reassemble as armor")', 'use structurally similar start/end frames for smooth morphs', 'specify pacing: where the transformation peaks within the duration'], communityInsights: ['marketed heavily for fashion and transformation content on the consumer app'], costEfficiency: 'Same published tiers as T2V: 720p no-audio default = 7.2 cr/s.', comparedTo: { 'bytedance/seedance-2-mini': 'Seedance first_frame_url+last_frame_url constrains a generation; PixVerse transition is a dedicated morph with a transition brief — better for explicit transformations.' }, lastResearched: '2026-07-27', sources: ['https://wavespeed.ai/models/pixverse/pixverse-v6/transition', 'https://kie.ai/pixverse-v6'] },
+    type: 'market',
+    apiModel: 'pixverse-v6/transition',
+    maxPromptChars: 5000,
+    requiresImage: true,
+    options: {
+      duration: { type: 'number', min: 1, max: 15, default: 5 },
+      quality: { type: 'string', enum: ['360p', '540p', '720p', '1080p'], default: '720p' },
+      generate_audio_switch: { type: 'boolean', default: false },
+      last_frame_image_url: { type: 'string', description: 'Last frame image URL (first frame comes from image_urls[0]; if image_urls has 2, the second is used as last frame unless this is set)' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { prompt, first_frame_image_url: imageUrls[0], quality: opts.quality || '720p', duration: opts.duration || 5 };
+      const last = opts.last_frame_image_url || imageUrls[1];
+      if (last) input.last_frame_image_url = last;
+      if (opts.generate_audio_switch) input.generate_audio_switch = true;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+  'pixverse-v6/reference-to-video': {
+    name: 'PixVerse V6 Fusion (R2V)',
+    description: 'PixVerse Fusion — up to 7 typed reference images (subject/background) addressed as @ref_name in the prompt. The family\'s character-consistency differentiator. Priciest V6 endpoint (8.1 cr/s @720p).',
+    capabilities: ['animation', 'character', 'multi-reference', 'audio', 'budget', 'latest', 'new'],
+    research: { verdict: 'PixVerse calls this Fusion: composes up to 7 reference images — isolated subjects plus clean backgrounds, each with a type (subject|background) and a ref_name you address in the prompt as @ref_name — into a coherent generated scene, locking facial features and outfits across shots. The fix for V5-era character drift and the differentiator for e-commerce, brand, and narrative character work. Distinct addressing style from HappyHorse 1.1\'s [Image N]: named, typed refs. ~12% pricier than the other V6 endpoints.', bestFor: ['character-consistent series with named refs (@hero, @sidekick)', 'e-commerce: product refs composited into scenes', 'subject+background composition control', 'brand work needing locked outfits/faces across shots'], weaknesses: ['refs must be high-res with subjects clearly isolated — messy refs degrade output', 'max 7 refs, images only (Seedance takes video+audio refs)', 'complex multi-character interaction still drifts'], promptTechniques: ['address refs by name: "@dog runs through @room chasing a ball"', 'ref_name ≤30 chars, unique per request', 'separate clean background images from subject images and type them correctly', 'high-res isolated-subject refs give dramatically better results'], communityInsights: ['Fusion is the community-cited fix for the V5 character-drift complaints'], costEfficiency: 'kie published: 360p 4.5/6.3, 540p 6.3/8.1, 720p 8.1/10.8, 1080p 16.2/20.7 (no-audio/audio, per second). Table prices 720p no-audio (8.1 cr/s). Cheaper than HappyHorse 1.1 R2V (22.5-29 cr/s) for image-ref work if the quality ceiling suffices.', comparedTo: { 'happyhorse-1-1/reference-to-video': 'HappyHorse has the higher with-audio Arena pedigree and 9 refs; PixVerse Fusion is ~a third the price with typed @name addressing.', 'bytedance/seedance-2-mini': 'Seedance refs span images+video+audio; Fusion is images-only but named/typed and cheaper at 720p.' }, lastResearched: '2026-07-27', sources: ['https://docs.platform.pixverse.ai/how-to-use-fusionreference-to-video-1339253m0', 'https://kie.ai/pixverse-v6'] },
+    type: 'market',
+    apiModel: 'pixverse-v6/reference-to-video',
+    maxPromptChars: 5000,
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '2:3', '3:2', '21:9'],
+    options: {
+      duration: { type: 'number', min: 1, max: 15, default: 5 },
+      quality: { type: 'string', enum: ['360p', '540p', '720p', '1080p'], default: '720p' },
+      generate_audio_switch: { type: 'boolean', default: false },
+      image_references: { type: 'array', description: 'REQUIRED: up to 7 refs as [{image_url, type: "subject"|"background", ref_name}] — address each in the prompt as @ref_name' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      // Accept structured image_references, or build subject refs from plain image_urls (@ref1, @ref2, ...)
+      const refs = opts.image_references || (imageUrls || []).slice(0, 7).map((u, i) => ({ image_url: u, type: 'subject', ref_name: `ref${i + 1}` }));
+      const input = { prompt, image_references: refs, aspect_ratio: aspectRatio || '16:9', quality: opts.quality || '720p', duration: opts.duration || 5 };
+      if (opts.generate_audio_switch) input.generate_audio_switch = true;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+  'pixverse-v6/extend': {
+    name: 'PixVerse V6 Extend',
+    description: 'PixVerse V6 video extend — continues an existing video (by kie taskId of a prior PixVerse success, or a video_url) so it "looks like the original kept rolling". Chainable, 1-15s per pass. Seedance/Kling lack a native equivalent.',
+    capabilities: ['video-extend', 'editing', 'audio', 'budget', 'latest', 'new'],
+    research: { verdict: 'Analyzes the ending segment of an existing video (motion trajectories, lighting, style, composition) and continues it. Each pass adds 1-15s with prompt control and optional audio; passes chain with no documented limit — a 15s base plus three extends yields a minute of continuous footage, the cheapest path to 30-60s among the budget models. Takes EITHER the taskId of a prior successful kie PixVerse task OR a video_url (mutually exclusive; kie does not accept official PixVerse video_ids).', bestFor: ['long-form assembly on a budget: 15s base + chained extends', 'continuing a shot past another model\'s duration cap', 'extending user-provided footage (video_url) with matched style'], weaknesses: ['taskId and video_url are mutually exclusive — exactly one', 'parent task must be a successful, undeleted kie task owned by you', 'extensions can repeat or contradict source footage — steer with an explicit prompt', 'style match degrades over many chained passes'], promptTechniques: ['be specific about what happens NEXT (camera movement, subject action, environment change)', 'reference the source\'s motion: "continue the same camera motion and extend the scene naturally"'], communityInsights: ['flagged by reviewers as a capability Seedance 2.0 and Kling 3.0 lack natively'], costEfficiency: 'Same published tiers as T2V: 720p no-audio default = 7.2 cr/s per extended second.', comparedTo: { 'runway/extend': 'Runway extends Runway outputs at 6 cr/s; PixVerse extends its own tasks AND arbitrary video_urls.', 'veo/extend': 'Veo extend is 31.25 cr/s and Veo-only; PixVerse is ~4x cheaper and takes external URLs.' }, lastResearched: '2026-07-27', sources: ['https://docs.platform.pixverse.ai/how-to-use-extend-1268531m0', 'https://wavespeed.ai/models/pixverse/pixverse-v6/extend', 'https://kie.ai/pixverse-v6'] },
+    type: 'market',
+    apiModel: 'pixverse-v6/extend',
+    maxPromptChars: 5000,
+    options: {
+      duration: { type: 'number', min: 1, max: 15, default: 5, description: 'Seconds to ADD' },
+      quality: { type: 'string', enum: ['360p', '540p', '720p', '1080p'], default: '720p' },
+      generate_audio_switch: { type: 'boolean', default: false },
+      task_id: { type: 'string', description: 'kie taskId of a prior successful PixVerse task to extend (mutually exclusive with video_url)' },
+      video_url: { type: 'string', description: 'URL of a video to extend (mutually exclusive with task_id)' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, _ar, _imgs, opts) {
+      const input = { prompt, quality: opts.quality || '720p', duration: opts.duration || 5 };
+      if (opts.task_id) input.taskId = opts.task_id;
+      else if (opts.video_url) input.video_url = opts.video_url;
+      if (opts.generate_audio_switch) input.generate_audio_switch = true;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+
   'infinitalk/from-audio': {
     name: 'Infinitalk Audio-to-Video',
     description: 'Audio-driven talking head video generation',

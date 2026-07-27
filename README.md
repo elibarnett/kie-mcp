@@ -1,6 +1,6 @@
 # kie-mcp
 
-A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **47+ image models**, **80+ video models**, and **20+ audio tools** with deep model intelligence built in.
+A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **47+ image models**, **86+ video models**, and **20+ audio tools** with deep model intelligence built in.
 
 ## Why this exists
 
@@ -32,22 +32,24 @@ Just ask Claude things like:
 - **Ideogram**: v3, Character, Edit, Remix, Reframe
 - **Others**: Qwen/Qwen2, Z-Image, Grok Imagine, Recraft, Topaz
 
-### Video (80+)
+### Video (86+)
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
-- **ByteDance Seedance**: 2.0 / 2.0 Fast / 2.0 Mini (NEW) / 1.5 Pro
+- **ByteDance Seedance**: 2.5 ⏸ (NEW — 30s takes; awaiting kie enablement) / 2.0 / 2.0 Fast / 2.0 Mini / 1.5 Pro
 - **OpenAI Sora 2** ⏸: T2V/I2V, Pro, Characters, Storyboard, Watermark Remover — *paused upstream by kie.ai (June 2026); OpenAI sunsets the Sora API Sept 2026*
 - **Kuaishou Kling**: 3.0, 3.0 Turbo (NEW), 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
 - **Alibaba Wan**: 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
 - **MiniMax Hailuo**: 2.3 Pro/Standard, 02 Pro/Standard
 - **xAI Grok Imagine**: Video 1.5 preview (NEW — I2V with native audio, cheapest audio video), T2V, I2V, Upscale, Extend
 - **Avatar / lip-sync**: OmniHuman 1.5 (NEW — audio-driven full-body avatar + free subject-detection utility), Volcengine Video Lip-Sync (NEW — re-dub existing footage), Kling AI Avatar, Infinitalk
+- **PixVerse V6** (NEW): T2V, I2V (viral templates), Transition (first→last morph), Fusion R2V (@ref_name), Extend — budget all-rounder with native audio
 - **Runway**: Aleph, Aleph Edit, Extend
 - **Others**: ByteDance V1 Pro/Lite, Topaz upscale
 
 ### Audio (20+)
 - **Suno**: Music Gen, Extend, Cover, Add Instrumental/Vocals, Replace Section, Lyrics, Sounds, Sound Effects, MIDI, Music Video, Cover Art, Mashup, Persona, Timestamped Lyrics, Boost Style, Vocal Separation, WAV, Custom Voice cloning (experimental)
 - **ElevenLabs**: TTS (Turbo 2.5 + Multilingual V2), Text-to-Dialogue V3, Audio Isolation, Speech-to-Text
+- **Google Gemini TTS** (NEW): style-directed speech, 30 voices, 2-speaker dialogue, inline tone tags — ~4.2 cr/min
 
 ### Utility
 - File upload (URL or base64)
@@ -132,7 +134,7 @@ Configure your MCP client to use the resulting URL:
 
 ```
 generate_image, generate_video, generate_music, generate_sfx,
-generate_tts, generate_dialogue, generate_sounds, generate_lyrics,
+generate_tts, generate_gemini_tts, generate_dialogue, generate_sounds, generate_lyrics,
 generate_persona, generate_mashup, generate_cover_art,
 generate_midi, create_music_video,
 prepare_voice_clone, create_voice_clone, regenerate_voice_clone,
