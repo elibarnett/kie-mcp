@@ -2,6 +2,30 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.7.0] — 2026-07-27
+
+July model pass — everything the drift watch (#44) surfaced in its first scheduled window, researched in the house Averiguare style with docs-scraped schemas and empirical pricing where possible.
+
+### Added
+
+**Video (6 new entries):**
+
+- **PixVerse V6** (`pixverse-v6/text-to-video`, `/image-to-video`, `/transition`, `/reference-to-video`, `/extend`) — AISphere's budget all-rounder (~Elo 1330, top-4 I2V-no-audio; T2V is its weaker modality): native audio in-pass, 1-15s up to 1080p, viral effect templates (`template_id`), first→last-frame **Transition** morphing (no registry equivalent), **Fusion** R2V with up to 7 typed refs addressed as `@ref_name`, and chainable **Extend** (taskId XOR video_url) — the cheapest path to 30-60s continuous footage. kie published per-second tiers (360p 4.0 → 1080p+audio 18.4/20.7); table prices the 720p no-audio default (7.2 / 8.1 R2V). **360p rate empirically confirmed: a 4s clip consumed exactly 16.00 credits (4.0 cr/s).**
+- **Seedance 2.5** (`bytedance/seedance-2-5`) — ByteDance's 30s-single-take flagship, ships **⏸ paused**: the slug routes and accepts tasks, but every generation fails server-side ("internal error", 0 credits — verified twice, T2V and I2V) and kie's page still says Coming Soon. Entry is fully probed (480p/720p only — no 4K on kie despite the marketing; duration 4-30s; Mini-style fields) and ready — remove the `paused` flag when kie enables the backend. Pricing unpublished; 25 cr/s placeholder in `PRICING_ESTIMATED`.
+
+**Audio (1 new tool):**
+
+- **`generate_gemini_tts`** — Google Gemini native TTS (flash = Gemini 3.1 Flash TTS, most expressive, inline tone tags like `[whispers]`, best <60s; pro = Gemini 2.5 Pro TTS, stabler long-form; same price). 30 named voices, up to 2 speakers with per-speaker accent/style/pace, `scene`/`sample_context` direction, simple mode (`text` + `voice_name`) or dialogue mode (`speakers` + `dialogue_turns`). Token-priced upstream ≈ **4.2 credits per minute of audio** — cheaper than every ElevenLabs tier. **Verified live end-to-end: 0.75 credits actual for a short clip, real WAV downloaded.**
+
+### Fixed
+
+- **Wan 2.7 image pricing drift** (drift watch): `wan/2-7-image` 4 → **4.8** cr, `wan/2-7-image-pro` 8 → **12** cr (kie raised both).
+
+### Notes
+
+- All 8 slugs verified live 2026-07-27: 2 full generations (PixVerse 16 cr, Gemini TTS 0.75 cr) + zero-cost probes for the rest. The `pixverse/*` docs URLs are misleading — the real slugs are `pixverse-v6/*` (caught by probing).
+- Out-of-scope kie additions correctly skipped: Gemini 2.5/3/3.6 chat models, Claude Opus 5, GPT-5.6 (kie's LLM API, not generation).
+
 ## [4.6.4] — 2026-07-13
 
 ### Fixed
@@ -414,6 +438,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.7.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.7.0
 [4.6.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.4
 [4.6.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.3
 [4.6.2]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.2

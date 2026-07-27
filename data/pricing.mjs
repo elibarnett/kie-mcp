@@ -49,8 +49,8 @@ export const PRICING = {
   'topaz/image-upscale': 4,
   'seedream/5-lite-text-to-image': 5,
   'seedream/5-lite-image-to-image': 5,
-  'wan/2-7-image': 4,
-  'wan/2-7-image-pro': 8,
+  'wan/2-7-image': 4.8,       // kie raised it (drift watch 2026-07-27; was 4)
+  'wan/2-7-image-pro': 12,    // kie raised it (drift watch 2026-07-27; was 8)
 
   // ── Video Models (credits per second, unless noted) ──
   // Veo numbers empirically measured 2026-06-01 via single 8s 720p 16:9 T2V probes;
@@ -139,6 +139,17 @@ export const PRICING = {
   // ── Grok Imagine Video 1.5 preview (June 2026) — 3 cr/s @720p (default), 1.6 cr/s @480p.
   //    720p rate empirically confirmed 2026-07-02: one 4s 720p I2V consumed exactly 12.00 credits (3 cr/s). ──
   'grok-imagine-video-1-5-preview': 3,
+  // ── Seedance 2.5 (July 2026) — kie pricing UNPUBLISHED at launch; 25 cr/s placeholder
+  //    matching Seedance 2.0. Runtime [actual] creditsConsumed is ground truth. ──
+  'bytedance/seedance-2-5': 25,
+  // ── PixVerse V6 (added July 2026) — kie published per-second tiers; table = 720p no-audio default.
+  //    T2V/I2V/transition/extend: 360p 4.0/5.6, 540p 5.6/7.2, 720p 7.2/9.6, 1080p 14.4/18.4 (no-audio/audio).
+  //    Fusion R2V: 360p 4.5/6.3, 540p 6.3/8.1, 720p 8.1/10.8, 1080p 16.2/20.7. ──
+  'pixverse-v6/text-to-video': 7.2,
+  'pixverse-v6/image-to-video': 7.2,
+  'pixverse-v6/transition': 7.2,
+  'pixverse-v6/extend': 7.2,
+  'pixverse-v6/reference-to-video': 8.1,
   // ── OmniHuman 1.5 — kie published: 27 cr/s (billed on output = audio length) ──
   'omnihuman-1-5': 27,
   // ── Volcengine lip-sync — kie published: 8 cr/s of generated video (follows audio duration) ──
@@ -171,6 +182,10 @@ export const PRICING = {
   'suno/timestamped-lyrics': 2,
   'suno/cover-art': 4,
   'suno/upload-extend': 10,
+  // Gemini TTS (July 2026) — token-priced upstream (140 cr/1M input, 2800 cr/1M audio-out;
+  // Google bills 25 audio tokens/sec → ~4.2 cr per MINUTE of audio). Value below ≈ 1 minute.
+  'google/gemini-3-1-flash-tts': 4.2,
+  'google/gemini-2-5-pro-tts': 4.2,
   'elevenlabs/text-to-speech-turbo-2-5': 6,  // per 1000 chars, ceil-rounded (empirical 2026-06-11: 35/150/600 chars→6, 1500→12, 3000→18)
   'elevenlabs/text-to-speech-multilingual-v2': 12, // per 1000 chars, ceil-rounded (empirical 2026-06-11: 33/150 chars→12, 1500→24)
   'elevenlabs/text-to-dialogue-v3': 14, // per 1000 chars, linear no rounding (empirical 2026-06-11: 67 chars→0.98, 1330→18.62)
@@ -185,6 +200,14 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'bytedance/seedance-2-5',
+  'pixverse-v6/text-to-video',
+  'pixverse-v6/image-to-video',
+  'pixverse-v6/transition',
+  'pixverse-v6/extend',
+  'pixverse-v6/reference-to-video',
+  'google/gemini-3-1-flash-tts',
+  'google/gemini-2-5-pro-tts',
   'wan/2-5-text-to-video',
   'wan/2-5-image-to-video',
   'suno/voice-generate',
@@ -217,6 +240,9 @@ export const PRICING_ESTIMATED = new Set([
 ]);
 
 export const PROMPT_CAPS = {
+  // PixVerse V6 (docs: 3-5000 chars)
+  'pixverse-v6/text-to-video': 5000, 'pixverse-v6/image-to-video': 5000,
+  'pixverse-v6/transition': 5000, 'pixverse-v6/reference-to-video': 5000, 'pixverse-v6/extend': 5000,
   // 800 — the tightest documented caps in the catalog
   'qwen2/text-to-image': 800,
   'qwen2/image-edit': 800,
