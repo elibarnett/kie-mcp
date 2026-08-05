@@ -811,7 +811,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.7.0' };
+const SERVER_INFO = { name: 'kie-art', version: '4.7.1' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1669,6 +1669,11 @@ const handleCallTool = async (request) => {
               `Downloaded ${downloadedFiles.length} file(s):`,
               ...downloadedFiles.map((f) => `  → ${f}`),
               ``,
+              // Result URLs are needed for i2i chaining (pass as the next call's
+              // image_urls) and are NOT pattern-stable — never reconstruct them (#66).
+              `Result URL(s) — use these for image-to-image chaining (temporary, ~24h; not pattern-stable, never guess them):`,
+              ...resultUrls.map((u) => `  → ${u}`),
+              ``,
               `Use the Read tool to preview the image, then \`/art-asset process\` to crop and integrate.`,
             ].join('\n'),
           }],
@@ -1851,7 +1856,7 @@ const handleCallTool = async (request) => {
         const outPath = join(resolveOutputDir(args), outName);
         await downloadToFile(urls[0], outPath);
         if (entry) { entry.status = 'success'; appendTaskLog(entry); }
-        return { content: [{ type: 'text', text: `Downloaded to: ${outPath}` }] };
+        return { content: [{ type: 'text', text: `Downloaded to: ${outPath}\nResult URL: ${urls[0]} (temporary; not pattern-stable — reuse verbatim for chaining)` }] };
       }
 
       case 'list_raw_assets': {
@@ -1929,7 +1934,7 @@ const handleCallTool = async (request) => {
         return {
           content: [{
             type: 'text',
-            text: [`✅ Video generated!`, `Model: ${modelDef.name}`, `Task ID: ${taskId}`, `Cost: ${formatCost(modelId, pollResult, parseInt(model_options.duration) || 8)}`, ``, `Downloaded to: ${outPath}`].join('\n'),
+            text: [`✅ Video generated!`, `Model: ${modelDef.name}`, `Task ID: ${taskId}`, `Cost: ${formatCost(modelId, pollResult, parseInt(model_options.duration) || 8)}`, ``, `Downloaded to: ${outPath}`, `Result URL: ${resultUrls[0]} (temporary, ~24h; not pattern-stable — never reconstruct, reuse verbatim)`].join('\n'),
           }],
         };
       }
@@ -2749,7 +2754,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.7.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.7.1', sessions: sessions.size }));
       return;
     }
 

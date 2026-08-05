@@ -12,7 +12,9 @@ export const VIDEO_MODEL_REGISTRY = {
     type: 'dedicated',
     endpoint: '/api/v1/veo/generate',
     pollEndpoint: '/api/v1/veo/record-info',
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    // Verified against kie's Veo docs + live probes 2026-08-05 (#65): the enum is
+    // 16:9 | 9:16 | Auto. '1:1' was never supported — kie 422s "Ratio error" at create.
+    aspectRatios: ['16:9', '9:16', 'Auto'],
     options: {
       enableFallback: { type: 'boolean', default: false, description: 'Fallback to backup model if unavailable' },
       enableTranslation: { type: 'boolean', default: true, description: 'Auto-translate non-English prompts' },
@@ -32,7 +34,9 @@ export const VIDEO_MODEL_REGISTRY = {
     endpoint: '/api/v1/veo/generate',
     pollEndpoint: '/api/v1/veo/record-info',
     requiresImage: true,
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    // Verified against kie's Veo docs + live probes 2026-08-05 (#65): the enum is
+    // 16:9 | 9:16 | Auto. '1:1' was never supported — kie 422s "Ratio error" at create.
+    aspectRatios: ['16:9', '9:16', 'Auto'],
     options: {
       enableFallback: { type: 'boolean', default: false },
       enableTranslation: { type: 'boolean', default: true },
@@ -51,7 +55,9 @@ export const VIDEO_MODEL_REGISTRY = {
     type: 'dedicated',
     endpoint: '/api/v1/veo/generate',
     pollEndpoint: '/api/v1/veo/record-info',
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    // Verified against kie's Veo docs + live probes 2026-08-05 (#65): the enum is
+    // 16:9 | 9:16 | Auto. '1:1' was never supported — kie 422s "Ratio error" at create.
+    aspectRatios: ['16:9', '9:16', 'Auto'],
     options: {
       enableFallback: { type: 'boolean', default: false },
       enableTranslation: { type: 'boolean', default: true },
@@ -71,7 +77,9 @@ export const VIDEO_MODEL_REGISTRY = {
     endpoint: '/api/v1/veo/generate',
     pollEndpoint: '/api/v1/veo/record-info',
     requiresImage: true,
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    // Verified against kie's Veo docs + live probes 2026-08-05 (#65): the enum is
+    // 16:9 | 9:16 | Auto. '1:1' was never supported — kie 422s "Ratio error" at create.
+    aspectRatios: ['16:9', '9:16', 'Auto'],
     options: {
       enableFallback: { type: 'boolean', default: false },
       enableTranslation: { type: 'boolean', default: true },
@@ -129,7 +137,9 @@ export const VIDEO_MODEL_REGISTRY = {
     type: 'dedicated',
     endpoint: '/api/v1/veo/generate',
     pollEndpoint: '/api/v1/veo/record-info',
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    // Verified against kie's Veo docs + live probes 2026-08-05 (#65): the enum is
+    // 16:9 | 9:16 | Auto. '1:1' was never supported — kie 422s "Ratio error" at create.
+    aspectRatios: ['16:9', '9:16', 'Auto'],
     options: {
       enableTranslation: { type: 'boolean', default: true },
     },
@@ -148,7 +158,9 @@ export const VIDEO_MODEL_REGISTRY = {
     endpoint: '/api/v1/veo/generate',
     pollEndpoint: '/api/v1/veo/record-info',
     requiresImage: true,
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    // Verified against kie's Veo docs + live probes 2026-08-05 (#65): the enum is
+    // 16:9 | 9:16 | Auto. '1:1' was never supported — kie 422s "Ratio error" at create.
+    aspectRatios: ['16:9', '9:16', 'Auto'],
     options: {
       enableTranslation: { type: 'boolean', default: true },
     },
