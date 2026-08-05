@@ -2,6 +2,17 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.7.1] — 2026-08-05
+
+### Fixed
+
+- **Veo aspect ratios corrected — `1:1` was never supported** (#65). All six Veo entries advertised `16:9, 9:16, 1:1`, but kie's Veo docs and live probes (all three tiers, creation-time 422 "Ratio error") show the real enum is **`16:9 | 9:16 | Auto`** — so callers following `list_models` paid a failed submission to learn it. Entries corrected (also gaining the previously-missing `Auto`); the existing client-side validator now rejects `1:1` locally and free with the valid list. Non-Veo models sharing that ratio list were left untouched — only Veo was verified upstream.
+- **`generate_image` / `generate_video` / `download_result` now return the result URL(s)** alongside the local path (#66). Image-to-image chaining needs the public URL for the next call's `image_urls`, and the URLs are NOT pattern-stable (path segment alternates `/ggc/`↔`/vnp/`, suffix format varies) — reconstructing them fails with a misleading "image fetch failed" error. The output now includes the verbatim URLs with an explicit "not pattern-stable, never guess them; temporary ~24h" warning, eliminating the per-link `check_task` round-trip.
+
+### Verified
+
+- Live (2026-08-05): `1:1` on `veo-3-fast/image-to-video` fails client-side, free, listing `16:9, 9:16, Auto`; a `generate_image` Result URL fed verbatim into a second call succeeded (chaining proven end-to-end via the free subject-detection model). Veo probes: 9 I2V ratio combinations tested at zero cost (bogus-URL creations).
+
 ## [4.7.0] — 2026-07-27
 
 July model pass — everything the drift watch (#44) surfaced in its first scheduled window, researched in the house Averiguare style with docs-scraped schemas and empirical pricing where possible.
@@ -438,6 +449,7 @@ The MCP went through 4 major internal iterations before this release:
 - v3.1-3.2: Added Seedance 2.0, Wan 2.7, and 20+ more models
 - v4.0: Dual-mode transport, Averiguare research integration, GPT Image 2, HappyHorse, complete Suno coverage
 
+[4.7.1]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.7.1
 [4.7.0]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.7.0
 [4.6.4]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.4
 [4.6.3]: https://github.com/elibarnett/kie-mcp/releases/tag/v4.6.3
