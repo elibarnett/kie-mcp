@@ -111,7 +111,7 @@ function normalizeBase64(input) {
     return { error: `base64_data has an invalid character (${JSON.stringify(bad[0])}) at position ${bad.index} — it was likely corrupted in transit. Re-send the exact base64, or use file_url with a public URL instead.` };
   }
   if (s.length % 4 !== 0) {
-    return { error: `base64_data length is ${s.length}, not a multiple of 4 — the payload was likely truncated in transit (large images are especially prone). Re-send the complete base64, or use file_url with a public URL instead.` };
+    return { error: `base64_data length is ${s.length}, not a multiple of 4 — the payload was likely truncated in transit (tool arguments above ~11.7K chars are unreliable, #68). Use file_path with the local file's absolute path instead — the server reads the bytes itself, immune to truncation.` };
   }
   return { data: s, ext };
 }
@@ -811,7 +811,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.7.1' };
+const SERVER_INFO = { name: 'kie-art', version: '4.7.2' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -907,7 +907,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (86+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (2cr/s). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family is paused upstream by kie.ai (June 2026) — not usable. Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (86+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family is paused upstream by kie.ai (June 2026) — not usable. Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1496,12 +1496,13 @@ const handleListTools = async () => ({
     // ── File Upload ──
     {
       name: 'upload_file',
-      description: 'Upload a file to kie.ai and get a public URL back. Use this to upload local images/audio/video before passing them to generation tools. Supports URL upload, base64 upload. Files expire after 3 days.',
+      description: 'Upload a file to kie.ai and get a public URL back. Use this to upload local images/audio/video before passing them to generation tools (image-to-image, image-to-video, reference/ingredient inputs). PREFER file_path for local files. Files expire after 3 days (kie temp storage).',
       inputSchema: {
         type: 'object',
         properties: {
-          file_url: { type: 'string', description: 'URL of file to upload — must be PUBLICLY reachable by kie.ai servers (no localhost/private IPs, no auth-gated or expired links). For local files use base64_data' },
-          base64_data: { type: 'string', description: 'Base64-encoded file data — raw base64 or a full data: URI. Whitespace and base64url are normalized and the data:<mime>;base64, prefix is stripped automatically (its MIME infers the extension if file_name is omitted). NOTE: very large images can be truncated when passed as a tool argument — if you get a length/invalid error, prefer file_url with a public URL.' },
+          file_path: { type: 'string', description: 'Absolute path to a local file on the machine running this MCP server (the normal case for stdio setups). The server reads and streams the bytes itself — reliable at any size, unlike base64_data. PREFERRED for local files.' },
+          file_url: { type: 'string', description: 'URL of file to upload — must be PUBLICLY reachable by kie.ai servers (no localhost/private IPs, no auth-gated or expired links). For local files use file_path' },
+          base64_data: { type: 'string', description: 'Base64-encoded file data — raw base64 or a full data: URI. Whitespace and base64url are normalized and the data:<mime>;base64, prefix is stripped automatically (its MIME infers the extension if file_name is omitted). WARNING: payloads above ~10-12K chars (observed ceiling ~11.7K, #68) are silently truncated in transit as a tool argument — use file_path for local files; base64_data is a fallback for remote/HTTP-mode callers with small payloads.' },
           upload_path: { type: 'string', description: 'Storage directory (e.g. "images", "audio", "video")', default: 'uploads' },
           file_name: { type: 'string', description: 'Custom filename (optional)' },
         },
@@ -2534,8 +2535,41 @@ const handleCallTool = async (request) => {
       // ── File Upload ──
 
       case 'upload_file': {
-        const { file_url, base64_data, upload_path = 'uploads', file_name } = args;
+        const { file_path, file_url, base64_data, upload_path = 'uploads', file_name } = args;
         const UPLOAD_BASE = 'https://kieai.redpandaai.co';
+
+        if (file_path) {
+          // Local file → kie's multipart stream endpoint. No base64 anywhere in
+          // the chain, so the ~11.7K-char tool-argument truncation (#68) and the
+          // atob failure class (#62) cannot occur. Only meaningful when the
+          // server shares a filesystem with the caller (stdio — the normal case).
+          if (!isAbsolute(file_path)) {
+            return { content: [{ type: 'text', text: `file_path must be an absolute path (got: ${file_path}).` }], isError: true };
+          }
+          if (!existsSync(file_path) || !statSync(file_path).isFile()) {
+            return { content: [{ type: 'text', text: `file_path does not exist or is not a file: ${file_path}\nNote: the path is read by the MCP server process — if the server runs on a different machine (HTTP mode), use base64_data or file_url instead.` }], isError: true };
+          }
+          const size = statSync(file_path).size;
+          const MAX_UPLOAD = 100 * 1024 * 1024;
+          if (size > MAX_UPLOAD) {
+            return { content: [{ type: 'text', text: `File is ${(size / 1048576).toFixed(1)}MB — larger than the 100MB upload guard for kie temp storage.` }], isError: true };
+          }
+          const name = sanitizeFilename(file_name) || basename(file_path);
+          const form = new FormData();
+          form.append('file', new Blob([readFileSync(file_path)]), name);
+          form.append('uploadPath', upload_path);
+          form.append('fileName', name);
+          const res = await fetch(`${UPLOAD_BASE}/api/file-stream-upload`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${API_KEY}` },
+            body: form,
+          });
+          const result = await res.json().catch(() => null);
+          if (!result || (!result.success && result.code !== 200)) {
+            return { content: [{ type: 'text', text: `Upload failed: ${result ? JSON.stringify(result) : `HTTP ${res.status}`}` }], isError: true };
+          }
+          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || name} (${result.data?.fileSize ?? size} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}` }] };
+        }
 
         if (file_url) {
           // kie's servers fetch the URL — anything not publicly reachable fails
@@ -2582,7 +2616,7 @@ const handleCallTool = async (request) => {
           return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || ''} (${result.data?.fileSize ?? '?'} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}` }] };
         }
 
-        return { content: [{ type: 'text', text: 'Provide either file_url or base64_data to upload.' }] };
+        return { content: [{ type: 'text', text: 'Provide file_path (local file — preferred), file_url (public URL), or base64_data.' }] };
       }
 
       // ── Veo Extend & Upscale ──
@@ -2754,7 +2788,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.7.1', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.7.2', sessions: sessions.size }));
       return;
     }
 

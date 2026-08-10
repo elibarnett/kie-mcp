@@ -77,7 +77,7 @@ export const PRICING = {
   'seedance/image-to-video': 8,
   'wan/text-to-video': 4,
   'wan/image-to-video': 4,
-  'wan/flash-image-to-video': 2,
+  'wan/flash-image-to-video': 6,   // measured 2026-08-05 (#69): 6× exactly 30 cr per 5s take at defaults; a second run averaged 8 cr/s — see PRICING_ESTIMATED
   'wan/video-to-video': 4,
   'wan/turbo-image-to-video': 2,
   'wan/turbo-text-to-video': 2,
@@ -90,7 +90,7 @@ export const PRICING = {
   'wan/2-7-reference-to-video': 5,
   'wan/2-5-text-to-video': 12,        // kie published: 12 cr/s @720p (default), 20 @1080p. Was 3
   'wan/2-5-image-to-video': 12,
-  'wan/flash-video-to-video': 2,
+  'wan/flash-video-to-video': 6,   // assumed same as flash I2V (#69) — never measured
   'hailuo/text-to-video': 8,
   'hailuo/text-to-video-standard': 4,
   'hailuo/image-to-video': 8,
@@ -200,6 +200,8 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'wan/flash-image-to-video',   // #69: measured 6-8 cr/s (varies — possibly by input size); kie publishes no rate
+  'wan/flash-video-to-video',   // #69: assumed same as flash I2V
   'bytedance/seedance-2-5',
   'pixverse-v6/text-to-video',
   'pixverse-v6/image-to-video',
