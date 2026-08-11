@@ -2,6 +2,16 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.7.2] — 2026-08-06
+
+### Added
+
+- **`upload_file` accepts `file_path`** (#68, #70) — absolute local path; the server reads and streams the bytes itself via kie's multipart `file-stream-upload` endpoint. No base64 anywhere in the chain, so the ~11.7K-char tool-argument truncation (#68) and the atob failure class (#62) cannot occur. This is now the recommended route for every image-to-image / image-to-video / reference-image workflow on stdio setups. `base64_data` remains for remote/HTTP-mode callers, with the observed transit ceiling documented in the schema and the truncation error pointing at `file_path` as the remedy. 100MB guard; filename inferred from the path.
+
+### Fixed
+
+- **Wan 2.6 Flash pricing corrected 2 → 6 cr/s** (#69) — kie publishes no rate for the Flash tier (the standard Wan 2.6 page prices 14/21 cr/s @720p/1080p); our 2 cr/s was an unlabeled guess. Empirical measurement (issue #69: six consecutive 5s takes at exactly 30 credits; a second run averaged 8 cr/s) sets the table to 6 cr/s, added to `PRICING_ESTIMATED` with the 6-8 range noted. `wan/flash-video-to-video` assumed same, marked estimated. MODEL GUIDE updated (including the `wan/flash` → `wan/2-6-flash` alias note) and the stale "2 cr/s" claim in the PixVerse research comparison refreshed.
+
 ## [4.7.1] — 2026-08-05
 
 ### Fixed
