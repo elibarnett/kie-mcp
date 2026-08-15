@@ -2,6 +2,25 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.7.3] — 2026-08-10
+
+### Changed
+
+- **Seedance 2.5 un-paused — kie enabled the backend** (drift watch). Verified with a real generation 2026-08-10: 4s @480p succeeded in ~3 min and billed exactly **112 credits = the published 28 cr/s**. Entry's `paused` flag removed, description refreshed, pricing 25 (placeholder) → **63 cr/s** (720p no-video default; tiers: 480p 28/17-with-video, 720p 63/38 — kie now publishes these).
+
+### Fixed
+
+- **Four pricing drifts** flagged by `scripts/drift-watch.mjs` (all confirmed against kie's advertised `pricingDesc`):
+  - `qwen/text-to-image` and `qwen/image-to-image`: 3 → **4** cr (kie raised both)
+  - `grok-imagine/text-to-video`: 3 → **4.5** cr/s, `grok-imagine/image-to-video`: 3 → **2.4** cr/s (kie published resolution tiers 2.4/4.5/8; each table value matches its entry's default resolution — T2V defaults 720p, I2V 480p)
+  - `bytedance/v1-lite-text-to-video` / `-image-to-video`: 3 → **4.5** cr/s (published tiers 2/4.5/10; entries default 720p)
+  - All four added to `PRICING_ESTIMATED` (resolution-tiered rates)
+- Drift-watch false positive noted, no change: Gemini TTS is advertised in tokens (140/1M in, 2,800/1M audio out) while our 4.2 cr/min is the derived per-minute figure backed by the 0.75-actual measurement from 4.7.0.
+
+### Checked, nothing to do
+
+- Sora: all 8 slugs still paused (guard active). No docs-page removals in any family the MCP depends on. MiniMax H3 (new family, 3 slugs verified routing) tracked separately for v4.8.
+
 ## [4.7.2] — 2026-08-06
 
 ### Added

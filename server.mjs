@@ -811,7 +811,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.7.2' };
+const SERVER_INFO = { name: 'kie-art', version: '4.7.3' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2788,7 +2788,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.7.2', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.7.3', sessions: sessions.size }));
       return;
     }
 

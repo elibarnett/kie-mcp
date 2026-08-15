@@ -39,8 +39,8 @@ export const PRICING = {
   'ideogram/v3-edit': 5,
   'ideogram/v3-remix': 5,
   'ideogram/character-remix': 5,
-  'qwen/text-to-image': 3,
-  'qwen/image-to-image': 3,
+  'qwen/text-to-image': 4,    // kie raised 3→4 cr/megapixel (drift watch 2026-08-10)
+  'qwen/image-to-image': 4,   // kie raised 3→4 cr flat (drift watch 2026-08-10)
   'qwen/image-edit': 3,
   'qwen2/image-edit': 3,
   'qwen2/text-to-image': 3,
@@ -110,15 +110,15 @@ export const PRICING = {
   'kling/v2-5-turbo-image-to-video': 8,
   'kling/ai-avatar-standard': 5,
   'kling/ai-avatar-pro': 10,
-  'grok-imagine/text-to-video': 3,
-  'grok-imagine/image-to-video': 3,
+  'grok-imagine/text-to-video': 4.5,  // kie published tiers 2.4/4.5/8 cr/s (480/720/1080p); entry default 720p (drift 2026-08-10)
+  'grok-imagine/image-to-video': 2.4, // same tiers; entry default 480p (drift 2026-08-10)
   'grok-imagine/upscale': 10,         // flat — kie published 10 cr/upscale (was 5)
   'grok-imagine/extend': 3,
   'bytedance/v1-pro-text-to-video': 6,
   'bytedance/v1-pro-image-to-video': 6,
   'bytedance/v1-pro-fast-image-to-video': 4,
-  'bytedance/v1-lite-text-to-video': 3,
-  'bytedance/v1-lite-image-to-video': 3,
+  'bytedance/v1-lite-text-to-video': 4.5,  // kie published tiers 2/4.5/10 cr/s (480/720/1080p); entry default 720p (drift 2026-08-10)
+  'bytedance/v1-lite-image-to-video': 4.5, // same tiers, same 720p default (drift 2026-08-10)
   'topaz/video-upscale': 8,           // flat
   'infinitalk/from-audio': 4,
   // ── HappyHorse 1.0 (NEW April 2026) ──
@@ -141,7 +141,7 @@ export const PRICING = {
   'grok-imagine-video-1-5-preview': 3,
   // ── Seedance 2.5 (July 2026) — kie pricing UNPUBLISHED at launch; 25 cr/s placeholder
   //    matching Seedance 2.0. Runtime [actual] creditsConsumed is ground truth. ──
-  'bytedance/seedance-2-5': 25,
+  'bytedance/seedance-2-5': 63,  // kie published 2026-08: 480p 28 (17 w/video-input), 720p 63 (38 w/video); entry default 720p. 480p rate empirically confirmed: 4s cost exactly 112 cr
   // ── PixVerse V6 (added July 2026) — kie published per-second tiers; table = 720p no-audio default.
   //    T2V/I2V/transition/extend: 360p 4.0/5.6, 540p 5.6/7.2, 720p 7.2/9.6, 1080p 14.4/18.4 (no-audio/audio).
   //    Fusion R2V: 360p 4.5/6.3, 540p 6.3/8.1, 720p 8.1/10.8, 1080p 16.2/20.7. ──
@@ -200,6 +200,10 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'grok-imagine/text-to-video',        // resolution-tiered 2.4/4.5/8 cr/s — table prices the 720p default
+  'grok-imagine/image-to-video',       // same tiers — table prices the 480p default
+  'bytedance/v1-lite-text-to-video',   // resolution-tiered 2/4.5/10 cr/s — table prices the 720p default
+  'bytedance/v1-lite-image-to-video',  // same tiers and default
   'wan/flash-image-to-video',   // #69: measured 6-8 cr/s (varies — possibly by input size); kie publishes no rate
   'wan/flash-video-to-video',   // #69: assumed same as flash I2V
   'bytedance/seedance-2-5',
