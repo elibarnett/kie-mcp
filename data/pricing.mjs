@@ -13,6 +13,9 @@ export const PRICING = {
   'gpt-image/2-image-to-image': 8,
   'grok-imagine/text-to-image': 4,
   'grok-imagine/image-to-image': 4,
+  'grok-imagine-image-2-0/text-to-image': 4,   // empirical 2026-08-14: exactly 4.0 cr
+  'grok-imagine-image-2-0/segment-map': 0,     // empirical 2026-08-14: FREE (0.0 cr) — returns named regions + mask PNGs
+  'grok-imagine-image-2-0/image-edit': 4,      // empirical 2026-08-14: exactly 4.0 cr per region-targeted edit
   'flux-2/pro-text-to-image': 5,
   'flux-2/pro-image-to-image': 5,
   'flux-2/flex-text-to-image': 4,

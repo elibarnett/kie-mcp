@@ -2,6 +2,19 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [4.8.0] — 2026-08-15
+
+### Added
+
+- **Grok Imagine Image 2.0** (`grok-imagine-image-2-0/text-to-image`) — xAI's editing-first image model, shipped Aug 7 and reported **#2 on both Arena text-to-image and image-edit leaderboards** (behind only gpt-image-2). 4 cr. Trained on photography/design/illustration with a typography emphasis. Full house-style `research` entry. xAI's own API is still "coming soon" — kie is early.
+- **`grok_segment_map`** (new tool, **FREE**) — segments a Grok Image 2.0 generation into NAMED regions (index + semantic name + mask PNG, e.g. `[0] red apple`, `[1] wooden table`). Callers pick regions by name; no mask drawing.
+- **`grok_image_edit`** (new tool, 4 cr) — edits only the chosen `mask_indexs` of a Grok Image 2.0 generation with a prompt; everything else preserved. Result task IDs chain back into segment/edit for iterative refinement at 4 cr per round. Supports `wait: false`.
+- The generate → segment → edit chain is unique on kie: semantic surgical editing at 8 cr per round vs ~10 cr for one Flux Kontext Pro edit. Constraint (documented in the entry): the chain starts from a 2.0 *generation* task — it cannot segment/edit an uploaded photo (Kontext / NB Pro remain the tools for that).
+
+### Verified
+
+- Live end-to-end 2026-08-14 via raw API and 2026-08-15 through the MCP: T2I → segment (0 cr, 2 named regions) → background-only edit → valid JPEG. Empirical pricing exactly 4.0 / 0.0 / 4.0.
+
 ## [4.7.3] — 2026-08-10
 
 ### Changed

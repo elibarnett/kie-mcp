@@ -811,7 +811,7 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
-const SERVER_INFO = { name: 'kie-art', version: '4.7.3' };
+const SERVER_INFO = { name: 'kie-art', version: '4.8.0' };
 const SERVER_CAPS = { capabilities: { tools: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -819,7 +819,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit, NEW) then grok_segment_map (free) + grok_image_edit (4cr). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1509,6 +1509,32 @@ const handleListTools = async () => ({
       },
     },
     // ── Veo Extend & Upscale ──
+    {
+      name: 'grok_segment_map',
+      description: 'FREE (0 credits). Segment a Grok Imagine Image 2.0 generation into NAMED regions for targeted editing. Returns each region\'s index, semantic name (e.g. "red apple", "wooden table"), and mask PNG URL. Workflow: generate_image model="grok-imagine-image-2-0/text-to-image" → grok_segment_map (this, free) → grok_image_edit with the mask_indexs you want changed. Only works on task_ids from a Grok Image 2.0 generation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string', description: 'Task ID from a completed generate_image call with model grok-imagine-image-2-0/text-to-image' },
+        },
+        required: ['task_id'],
+      },
+    },
+    {
+      name: 'grok_image_edit',
+      description: 'Edit ONLY selected regions of a Grok Imagine Image 2.0 generation (4 credits). Pass the source task_id, an edit prompt describing the desired end state of the masked region(s), and mask_indexs — the region indices from grok_segment_map (run it first, free, and pick regions by NAME; do not guess indices). Everything outside the masks is preserved. Returns a new full image; the result task_id can itself be segmented/edited again for iterative refinement at 4 cr per round. Downloads to kie/assets/raw/.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string', description: 'Source task ID — a Grok Image 2.0 generation (or a previous grok_image_edit result)' },
+          prompt: { type: 'string', description: 'What the masked region(s) should become, plus what to preserve (e.g. "change the background to a sunset beach, keep the apple unchanged")' },
+          mask_indexs: { type: 'array', items: { type: 'number' }, description: 'Region indices to edit, from grok_segment_map (e.g. [1] or [0, 2]). Field name matches kie\'s API spelling.' },
+          filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
+        },
+        required: ['task_id', 'prompt', 'mask_indexs'],
+      },
+    },
     {
       name: 'veo_extend',
       description: 'Extend an existing Veo 3.1 video with additional content. Requires taskId from a previous Veo generation.',
@@ -2621,6 +2647,69 @@ const handleCallTool = async (request) => {
 
       // ── Veo Extend & Upscale ──
 
+      case 'grok_segment_map': {
+        const { task_id } = args;
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'grok-imagine-image-2-0/segment-map', input: { task_id } });
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start segmentation — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        trackTask({ taskId, model: 'grok-imagine-image-2-0/segment-map', prompt: `segment ${task_id}`, filename: '', status: 'polling', createdAt: new Date().toISOString() });
+
+        const pollResult = await pollTask(taskId, pollBudgetMs('image', args));
+        let parsed = pollResult.resultJson;
+        try { parsed = typeof parsed === 'string' ? JSON.parse(parsed) : parsed; } catch { /* leave raw */ }
+        const segments = parsed?.resultObject?.segments || parsed?.segments || [];
+        if (!segments.length) return { content: [{ type: 'text', text: `Segment task ${taskId} done but no segments returned.\nRaw: ${JSON.stringify(pollResult, null, 2)}` }] };
+
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              `✅ Segment map ready (FREE — 0 credits). ${segments.length} region(s) in task ${task_id}:`,
+              ...segments.map((seg) => `  [${seg.index}] ${seg.name}${seg.maskUrl ? `  — mask: ${seg.maskUrl}` : ''}`),
+              ``,
+              `Next: grok_image_edit with task_id="${task_id}" and mask_indexs=[...] choosing regions by name above.`,
+            ].join('\n'),
+          }],
+        };
+      }
+
+      case 'grok_image_edit': {
+        const { task_id, prompt, mask_indexs, filename } = args;
+        if (!Array.isArray(mask_indexs) || mask_indexs.length === 0) {
+          return { content: [{ type: 'text', text: 'mask_indexs must be a non-empty array of region indices — run grok_segment_map first to get them.' }], isError: true };
+        }
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const outFilename = sanitizeFilename(filename) || `grok2-edit-${ts}.jpg`;
+        const outPath = join(resolveOutputDir(args), outFilename);
+
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'grok-imagine-image-2-0/image-edit', input: { task_id, prompt, mask_indexs } });
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start edit — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        const taskEntry = { taskId, model: 'grok-imagine-image-2-0/image-edit', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
+        trackTask(taskEntry);
+        if (args.wait === false) return submitOnly(taskId, 'grok-imagine-image-2-0/image-edit', outFilename);
+
+        const pollResult = await pollTask(taskId, pollBudgetMs('image', args));
+        const resultUrls = extractResultUrls(pollResult);
+        if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Edit task ${taskId} done but no URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
+
+        await downloadToFile(resultUrls[0], outPath);
+        taskEntry.status = 'downloaded'; appendTaskLog(taskEntry);
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              `✅ Region edit done!`,
+              `Task ID: ${taskId}  (chain again: grok_segment_map / grok_image_edit on this ID for another 4 cr round)`,
+              `Edited regions: [${mask_indexs.join(', ')}] of source ${task_id}`,
+              `Cost: ${formatCost('grok-imagine-image-2-0/image-edit', pollResult)}`,
+              `Downloaded to: ${outPath}`,
+              `Result URL (temporary ~24h; not pattern-stable): ${resultUrls[0]}`,
+            ].join('\n'),
+          }],
+        };
+      }
+
       case 'veo_extend': {
         const { task_id, prompt, model = 'fast', seeds, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -2788,7 +2877,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.7.3', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '4.8.0', sessions: sessions.size }));
       return;
     }
 
