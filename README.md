@@ -1,6 +1,6 @@
 # kie-mcp
 
-A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **47+ image models**, **86+ video models**, and **20+ audio tools** with deep model intelligence built in.
+A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **48+ image models**, **86+ video models**, and **20+ audio tools** with deep model intelligence built in.
 
 ## Why this exists
 
@@ -23,14 +23,15 @@ Just ask Claude things like:
 
 ## Model coverage
 
-### Image (47+)
+### Image (48+)
 - **OpenAI**: GPT Image 2 (NEW), GPT-4o Image, GPT Image 1.5
 - **Google**: Nano Banana 2 / 2 Lite (NEW) / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
 - **Black Forest Labs**: Flux Kontext Pro/Max, Flux 2 Pro/Flex
 - **ByteDance**: Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
 - **Alibaba**: Wan 2.7 Image / Image Pro
 - **Ideogram**: v3, Character, Edit, Remix, Reframe
-- **Others**: Qwen/Qwen2, Z-Image, Grok Imagine, Recraft, Topaz
+- **xAI Grok Imagine Image 2.0** (NEW — #2 Arena T2I + edit; free segment map → region-targeted edit chain)
+- **Others**: Qwen/Qwen2, Z-Image, Grok Imagine 1.x, Recraft, Topaz
 
 ### Video (86+)
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
@@ -145,6 +146,7 @@ convert_to_wav, separate_vocals, boost_style,
 get_timestamped_lyrics, audio_isolation, speech_to_text,
 list_models, check_task, list_tasks, check_credits,
 download_result, list_raw_assets, upload_file,
+grok_segment_map, grok_image_edit,
 veo_extend, veo_upscale_1080p, veo_upscale_4k, runway_extend
 ```
 
