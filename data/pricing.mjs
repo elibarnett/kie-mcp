@@ -107,6 +107,9 @@ export const PRICING = {
   'hailuo/text-to-video-standard': 4,
   'hailuo/image-to-video': 8,
   'hailuo/image-to-video-standard': 4,
+  'minimax-h3/text-to-video': 16,      // 768P; 2K 26; +8 cr per extra input image (published)
+  'minimax-h3/image-to-video': 16,     // same tiers
+  'minimax-h3/reference-to-video': 16, // same tiers; video refs billed at resolution rate
   'hailuo/2-3-image-to-video-pro': 8,
   'hailuo/2-3-image-to-video-standard': 4,
   'kling/text-to-video': 10,
@@ -216,6 +219,7 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'minimax-h3/text-to-video', 'minimax-h3/image-to-video', 'minimax-h3/reference-to-video',  // resolution-tiered + per-image surcharges
   'qwen3/pro-text-to-image', 'qwen3/pro-image-to-image',  // 2K tier doubles
   'seedream/5-pro-text-to-image', 'seedream/5-pro-image-to-image', 'seedream/5-pro-layer-decomposition',  // size-tiered / per-layer billing
   'wan/3-0-video', 'wan/3-0-video-prime',  // resolution-tiered + input-duration billing, published not empirical
