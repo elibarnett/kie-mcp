@@ -861,7 +861,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '4.9.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.0.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -869,7 +869,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -3048,7 +3048,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '4.9.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '5.0.0', sessions: sessions.size }));
       return;
     }
 
