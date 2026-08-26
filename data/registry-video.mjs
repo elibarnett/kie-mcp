@@ -626,6 +626,54 @@ export const VIDEO_MODEL_REGISTRY = {
   },
 
   // ── Wan 2.7 (newest video) ──
+  // ── Wan 3.0 — unified prompt-or-media video (standard + Prime tiers) ──
+  'wan/3-0-video': {
+    name: 'Wan 3.0',
+    description: 'NEW (Aug 2026) — Alibaba\'s next-gen unified video model ("prompt or media" input), optional audio, up to 1080P. 8 cr/s @480P / 16 @720P / 32 @1080P. NOTE kie bills (input video duration + output duration) × rate.',
+    capabilities: ['cinematic', 'audio', 'latest', 'new'],
+    research: { verdict: 'Wan 3.0 landed on kie August 2026 as a unified endpoint — the creation-time validator says "prompt or media is required", so it accepts text and/or media input on one slug rather than Wan 2.x\'s per-modality slugs. Docs-scraped surface: prompt, resolution (480P/720P/1080P — uppercase P), aspect_ratio incl. adaptive, duration, audio boolean. Standard tier is priced 20% below official (8/16/32 cr/s); the Prime tier (separate slug) is the premium variant at ~1.5x (12.2/25.2/50.4, 10% below official). Both slugs live-probed 2026-08-26; no kie-side generations yet, so treat quality claims as pending — Wan 2.7 remains the family\'s proven tier. Distinctive billing rule: (input video duration + output duration) × unit price, so media-driven calls cost more than the output length alone.', bestFor: ['next-gen Wan drafts at 480P (8 cr/s — cheap for a current-gen model)', 'unified text+media workflows without picking a per-modality slug', 'audio-in-one-pass at Wan pricing'], weaknesses: ['no independent benchmarks or kie-side empirical data yet', 'input media duration is billed too — long source clips inflate cost', 'kie documents the surface thinly; option enums are docs-sample-derived'], promptTechniques: ['cinematic prose prompts as with Wan 2.7; specify camera movement explicitly', 'keep source media short — billing counts input duration', 'aspect_ratio "adaptive" follows the input media'], costEfficiency: 'Standard 8/16/32 cr/s (480/720/1080P), Prime 12.2/25.2/50.4 — published, not yet empirically confirmed (PRICING_ESTIMATED). Table prices the 480P sample default.', comparedTo: { 'wan/2-7-text-to-video': '2.7 is benchmark-proven with a full modality suite; 3.0 is the unified next gen — prefer 2.7 for production until 3.0 gets evals.', 'wan/3-0-video-prime': 'Prime is ~1.5x for the premium tier of the same model.' }, lastResearched: '2026-08-26', sources: ['https://docs.kie.ai/market/wan/3-0-video', 'https://kie.ai/wan3.0-video'] },
+    type: 'market',
+    apiModel: 'wan/3-0-video',
+    aspectRatios: ['adaptive', '16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5, description: 'Output duration in seconds' },
+      resolution: { type: 'string', enum: ['480P', '720P', '1080P'], default: '480P', description: '8 / 16 / 32 cr/s (uppercase P per kie docs)' },
+      audio: { type: 'boolean', default: false, description: 'Native audio' },
+      image_urls: { type: 'array', description: 'Optional media input (unified endpoint accepts prompt and/or media)' },
+      video_urls: { type: 'array', description: 'Optional video input — NOTE its duration is billed too' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { resolution: opts.resolution || '480P', aspect_ratio: aspectRatio || 'adaptive', duration: opts.duration ?? 5, audio: opts.audio ?? false };
+      if (prompt) input.prompt = prompt;
+      const imgs = opts.image_urls || imageUrls;
+      if (imgs && imgs.length) input.image_urls = imgs;
+      if (opts.video_urls && opts.video_urls.length) input.video_urls = opts.video_urls;
+      return input;
+    },
+  },
+  'wan/3-0-video-prime': {
+    name: 'Wan 3.0 Prime',
+    description: 'NEW (Aug 2026) — premium tier of Wan 3.0 (same unified surface), ~1.5x the standard rate: 12.2 cr/s @480P / 25.2 @720P / 50.4 @1080P. Same (input + output duration) billing rule.',
+    capabilities: ['cinematic', 'audio', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'wan/3-0-video-prime',
+    aspectRatios: ['adaptive', '16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5 },
+      resolution: { type: 'string', enum: ['480P', '720P', '1080P'], default: '480P', description: '12.2 / 25.2 / 50.4 cr/s' },
+      audio: { type: 'boolean', default: false },
+      image_urls: { type: 'array', description: 'Optional media input' },
+      video_urls: { type: 'array', description: 'Optional video input — duration billed' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { resolution: opts.resolution || '480P', aspect_ratio: aspectRatio || 'adaptive', duration: opts.duration ?? 5, audio: opts.audio ?? false };
+      if (prompt) input.prompt = prompt;
+      const imgs = opts.image_urls || imageUrls;
+      if (imgs && imgs.length) input.image_urls = imgs;
+      if (opts.video_urls && opts.video_urls.length) input.video_urls = opts.video_urls;
+      return input;
+    },
+  },
   'wan/2-7-text-to-video': {
     name: 'Wan 2.7 T2V',
     description: 'Latest Wan 2.7 text-to-video',
