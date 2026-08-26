@@ -834,6 +834,67 @@ export const VIDEO_MODEL_REGISTRY = {
       return input;
     },
   },
+  // ── MiniMax H3 (Hailuo-03) — unified 2K generation + editing with native stereo audio ──
+  'minimax-h3/text-to-video': {
+    name: 'MiniMax H3',
+    description: 'NEW (Aug 2026) — MiniMax\'s Hailuo-03 flagship: unified generation + editing, up to 2K with native stereo sound. 16 cr/s @768P, 26 @2K (+8 cr per extra input image).',
+    capabilities: ['cinematic', 'audio', 'character', 'latest', 'new'],
+    research: { verdict: 'MiniMax\'s Hailuo-03 ("H3") became official on kie in August 2026 after a soft launch (slugs routed since Aug 10; docs pages and catalog card followed) — pitched as unified video generation AND editing: prompts plus multimodal references produce up to 2K output with native stereo sound and consistent characters. Three endpoints: T2V (prompt + aspect + duration), I2V (first_frame_url AND optional last_frame_url — first/last-frame interpolation like PixVerse Transition but with the flagship engine), and R2V accepting reference images, videos, AND audio in one call — the broadest reference surface on kie alongside Gemini Omni. Video input is billed at the output-resolution rate; extra input images 8 cr each. Live-probed repeatedly Aug 10-26; no kie-side generations yet, and the family\'s Arena placement is pending — Hailuo 2.3 remains the benchmarked fallback.', bestFor: ['2K output with native stereo audio in one pass', 'first→last-frame interpolation on a flagship engine (I2V with both frames)', 'multimodal reference workflows: character images + motion video + audio reference in one call', 'succeeding Hailuo 2.3 where audio matters'], weaknesses: ['no independent benchmarks yet for H3 specifically', 'reference videos billed at the resolution rate — long refs inflate cost', '8 cr per additional input image adds up in multi-ref calls', 'resolution field is pricing-tier-derived (768P/2K) — not shown in docs samples'], promptTechniques: ['I2V: supply both first_frame_url and last_frame_url for controlled interpolation', 'R2V: keep reference videos short (billed by duration at the output rate)', 'describe camera movement explicitly — samples lead with it'], costEfficiency: '16 cr/s @768P / 26 @2K published (+8 cr/extra image; video input at resolution rate). Between Hailuo 2.3 Standard and Pro. PRICING_ESTIMATED pending empirical confirmation.', comparedTo: { 'hailuo/2-3-image-to-video-pro': '2.3 Pro is benchmark-proven; H3 adds 2K, stereo audio, and the unified edit/reference surface.', 'happyhorse/text-to-video': 'Both are Chinese flagship unifieds; HappyHorse 1.1 has the lip-sync/language edge, H3 the 2K+stereo pitch.', 'pixverse-v6/transition': 'PixVerse Transition is the budget first→last-frame morph; H3 I2V does it on a flagship engine at ~2-3x the rate.' }, lastResearched: '2026-08-26', sources: ['https://docs.kie.ai/market/minimax-h3/text-to-video', 'https://docs.kie.ai/market/minimax-h3/reference-to-video', 'https://kie.ai/minimax-h3'] },
+    type: 'market',
+    apiModel: 'minimax-h3/text-to-video',
+    aspectRatios: ['16:9', '9:16', '1:1', 'adaptive'],
+    options: {
+      duration: { type: 'number', min: 3, max: 10, default: 6, description: 'Duration in seconds (docs sample: 6)' },
+      resolution: { type: 'string', enum: ['768P', '2K'], description: 'Pricing tier: 768P 16 cr/s, 2K 26 cr/s. Omit for kie default (field derived from pricing, not docs samples).' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio, duration: opts.duration ?? 6 };
+      if (opts.resolution) input.resolution = opts.resolution;
+      return input;
+    },
+  },
+  'minimax-h3/image-to-video': {
+    name: 'MiniMax H3 I2V',
+    description: 'NEW (Aug 2026) — H3 image-to-video with first→last-frame interpolation (pass first_frame_url via image_urls[0]; optional last frame via model_options.last_frame_url). 16 cr/s @768P, 26 @2K.',
+    capabilities: ['cinematic', 'audio', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'minimax-h3/image-to-video',
+    requiresImage: true,
+    aspectRatios: [],
+    options: {
+      duration: { type: 'number', min: 3, max: 10, default: 6 },
+      last_frame_url: { type: 'string', description: 'Optional last frame — enables first→last interpolation' },
+      resolution: { type: 'string', enum: ['768P', '2K'] },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { prompt, first_frame_url: imageUrls[0], duration: opts.duration ?? 6 };
+      if (opts.last_frame_url) input.last_frame_url = opts.last_frame_url;
+      if (opts.resolution) input.resolution = opts.resolution;
+      return input;
+    },
+  },
+  'minimax-h3/reference-to-video': {
+    name: 'MiniMax H3 R2V',
+    description: 'NEW (Aug 2026) — H3 reference-to-video: reference IMAGES + VIDEOS + AUDIO in one call (broadest reference surface on kie). Images via image_urls; videos/audio via model_options. +8 cr per extra image; video refs billed at resolution rate.',
+    capabilities: ['character', 'cinematic', 'audio', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'minimax-h3/reference-to-video',
+    requiresImage: true,
+    aspectRatios: ['adaptive', '16:9', '9:16'],
+    options: {
+      duration: { type: 'number', min: 3, max: 10, default: 6 },
+      reference_video_urls: { type: 'array', description: 'Reference video URL(s) — billed at the output resolution rate by duration' },
+      reference_audio_urls: { type: 'array', description: 'Reference audio URL(s)' },
+      resolution: { type: 'string', enum: ['768P', '2K'] },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, reference_image_urls: imageUrls, aspect_ratio: aspectRatio || 'adaptive', duration: opts.duration ?? 6 };
+      if (opts.reference_video_urls?.length) input.reference_video_urls = opts.reference_video_urls;
+      if (opts.reference_audio_urls?.length) input.reference_audio_urls = opts.reference_audio_urls;
+      if (opts.resolution) input.resolution = opts.resolution;
+      return input;
+    },
+  },
   'hailuo/2-3-image-to-video-pro': {
     name: 'Hailuo 2.3 Pro I2V',
     description: 'Latest Hailuo 2.3 Pro image-to-video',
