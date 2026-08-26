@@ -819,7 +819,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1509,6 +1509,22 @@ const handleListTools = async () => ({
       },
     },
     // ── Veo Extend & Upscale ──
+    {
+      name: 'seedream_layer_decompose',
+      description: 'Split ANY image into independent layers with Seedream 5.0 Pro (billed per OUTPUT layer incl. base: 7 cr @1K, 14 @2K — a 3-layer split ≈ 21 cr). Works on any public image URL (upload local files with upload_file first). Describe which elements become layers in the prompt, optionally bounding them with <bbox>x1 y1 x2 y2</bbox> tags. Downloads every layer image to kie/assets/raw/.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          image_url: { type: 'string', description: 'Public URL of the source image (singular — one image per call)' },
+          prompt: { type: 'string', description: 'Which elements to separate into layers, e.g. "Separate the title text <bbox>179 58 809 197</bbox> and the parrot <bbox>330 274 641 991</bbox> into independent layers"' },
+          size: { type: 'string', default: 'auto', description: '1K/1.5K = 7 cr per layer, 2K = 14' },
+          output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png', description: 'png recommended for transparency' },
+          filename: { type: 'string', description: 'Base output filename; layers get -2, -3... suffixes' },
+          download_dir: { type: 'string', description: 'Absolute directory to save into (created if missing). Defaults to the server\'s kie/assets/raw/.' },
+        },
+        required: ['image_url', 'prompt'],
+      },
+    },
     {
       name: 'grok_segment_map',
       description: 'FREE (0 credits). Segment a Grok Imagine Image 2.0 generation into NAMED regions for targeted editing. Returns each region\'s index, semantic name (e.g. "red apple", "wooden table"), and mask PNG URL. Workflow: generate_image model="grok-imagine-image-2-0/text-to-image" → grok_segment_map (this, free) → grok_image_edit with the mask_indexs you want changed. Only works on task_ids from a Grok Image 2.0 generation.',
@@ -2648,6 +2664,45 @@ const handleCallTool = async (request) => {
       }
 
       // ── Veo Extend & Upscale ──
+
+      case 'seedream_layer_decompose': {
+        const { image_url, prompt, size = 'auto', output_format = 'png', filename } = args;
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const ext = output_format === 'jpeg' ? 'jpg' : 'png';
+        const outFilename = sanitizeFilename(filename) || `seedream-layers-${ts}.${ext}`;
+
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'seedream/5-pro-layer-decomposition', input: { image_url, prompt, size, output_format } });
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start layer decomposition — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        const taskEntry = { taskId, model: 'seedream/5-pro-layer-decomposition', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
+        trackTask(taskEntry);
+        if (args.wait === false) return submitOnly(taskId, 'seedream/5-pro-layer-decomposition', outFilename);
+
+        const pollResult = await pollTask(taskId, pollBudgetMs('image', args));
+        const resultUrls = extractResultUrls(pollResult);
+        if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Layer task ${taskId} done but no URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
+
+        const files = [];
+        for (let i = 0; i < resultUrls.length; i++) {
+          const path = join(resolveOutputDir(args), i === 0 ? outFilename : outFilename.replace(new RegExp(`\\.${ext}$`), `-${i + 1}.${ext}`));
+          await downloadToFile(resultUrls[i], path);
+          files.push(path);
+        }
+        taskEntry.status = 'downloaded'; appendTaskLog(taskEntry);
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              `✅ Decomposed into ${resultUrls.length} layer(s)!`,
+              `Task ID: ${taskId}`,
+              `Cost: ${formatCost('seedream/5-pro-layer-decomposition', pollResult)} (billed per output layer)`,
+              ...files.map((f) => `  → ${f}`),
+              `Result URL(s) (temporary ~24h): `,
+              ...resultUrls.map((u) => `  → ${u}`),
+            ].join('\n'),
+          }],
+        };
+      }
 
       case 'grok_segment_map': {
         const { task_id } = args;

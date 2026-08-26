@@ -50,6 +50,9 @@ export const PRICING = {
   'recraft/crisp-upscale': 2,
   'recraft/remove-background': 2,
   'topaz/image-upscale': 4,
+  'seedream/5-pro-text-to-image': 7,       // 1K/1.5K; 2K 14 (published, drift 2026-08-26)
+  'seedream/5-pro-image-to-image': 7,      // + 0.5 cr per input image, first free
+  'seedream/5-pro-layer-decomposition': 7, // PER OUTPUT LAYER incl. base (1K; 2K 14)
   'seedream/5-lite-text-to-image': 5,
   'seedream/5-lite-image-to-image': 5,
   'wan/2-7-image': 4.8,       // kie raised it (drift watch 2026-07-27; was 4)
@@ -209,6 +212,7 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'seedream/5-pro-text-to-image', 'seedream/5-pro-image-to-image', 'seedream/5-pro-layer-decomposition',  // size-tiered / per-layer billing
   'wan/3-0-video', 'wan/3-0-video-prime',  // resolution-tiered + input-duration billing, published not empirical
   'kling-3-omni/text-to-video', 'kling-3-omni/image-to-video', 'kling-3-omni/reference-to-video', 'kling-3-omni/transformation',  // resolution/audio-tiered, published not yet empirical
   'grok-imagine/text-to-video',        // resolution-tiered 2.4/4.5/8 cr/s — table prices the 720p default

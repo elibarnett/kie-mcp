@@ -609,6 +609,41 @@ export const MODEL_REGISTRY = {
   },
 
   // ── Seedream 5.0 Lite (ByteDance) ──
+  // ── Seedream 5.0 Pro — flagship T2I/I2I + layer decomposition (see seedream_layer_decompose tool) ──
+  'seedream/5-pro-text-to-image': {
+    name: 'Seedream 5.0 Pro',
+    description: 'NEW (Aug 2026) — ByteDance flagship image tier above 5.0 Lite. 7 cr @1K/1.5K, 14 cr @2K. Sibling endpoints: image-to-image and the unique layer-decomposition (seedream_layer_decompose tool).',
+    capabilities: ['photorealistic', 'illustration', 'design', 'text-rendering', 'latest', 'new'],
+    research: { verdict: 'ByteDance\'s Seedream 5.0 Pro reached kie August 2026 as the Pro tier above 5.0 Lite: T2I, I2I, and a catalog-unique layer-decomposition endpoint that splits an image into independent layers (each output layer billed as one image — see the seedream_layer_decompose tool). Docs-scraped surface: prose prompts (the T2I sample is a full design brief), aspect_ratio, quality ("basic" in samples), output_format; I2I adds image_urls with per-input billing (0.5 cr each, first free). All three slugs live-probed 2026-08-26; no kie-side generations yet and no independent benchmarks — the 4.x family record (4.5 strong at design/game-art) is the prior. Pricing published: 7 cr @1K/1.5K, 14 @2K — between NB2 Lite (4) and NB Pro (24).', bestFor: ['design-brief-style prompts (posters, product sheets, UI concepts) where 4.5 was already strong', 'layered deliverables via layer decomposition — text/subject/background as separate images', 'Pro-tier quality at 7 cr before committing to 24-cr NB Pro'], weaknesses: ['no independent benchmarks yet — 5.0 Pro is days old on kie', 'quality enum undocumented beyond "basic" sample', 'input images billed (0.5 cr, first free) on I2I'], promptTechniques: ['write full design briefs — the docs sample is a paragraph-long SaaS promo spec', 'for layers: bound targets with <bbox>x1 y1 x2 y2</bbox> tags in the decomposition prompt'], costEfficiency: '7 cr @1K / 14 @2K published (~20% below official per kie), PRICING_ESTIMATED until empirically confirmed. Layer decomposition bills per OUTPUT layer incl. base.', comparedTo: { 'seedream/5-lite-text-to-image': 'Lite is the volume tier; Pro adds quality headroom + the layer/I2I surface.', 'nano-banana-pro': 'NB Pro (24 cr) keeps the reasoning/grounding crown; 5.0 Pro at 7 cr is the value play for design output.' }, lastResearched: '2026-08-26', sources: ['https://docs.kie.ai/market/seedream/5-pro-text-to-image', 'https://docs.kie.ai/market/seedream/5-pro-layer-decomposition', 'https://kie.ai/seedream-5-0-pro'] },
+    type: 'market',
+    apiModel: 'seedream/5-pro-text-to-image',
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'],
+    options: {
+      quality: { type: 'string', default: 'basic', description: 'Docs sample value: "basic"' },
+      size: { type: 'string', default: 'auto', description: '1K/1.5K = 7 cr, 2K = 14 cr' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, quality: opts.quality || 'basic', size: opts.size || 'auto', output_format: opts.output_format || 'png' };
+    },
+  },
+  'seedream/5-pro-image-to-image': {
+    name: 'Seedream 5.0 Pro (img2img)',
+    description: 'NEW (Aug 2026) — Pro-tier image editing/restyling. 7 cr @1K, 14 @2K + 0.5 cr per input image (first free).',
+    capabilities: ['editing', 'style-transfer', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'seedream/5-pro-image-to-image',
+    requiresImage: true,
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'],
+    options: {
+      quality: { type: 'string', default: 'basic' },
+      size: { type: 'string', default: 'auto', description: '1K = 7 cr, 2K = 14 cr; inputs 0.5 cr each, first free' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, quality: opts.quality || 'basic', size: opts.size || 'auto', output_format: opts.output_format || 'png' };
+    },
+  },
   'seedream/5-lite-text-to-image': {
     name: 'Seedream 5.0 Lite',
     description: 'Seedream 5.0 Lite with 2K/4K quality tiers. Great for 3D renders and game art.',
