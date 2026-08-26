@@ -1,6 +1,6 @@
 # kie-mcp
 
-A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **48+ image models**, **86+ video models**, and **20+ audio tools** with deep model intelligence built in.
+A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.ai) generation API. Gives Claude (and any MCP client) access to **54+ image models**, **95+ video models**, and **20+ audio tools** with deep model intelligence built in.
 
 ## Why this exists
 
@@ -23,24 +23,26 @@ Just ask Claude things like:
 
 ## Model coverage
 
-### Image (48+)
+### Image (54+)
 - **OpenAI**: GPT Image 2 (NEW), GPT-4o Image, GPT Image 1.5
 - **Google**: Nano Banana 2 / 2 Lite (NEW) / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
 - **Black Forest Labs**: Flux Kontext Pro/Max, Flux 2 Pro/Flex
 - **ByteDance**: Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
 - **Alibaba**: Wan 2.7 Image / Image Pro
 - **Ideogram**: v3, Character, Edit, Remix, Reframe
-- **xAI Grok Imagine Image 2.0** (NEW — #2 Arena T2I + edit; free segment map → region-targeted edit chain)
+- **xAI Grok Imagine Image 2.0** (#2 Arena T2I + edit; free segment map → region-targeted edit chain; whole-image edits of ANY uploaded image)
+- **ByteDance Seedream 5.0 Pro** (NEW — T2I/I2I + layer decomposition: split any image into layer files)
+- **Qwen Image 3.0 / 3.0 Pro** (NEW — seed, negative prompts, 2K at the 1K price on standard)
 - **Others**: Qwen/Qwen2, Z-Image, Grok Imagine 1.x, Recraft, Topaz
 
-### Video (86+)
+### Video (95+)
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
 - **ByteDance Seedance**: 2.5 (NEW — 30s single takes, live Aug 2026) / 2.0 / 2.0 Fast / 2.0 Mini / 1.5 Pro
 - **OpenAI Sora 2** ⏸: T2V/I2V, Pro, Characters, Storyboard, Watermark Remover — *paused upstream by kie.ai (June 2026); OpenAI sunsets the Sora API Sept 2026*
-- **Kuaishou Kling**: 3.0, 3.0 Turbo (NEW), 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
-- **Alibaba Wan**: 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
-- **MiniMax Hailuo**: 2.3 Pro/Standard, 02 Pro/Standard
+- **Kuaishou Kling**: 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
+- **Alibaba Wan**: 3.0 + 3.0 Prime (NEW — unified prompt-or-media, audio), 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
+- **MiniMax Hailuo**: H3 (NEW — 2K + native stereo audio, image+video+audio references, first→last-frame I2V), 2.3 Pro/Standard, 02 Pro/Standard
 - **xAI Grok Imagine**: Video 1.5 preview (NEW — I2V with native audio, cheapest audio video), T2V, I2V, Upscale, Extend
 - **Avatar / lip-sync**: OmniHuman 1.5 (NEW — audio-driven full-body avatar + free subject-detection utility), Volcengine Video Lip-Sync (NEW — re-dub existing footage), Kling AI Avatar, Infinitalk
 - **PixVerse V6** (NEW): T2V, I2V (viral templates), Transition (first→last morph), Fusion R2V (@ref_name), Extend — budget all-rounder with native audio
@@ -146,7 +148,7 @@ convert_to_wav, separate_vocals, boost_style,
 get_timestamped_lyrics, audio_isolation, speech_to_text,
 list_models, check_task, list_tasks, check_credits,
 download_result, list_raw_assets, upload_file,
-grok_segment_map, grok_image_edit,
+grok_segment_map, grok_image_edit, seedream_layer_decompose,
 veo_extend, veo_upscale_1080p, veo_upscale_4k, runway_extend
 ```
 
