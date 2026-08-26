@@ -24,7 +24,7 @@ export const PROFILES = Object.fromEntries(
 // profile. Returns [{id, score}] sorted desc; the agent can override — the
 // brief labels the pick as an inference, never a fact.
 const KEYWORDS = {
-  architecture: ['architect', 'building', 'house', 'facade', 'interior', 'render', 'floor plan', 'site plan', 'elevation', 'room', 'furniture', 'real estate', 'construction', 'apartment', 'kitchen', 'bathroom', 'landscape design'],
+  architecture: ['architect', 'building', 'house', 'facade', 'interior', 'render', 'floor plan', 'site plan', 'elevation', 'room', 'furniture', 'real estate', 'construction', 'apartment', 'kitchen', 'bathroom', 'landscape design', 'renovation', 'remodel', 'refurbish', 'makeover'],
   'game-assets': ['game', 'sprite', 'pixel art', 'character sheet', 'tileset', 'tileable', 'texture', 'unity', 'godot', 'unreal', 'rpg', 'platformer', 'skybox', 'game icon', 'npc', 'level', 'key art'],
   advertising: ['ad', 'advert', 'campaign', 'banner', 'social post', 'instagram', 'marketing', 'brand', 'product shot', 'packshot', 'billboard', 'promo', 'cta', 'a/b', 'story cover', 'thumbnail'],
   'film-storyboard': ['storyboard', 'shot list', 'film', 'movie', 'cinematic frame', 'scene concept', 'screenplay', 'director', 'mood frame', 'lookdev', 'costume', 'set design', 'animatic'],
