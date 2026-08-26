@@ -819,7 +819,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit, NEW) then grok_segment_map (free) + grok_image_edit (4cr). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1522,17 +1522,19 @@ const handleListTools = async () => ({
     },
     {
       name: 'grok_image_edit',
-      description: 'Edit ONLY selected regions of a Grok Imagine Image 2.0 generation (4 credits). Pass the source task_id, an edit prompt describing the desired end state of the masked region(s), and mask_indexs — the region indices from grok_segment_map (run it first, free, and pick regions by NAME; do not guess indices). Everything outside the masks is preserved. Returns a new full image; the result task_id can itself be segmented/edited again for iterative refinement at 4 cr per round. Downloads to kie/assets/raw/.',
+      description: 'Edit an image with Grok Imagine Image 2.0 (4 credits). TWO MODES: (1) Region mode — pass task_id (a prior Grok 2.0 generation) + mask_indexs from grok_segment_map (run it first, free, pick regions by NAME): only those regions change. (2) Whole-image mode (NEW Aug 2026) — pass image_urls (ANY uploaded/external image, e.g. from upload_file) + aspect_ratio + prompt: instruction-based edit of the full image, no segmentation. Returns a new full image; result task_ids chain back into segment/edit for iterative refinement. Downloads to kie/assets/raw/.',
       inputSchema: {
         type: 'object',
         properties: {
-          task_id: { type: 'string', description: 'Source task ID — a Grok Image 2.0 generation (or a previous grok_image_edit result)' },
-          prompt: { type: 'string', description: 'What the masked region(s) should become, plus what to preserve (e.g. "change the background to a sunset beach, keep the apple unchanged")' },
-          mask_indexs: { type: 'array', items: { type: 'number' }, description: 'Region indices to edit, from grok_segment_map (e.g. [1] or [0, 2]). Field name matches kie\'s API spelling.' },
+          task_id: { type: 'string', description: 'Region mode: source task ID — a Grok Image 2.0 generation (or a previous grok_image_edit result). Mutually exclusive with image_urls.' },
+          prompt: { type: 'string', description: 'Region mode: what the masked region(s) should become plus what to preserve. Whole-image mode: the edit instruction for the full image.' },
+          mask_indexs: { type: 'array', items: { type: 'number' }, description: 'Region mode only: region indices from grok_segment_map (e.g. [1] or [0, 2]). Field name matches kie\'s API spelling.' },
+          image_urls: { type: 'array', items: { type: 'string' }, description: 'Whole-image mode: public URL(s) of the image to edit — any image, not just Grok generations (upload local files with upload_file first). Mutually exclusive with task_id.' },
+          aspect_ratio: { type: 'string', enum: ['1:1', '2:3', '3:2', '16:9', '9:16'], description: 'Whole-image mode: required output aspect ratio.' },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
-        required: ['task_id', 'prompt', 'mask_indexs'],
+        required: ['prompt'],
       },
     },
     {
@@ -2674,15 +2676,26 @@ const handleCallTool = async (request) => {
       }
 
       case 'grok_image_edit': {
-        const { task_id, prompt, mask_indexs, filename } = args;
-        if (!Array.isArray(mask_indexs) || mask_indexs.length === 0) {
-          return { content: [{ type: 'text', text: 'mask_indexs must be a non-empty array of region indices — run grok_segment_map first to get them.' }], isError: true };
+        const { task_id, prompt, mask_indexs, image_urls, aspect_ratio, filename } = args;
+        // Two upstream modes: region-targeted (task_id + mask_indexs) or
+        // whole-image on any URL (image_urls + aspect_ratio, added by kie Aug 2026).
+        const regionMode = !!task_id;
+        const wholeMode = Array.isArray(image_urls) && image_urls.length > 0;
+        if (regionMode === wholeMode) {
+          return { content: [{ type: 'text', text: 'Pass EITHER task_id + mask_indexs (region mode, after grok_segment_map) OR image_urls + aspect_ratio (whole-image mode on any image) — exactly one of the two.' }], isError: true };
+        }
+        if (regionMode && (!Array.isArray(mask_indexs) || mask_indexs.length === 0)) {
+          return { content: [{ type: 'text', text: 'Region mode needs a non-empty mask_indexs array — run grok_segment_map first to get region indices.' }], isError: true };
+        }
+        if (wholeMode && !aspect_ratio) {
+          return { content: [{ type: 'text', text: 'Whole-image mode requires aspect_ratio (1:1, 2:3, 3:2, 16:9 or 9:16).' }], isError: true };
         }
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `grok2-edit-${ts}.jpg`;
         const outPath = join(resolveOutputDir(args), outFilename);
 
-        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'grok-imagine-image-2-0/image-edit', input: { task_id, prompt, mask_indexs } });
+        const input = regionMode ? { task_id, prompt, mask_indexs } : { prompt, image_urls, aspect_ratio };
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'grok-imagine-image-2-0/image-edit', input });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start edit — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const taskEntry = { taskId, model: 'grok-imagine-image-2-0/image-edit', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
@@ -2701,7 +2714,7 @@ const handleCallTool = async (request) => {
             text: [
               `✅ Region edit done!`,
               `Task ID: ${taskId}  (chain again: grok_segment_map / grok_image_edit on this ID for another 4 cr round)`,
-              `Edited regions: [${mask_indexs.join(', ')}] of source ${task_id}`,
+              regionMode ? `Edited regions: [${mask_indexs.join(', ')}] of source ${task_id}` : `Whole-image edit of ${image_urls.length} input image(s)`,
               `Cost: ${formatCost('grok-imagine-image-2-0/image-edit', pollResult)}`,
               `Downloaded to: ${outPath}`,
               `Result URL (temporary ~24h; not pattern-stable): ${resultUrls[0]}`,
