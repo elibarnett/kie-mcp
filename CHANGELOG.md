@@ -10,7 +10,7 @@ All notable changes to kie-mcp will be documented here.
   - New **`profile_brief` tool**: no args → list profiles; `request` only → keyword-inferred profile (labeled, with alternatives); `profile` (+`request`) → the full brief.
   - **MCP prompts capability**: each profile registers as a server prompt → `/kie-art:<profile>` slash commands in supporting clients. First use of the prompts primitive.
   - **Referential integrity tests** (`test/profiles.test.mjs`): routing models must exist in registries, workflow tool mentions must be real tools, paused models are never recommended, briefs must render. The tests caught their first real bug during development (a tool slug routed as a model).
-  - First profile: **Architecture & Interior Design** — 6 deliverable types, 10 intake questions, camera/material/light prompt formulas, sketch-to-render and layer-decompose workflows.
+  - Phase-1 profiles: **Architecture & Interior Design**, **Video Game Assets** (8 asset types incl. pixel-grid, tileable-texture, and transparent-background techniques; consistent-character and icon-family workflows), and **Advertising & Marketing** (brand-hex handling, verbatim in-image copy rules, never-generate-the-logo, master→segment→edit A/B variant program)), and **Web & Software Product Imagery** (empty states, feature spots, icon families with locked style prefixes, onboarding sequences, og:images with safe zones, dark-mode pairs).
 
 ## [4.9.0] — 2026-08-26
 
