@@ -4,6 +4,10 @@ All notable changes to kie-mcp will be documented here.
 
 ## [Unreleased — 4.9.0]
 
+### Added
+
+- **Kling 3.0 Omni ("Kling O3")** (#77) — 4 entries: `kling-3-omni/{text-to-video, image-to-video, reference-to-video, transformation}` (API slugs `kling-3.0-omni/*` — docs paths differ). Unified multi-shot family: per-shot scripting via `customize_multi_shots` + `multi_prompt`, optional native audio, up to 4K, and a new **Transformation** modality (restyle existing video preserving motion, via `model_options.video_urls`). Published pricing: T2V/I2V/R2V 14 cr/s @720p no-audio (audio 18; 1080p 18/23; 4K 67); Transformation 20/27/67. All slugs live-probed; `PRICING_ESTIMATED`.
+
 ### Fixed
 
 - **Seedance 2 Mini price cut: 20.5 → 8.2 cr/s** (#76) — kie now publishes tiers (480p 2.4 with-video / 3.8 no-video; 720p 5 / 8.2); table set to the entry's 720p no-video default, tiers noted, still in `PRICING_ESTIMATED`.

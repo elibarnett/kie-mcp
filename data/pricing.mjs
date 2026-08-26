@@ -103,6 +103,10 @@ export const PRICING = {
   'kling/text-to-video': 10,
   'kling/image-to-video': 10,
   'kling/motion-control': 10,
+  'kling-3-omni/text-to-video': 14,      // O3, 720p no-audio default; audio 18, 1080p 18/23, 4K 67 (published, drift 2026-08-26)
+  'kling-3-omni/image-to-video': 14,     // same tiers
+  'kling-3-omni/reference-to-video': 14, // same tiers (+video-input 20/27)
+  'kling-3-omni/transformation': 20,     // 720p default; 1080p 27, 4K 67 — video input required
   'kling-3/video': 12,
   'kling-3/motion-control': 12,
   'kling/v2-1-standard': 5,           // 25 credits/5s
@@ -203,6 +207,7 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'kling-3-omni/text-to-video', 'kling-3-omni/image-to-video', 'kling-3-omni/reference-to-video', 'kling-3-omni/transformation',  // resolution/audio-tiered, published not yet empirical
   'grok-imagine/text-to-video',        // resolution-tiered 2.4/4.5/8 cr/s — table prices the 720p default
   'grok-imagine/image-to-video',       // same tiers — table prices the 480p default
   'bytedance/v1-lite-text-to-video',   // resolution-tiered 2/4.5/10 cr/s — table prices the 720p default

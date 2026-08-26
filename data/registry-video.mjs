@@ -955,6 +955,86 @@ export const VIDEO_MODEL_REGISTRY = {
       return { prompt, input_urls: imageUrls, video_urls: opts.video_urls, mode: opts.mode || '720p', character_orientation: opts.character_orientation || 'image', background_source: opts.background_source || 'input_video' };
     },
   },
+  // ── Kling 3.0 Omni ("Kling O3") — unified multi-shot T2V/I2V/R2V + video Transformation ──
+  'kling-3-omni/text-to-video': {
+    name: 'Kling 3.0 Omni T2V',
+    description: 'NEW (Aug 2026) — Kling O3 unified model: per-shot scripting (multi_prompt), optional native audio, up to 4K. 14 cr/s @720p no-audio.',
+    capabilities: ['cinematic', 'multi-shot', 'audio', 'latest', 'new'],
+    research: { verdict: 'Kuaishou\'s "Kling O3" / 3.0 Omni family, live on kie August 2026 — the unified any-to-any evolution of Kling 3.0: one architecture spanning T2V, I2V, reference-to-video, and a new video Transformation modality (restyle an existing clip while preserving its motion). Headline controls: per-shot scripting via customize_multi_shots + multi_prompt (each shot gets its own prompt and duration — the most explicit multi-shot API on kie), native audio co-generation, and output up to 4K. Young on kie: entries are docs-scraped and live-probed (all four slugs route, 2026-08-26) but not yet empirically generated; independent benchmarks pending. Priced below Kling 3.0 standard at 720p (14 vs 14-20 cr/s) with the same 67 cr/s 4K ceiling.', bestFor: ['multi-shot sequences with explicit per-shot prompts and durations', 'restyling existing footage while keeping motion (Transformation — unique modality on kie with Wan 2.7 Edit the nearest neighbor)', 'character-consistent videos from reference images (R2V)', 'audio-in-one-pass generation up to 4K'], weaknesses: ['no kie-side empirical generation data yet — rates and quality unverified beyond routing probes', 'multi_prompt shot durations must sum sensibly with total duration (kie does not document the reconciliation rule)', '4K tier is 3.4-4.8x the 720p rate', 'Transformation requires video input billed at its own higher tier'], promptTechniques: ['set customize_multi_shots: true and give each shot a one-sentence prompt + duration in multi_prompt', 'Transformation: describe the target style AND what to preserve ("...while preserving the character movements")', 'audio: false is the default cost saver — enable per-take only when needed'], costEfficiency: 'Table prices the 720p no-audio default: 14 cr/s T2V/I2V/R2V (audio 18; 1080p 18/23; 4K 67), Transformation 20 cr/s @720p (27 @1080p, 67 @4K, video input required). Published by kie, not yet empirically confirmed — PRICING_ESTIMATED.', comparedTo: { 'kling-3/video': 'Same-price entry tier; Omni adds per-shot multi_prompt scripting, R2V, and Transformation. 3.0 remains the benchmark-proven choice until Omni gets independent evals.', 'wan/2-7-video-edit': 'Both restyle existing video; Omni Transformation adds the 4K ceiling and audio.' }, lastResearched: '2026-08-26', sources: ['https://docs.kie.ai/market/kling/v3-omni-text-to-video', 'https://docs.kie.ai/market/kling/v3-omni-transformation', 'https://kie.ai/kling-o3'] },
+    type: 'market',
+    apiModel: 'kling-3.0-omni/text-to-video',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5, description: 'Total duration in seconds' },
+      resolution: { type: 'string', enum: ['720p', '1080p', '4K'], default: '720p', description: '720p 14 cr/s → 1080p 18 → 4K 67 (no-audio rates)' },
+      audio: { type: 'boolean', default: false, description: 'Native audio co-generation (720p 14→18, 1080p 18→23 cr/s)' },
+      customize_multi_shots: { type: 'boolean', default: false, description: 'Enable per-shot scripting via multi_prompt' },
+      multi_prompt: { type: 'array', description: 'Per-shot list of {prompt, duration} objects (with customize_multi_shots: true)' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio, resolution: opts.resolution || '720p', duration: opts.duration ?? 5, audio: opts.audio ?? false };
+      if (opts.customize_multi_shots) { input.customize_multi_shots = true; input.multi_prompt = opts.multi_prompt || []; }
+      return input;
+    },
+  },
+  'kling-3-omni/image-to-video': {
+    name: 'Kling 3.0 Omni I2V',
+    description: 'NEW (Aug 2026) — Kling O3 image-to-video with multi-shot scripting and optional audio, up to 4K. 14 cr/s @720p no-audio.',
+    capabilities: ['cinematic', 'multi-shot', 'audio', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'kling-3.0-omni/image-to-video',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5 },
+      resolution: { type: 'string', enum: ['720p', '1080p', '4K'], default: '720p' },
+      audio: { type: 'boolean', default: false },
+      customize_multi_shots: { type: 'boolean', default: false },
+      multi_prompt: { type: 'array', description: 'Per-shot {prompt, duration} list' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, resolution: opts.resolution || '720p', duration: opts.duration ?? 5, audio: opts.audio ?? false };
+      if (opts.customize_multi_shots) { input.customize_multi_shots = true; input.multi_prompt = opts.multi_prompt || []; }
+      return input;
+    },
+  },
+  'kling-3-omni/reference-to-video': {
+    name: 'Kling 3.0 Omni R2V',
+    description: 'NEW (Aug 2026) — Kling O3 reference-to-video: character/style consistency from reference images, multi-shot scripting, optional audio. 14 cr/s @720p no-audio (+video-input tier 20/27).',
+    capabilities: ['character', 'multi-shot', 'audio', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'kling-3.0-omni/reference-to-video',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 5 },
+      resolution: { type: 'string', enum: ['720p', '1080p', '4K'], default: '720p' },
+      audio: { type: 'boolean', default: false },
+      customize_multi_shots: { type: 'boolean', default: false },
+      multi_prompt: { type: 'array', description: 'Per-shot {prompt, duration} list' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, resolution: opts.resolution || '720p', duration: opts.duration ?? 5, audio: opts.audio ?? false };
+      if (opts.customize_multi_shots) { input.customize_multi_shots = true; input.multi_prompt = opts.multi_prompt || []; }
+      return input;
+    },
+  },
+  'kling-3-omni/transformation': {
+    name: 'Kling 3.0 Omni Transformation',
+    description: 'NEW (Aug 2026) — restyle an EXISTING video while preserving its motion (video-to-video). Pass the source via model_options.video_urls. 20 cr/s @720p (27 @1080p, 67 @4K).',
+    capabilities: ['video-edit', 'style-transfer', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'kling-3.0-omni/transformation',
+    aspectRatios: ['auto', '16:9', '9:16'],
+    options: {
+      video_urls: { type: 'array', description: 'REQUIRED — public URL(s) of the source video to transform' },
+      resolution: { type: 'string', enum: ['720p', '1080p', '4K'], default: '720p' },
+      audio: { type: 'boolean', default: false },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, video_urls: opts.video_urls || [], aspect_ratio: aspectRatio || 'auto', resolution: opts.resolution || '720p', audio: opts.audio ?? false };
+    },
+  },
   'kling/v3-turbo-text-to-video': {
     name: 'Kling 3.0 Turbo T2V',
     description: 'NEW (June 2026) — speed-optimized Kling 3.0 tier. Keeps vCoT reasoning, multi-shot (6 cuts), bundled audio + 5-language lip-sync; caps at 1080p. Faster queue, not a discount tier.',
