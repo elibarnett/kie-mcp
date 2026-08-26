@@ -2,7 +2,9 @@
 
 All notable changes to kie-mcp will be documented here.
 
-## [Unreleased — 4.9.0]
+## [4.9.0] — 2026-08-26
+
+August drift-sweep release (#75–#82): every gap between the MCP and current kie capabilities, one issue → one PR each.
 
 ### Added
 
