@@ -2,6 +2,16 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [Unreleased — 5.0.0]
+
+### Added
+
+- **Vertical Profiles** (#91) — per-domain playbooks that brief the calling agent: the intake questions a professional would ask (each with a `why`), model routing per deliverable with budget tiers and live pricing, per-model prompt formulas with pitfalls, multi-tool workflows, and a quality checklist. Design conviction: the MCP briefs the agent, it never interrogates the user.
+  - New **`profile_brief` tool**: no args → list profiles; `request` only → keyword-inferred profile (labeled, with alternatives); `profile` (+`request`) → the full brief.
+  - **MCP prompts capability**: each profile registers as a server prompt → `/kie-art:<profile>` slash commands in supporting clients. First use of the prompts primitive.
+  - **Referential integrity tests** (`test/profiles.test.mjs`): routing models must exist in registries, workflow tool mentions must be real tools, paused models are never recommended, briefs must render. The tests caught their first real bug during development (a tool slug routed as a model).
+  - First profile: **Architecture & Interior Design** — 6 deliverable types, 10 intake questions, camera/material/light prompt formulas, sketch-to-render and layer-decompose workflows.
+
 ## [4.9.0] — 2026-08-26
 
 August drift-sweep release (#75–#82): every gap between the MCP and current kie capabilities, one issue → one PR each.

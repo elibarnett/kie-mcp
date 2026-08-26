@@ -3,7 +3,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync, existsSync, mkdirSync, readdirSync, statSync, appendFileSync, readFileSync } from 'fs';
 import { join, basename, isAbsolute } from 'path';
 import { createServer } from 'http';
@@ -13,6 +13,7 @@ import { realpathSync } from 'fs';
 
 import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './data/voices.mjs';
 import { PRICING, PRICING_ESTIMATED, PROMPT_CAPS } from './data/pricing.mjs';
+import { PROFILES, inferProfile } from './data/profiles/index.mjs';
 import { MODEL_REGISTRY } from './data/registry-image.mjs';
 import { VIDEO_MODEL_REGISTRY } from './data/registry-video.mjs';
 import { AUDIO_TOOLS_REGISTRY } from './data/registry-audio.mjs';
@@ -811,8 +812,57 @@ async function downloadToFile(url, destPath) {
 
 // ─── MCP Server ───
 
+// ── Vertical profiles (issue #91): render a profile as an agent brief ──
+// Pricing resolved live from PRICING; models referenced by a profile that are
+// paused (or missing) get flagged instead of recommended.
+function renderProfileBrief(profile, request) {
+  const lines = [];
+  lines.push(`# ${profile.name} — vertical brief`);
+  lines.push(profile.summary);
+  const ageDays = Math.round((Date.now() - new Date(profile.lastReviewed)) / 86400000);
+  if (ageDays > 90) lines.push(`⚠️ Profile last reviewed ${profile.lastReviewed} (${ageDays} days ago) — model routing may be stale; cross-check with list_models.`);
+  if (request) lines.push(`\nUser request: "${request}"`);
+  lines.push('\n## Intake — ask ONLY what the request above leaves unanswered, conversationally (do not run this as a form):');
+  for (const q of profile.intake) {
+    const scope = q.appliesTo ? ` [only for: ${q.appliesTo.join(', ')}]` : '';
+    lines.push(`- ${q.ask}${scope}\n    why: ${q.why}`);
+  }
+  lines.push('\n## Model routing (pick tier by budget/purpose; costs live from the pricing table):');
+  for (const route of profile.routing) {
+    lines.push(`- **${route.deliverable}**`);
+    for (const [tier, t] of Object.entries(route.tiers)) {
+      if (t.tool) {
+        lines.push(`    ${tier}: ${t.tool} (tool)${t.note ? ` — ${t.note}` : ''}`);
+        continue;
+      }
+      const def = MODEL_REGISTRY[t.model] || VIDEO_MODEL_REGISTRY[t.model];
+      const price = PRICING[t.model] ?? (def && PRICING[def.apiModel]);
+      const flag = !def ? ' ⚠️ UNKNOWN MODEL' : def.paused ? ' ⏸ PAUSED — do not use' : '';
+      lines.push(`    ${tier}: ${t.model}${price != null ? ` (~${price} cr${(MODEL_REGISTRY[t.model]) ? '' : '/s'})` : ''}${flag}${t.note ? ` — ${t.note}` : ''}`);
+    }
+  }
+  if (profile.promptFormulas) {
+    lines.push('\n## Prompt formulas:');
+    for (const [deliv, f] of Object.entries(profile.promptFormulas)) {
+      lines.push(`- **${deliv}**: ${f.structure}`);
+      if (f.example) lines.push(`    example: ${f.example}`);
+      for (const [m, note] of Object.entries(f.perModel || {})) lines.push(`    ${m}: ${note}`);
+      for (const pit of f.pitfalls || []) lines.push(`    ⚠ ${pit}`);
+    }
+  }
+  if (profile.workflows?.length) {
+    lines.push('\n## Workflows:');
+    for (const w of profile.workflows) lines.push(`- **${w.name}**: ${w.steps.join(' → ')}`);
+  }
+  if (profile.qualityChecklist?.length) {
+    lines.push('\n## Quality checklist (verify outputs against this):');
+    for (const c of profile.qualityChecklist) lines.push(`- ${c}`);
+  }
+  return lines.join('\n');
+}
+
 const SERVER_INFO = { name: 'kie-art', version: '4.9.0' };
-const SERVER_CAPS = { capabilities: { tools: {} } };
+const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
 const handleListTools = async () => ({
@@ -1509,6 +1559,17 @@ const handleListTools = async () => ({
       },
     },
     // ── Veo Extend & Upscale ──
+    {
+      name: 'profile_brief',
+      description: 'Get a vertical playbook before generating: the intake questions a professional in that domain would ask, model routing per deliverable with live costs, per-model prompt formulas, and multi-tool workflows. Call with no args to list available profiles. Call this FIRST when the user\'s request belongs to a known vertical (architecture/interiors, and more) — then ask the user only the unanswered intake questions, conversationally.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string', description: 'Profile id (omit to list profiles, or pass only `request` to auto-infer)' },
+          request: { type: 'string', description: 'The user\'s request verbatim — used to auto-infer the profile and echoed into the brief so intake can be filtered' },
+        },
+      },
+    },
     {
       name: 'seedream_layer_decompose',
       description: 'Split ANY image into independent layers with Seedream 5.0 Pro (billed per OUTPUT layer incl. base: 7 cr @1K, 14 @2K — a 3-layer split ≈ 21 cr). Works on any public image URL (upload local files with upload_file first). Describe which elements become layers in the prompt, optionally bounding them with <bbox>x1 y1 x2 y2</bbox> tags. Downloads every layer image to kie/assets/raw/.',
@@ -2665,6 +2726,30 @@ const handleCallTool = async (request) => {
 
       // ── Veo Extend & Upscale ──
 
+      case 'profile_brief': {
+        const { profile: profileId, request } = args;
+        if (!profileId && !request) {
+          const list = Object.values(PROFILES).map((p) => `- ${p.id}: ${p.name} — ${p.summary}`).join('\n');
+          return { content: [{ type: 'text', text: `Available vertical profiles:\n${list}\n\nCall profile_brief with { profile: "<id>", request: "<user request>" }.` }] };
+        }
+        let chosen = profileId && PROFILES[profileId];
+        let inferenceNote = '';
+        if (!chosen) {
+          if (profileId) {
+            return { content: [{ type: 'text', text: `Unknown profile "${profileId}". Available: ${Object.keys(PROFILES).join(', ')}` }], isError: true };
+          }
+          const ranked = inferProfile(request);
+          if (!ranked.length) {
+            const list = Object.keys(PROFILES).join(', ');
+            return { content: [{ type: 'text', text: `Could not infer a profile from the request. Available: ${list}. Pick one explicitly, or proceed without a profile using list_models.` }] };
+          }
+          chosen = PROFILES[ranked[0].id];
+          const alts = ranked.slice(1).map((r) => r.id).join(', ');
+          inferenceNote = `\n(Inferred profile: ${chosen.id}${alts ? `; alternatives: ${alts}` : ''} — override with an explicit profile id if wrong.)\n`;
+        }
+        return { content: [{ type: 'text', text: inferenceNote + renderProfileBrief(chosen, request) }] };
+      }
+
       case 'seedream_layer_decompose': {
         const { image_url, prompt, size = 'auto', output_format = 'png', filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -2910,6 +2995,24 @@ function createMcpServer() {
   const s = new Server(SERVER_INFO, SERVER_CAPS);
   s.setRequestHandler(ListToolsRequestSchema, handleListTools);
   s.setRequestHandler(CallToolRequestSchema, handleCallTool);
+  // MCP prompts: each vertical profile doubles as a server prompt, so clients
+  // that surface prompts (e.g. Claude Code slash commands) get /kie-art:<id>.
+  s.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: Object.values(PROFILES).map((p) => ({
+      name: p.id,
+      description: `${p.name} — ${p.summary}`,
+      arguments: [{ name: 'request', description: 'What you want to create', required: false }],
+    })),
+  }));
+  s.setRequestHandler(GetPromptRequestSchema, async (req) => {
+    const p = PROFILES[req.params.name];
+    if (!p) throw new Error(`Unknown prompt: ${req.params.name}`);
+    const request = req.params.arguments?.request || '';
+    return {
+      description: p.name,
+      messages: [{ role: 'user', content: { type: 'text', text: renderProfileBrief(p, request) + '\n\nUsing this brief: ask me the unanswered intake questions conversationally, then generate with the routed model and prompt formula.' } }],
+    };
+  });
   return s;
 }
 
@@ -3003,6 +3106,7 @@ if (httpFlag) {
 // server. Importing this module is side-effect-free except for creating the
 // (gitignored) RAW_DIR.
 export {
+  renderProfileBrief,
   extractResultUrls,
   classifyKieCode,
   sanitizeFilename,
