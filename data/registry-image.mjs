@@ -500,6 +500,106 @@ export const MODEL_REGISTRY = {
   },
 
   // Qwen
+  // ── Qwen Image 3.0 (standard + Pro) ──
+  'qwen3/text-to-image': {
+    name: 'Qwen Image 3.0',
+    description: 'NEW (Aug 2026) — Qwen 3.0 standard: 4.8 cr flat for 1K OR 2K, with seed/negative-prompt/prompt_extend controls the old qwen line lacked.',
+    capabilities: ['illustration', 'anime', 'photorealistic', 'budget', 'latest', 'new'],
+    research: { verdict: 'Qwen Image 3.0 reached kie August 2026 in two tiers: standard (4.8 cr flat, 1K or 2K — 2K at no premium is unusual) and Pro (6.4 cr @1K, 12 @2K). Successor to the qwen/qwen2 budget line that has anchored the cheap-anime/illustration slot since launch. Surface is the richest of the budget image models: resolution, image_size (aspect), prompt_extend (LLM prompt expansion — on by default), negative_prompt, seed, nsfw_checker toggle, and I2I variants with 0.5 cr per input image. All four slugs live-probed 2026-08-26 (note the Pro slugs live under qwen3/pro-*, not qwen3-pro/*); no kie-side generations or independent benchmarks yet — the Qwen2 track record (strong stylized/anime, budget king) is the prior.', bestFor: ['budget generation with modern controls (seed, negative prompt) the old qwen line lacked', '2K output at the 1K price (standard tier)', 'anime/stylized work where qwen2 was already the value pick', 'reproducible variants via seed'], weaknesses: ['days old on kie — no benchmarks', 'prompt_extend defaults ON: outputs may drift from literal prompts (disable for precise control)', 'nsfw_checker default may block borderline artistic content'], promptTechniques: ['disable prompt_extend for exact prompt adherence', 'use negative_prompt for the classic quality boilerplate', 'pin seed for iteration on a composition'], costEfficiency: 'Standard 4.8 cr flat incl. 2K; Pro 6.4/12. Slightly above old qwen (4) with far more control. PRICING_ESTIMATED pending empirical confirmation.', comparedTo: { 'qwen/text-to-image': 'Qwen 1.x/2 stay the absolute floor at 4 cr; 3.0 adds 2K, seed, negative prompts for +0.8 cr.', 'z-image': 'z-image (3 cr) remains the cheapest slot; qwen3 is the feature-rich budget pick.', 'seedream/5-lite-text-to-image': 'NB2-Lite-class rivals; qwen3 wins on stylized + controls, 5-Lite on photoreal speed.' }, lastResearched: '2026-08-26', sources: ['https://docs.kie.ai/market/qwen3/text-to-image', 'https://kie.ai/qwen-image-3'] },
+    type: 'market',
+    apiModel: 'qwen3/text-to-image',
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K'], default: '1K' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      prompt_extend: { type: 'boolean', default: true, description: 'Let Qwen expand the prompt' },
+      negative_prompt: { type: 'string' },
+      seed: { type: 'number' },
+      nsfw_checker: { type: 'boolean', default: true },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_size: aspectRatio, resolution: opts.resolution || '1K', output_format: opts.output_format || 'png' };
+      if (opts.prompt_extend !== undefined) input.prompt_extend = opts.prompt_extend;
+      if (opts.negative_prompt) input.negative_prompt = opts.negative_prompt;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
+  'qwen3/image-to-image': {
+    name: 'Qwen Image 3.0 (img2img)',
+    description: 'NEW (Aug 2026) — Qwen 3.0 image-to-image, 4.8 cr + 0.5 cr per input image.',
+    capabilities: ['editing', 'style-transfer', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'qwen3/image-to-image',
+    requiresImage: true,
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K'], default: '1K' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      prompt_extend: { type: 'boolean', default: true, description: 'Let Qwen expand the prompt' },
+      negative_prompt: { type: 'string' },
+      seed: { type: 'number' },
+      nsfw_checker: { type: 'boolean', default: true },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_urls: imageUrls, image_size: aspectRatio, resolution: opts.resolution || '1K', output_format: opts.output_format || 'png' };
+      if (opts.prompt_extend !== undefined) input.prompt_extend = opts.prompt_extend;
+      if (opts.negative_prompt) input.negative_prompt = opts.negative_prompt;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
+  'qwen3/pro-text-to-image': {
+    name: 'Qwen Image 3.0 Pro',
+    description: 'NEW (Aug 2026) — Pro tier: 6.4 cr @1K, 12 @2K. Same control surface as standard.',
+    capabilities: ['illustration', 'photorealistic', 'text-rendering', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'qwen3/pro-text-to-image',
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K'], default: '1K' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      prompt_extend: { type: 'boolean', default: true, description: 'Let Qwen expand the prompt' },
+      negative_prompt: { type: 'string' },
+      seed: { type: 'number' },
+      nsfw_checker: { type: 'boolean', default: true },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_size: aspectRatio, resolution: opts.resolution || '1K', output_format: opts.output_format || 'png' };
+      if (opts.prompt_extend !== undefined) input.prompt_extend = opts.prompt_extend;
+      if (opts.negative_prompt) input.negative_prompt = opts.negative_prompt;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
+  'qwen3/pro-image-to-image': {
+    name: 'Qwen Image 3.0 Pro (img2img)',
+    description: 'NEW (Aug 2026) — Pro image-to-image: 6.4 cr @1K, 12 @2K + 0.5 cr per input.',
+    capabilities: ['editing', 'style-transfer', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'qwen3/pro-image-to-image',
+    requiresImage: true,
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K'], default: '1K' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      prompt_extend: { type: 'boolean', default: true, description: 'Let Qwen expand the prompt' },
+      negative_prompt: { type: 'string' },
+      seed: { type: 'number' },
+      nsfw_checker: { type: 'boolean', default: true },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_urls: imageUrls, image_size: aspectRatio, resolution: opts.resolution || '1K', output_format: opts.output_format || 'png' };
+      if (opts.prompt_extend !== undefined) input.prompt_extend = opts.prompt_extend;
+      if (opts.negative_prompt) input.negative_prompt = opts.negative_prompt;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
   'qwen/text-to-image': {
     name: 'Qwen Text-to-Image',
     description: 'Qwen generation with fine inference step control. Good for anime and illustration at low cost.',

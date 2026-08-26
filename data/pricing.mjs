@@ -42,6 +42,10 @@ export const PRICING = {
   'ideogram/v3-edit': 5,
   'ideogram/v3-remix': 5,
   'ideogram/character-remix': 5,
+  'qwen3/text-to-image': 4.8,      // flat 1K/2K (published, drift 2026-08-26)
+  'qwen3/image-to-image': 4.8,     // + 0.5 cr per input image
+  'qwen3/pro-text-to-image': 6.4,  // 1K; 2K 12
+  'qwen3/pro-image-to-image': 6.4, // 1K; 2K 12; + 0.5 cr per input
   'qwen/text-to-image': 4,    // kie raised 3→4 cr/megapixel (drift watch 2026-08-10)
   'qwen/image-to-image': 4,   // kie raised 3→4 cr flat (drift watch 2026-08-10)
   'qwen/image-edit': 3,
@@ -212,6 +216,7 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'qwen3/pro-text-to-image', 'qwen3/pro-image-to-image',  // 2K tier doubles
   'seedream/5-pro-text-to-image', 'seedream/5-pro-image-to-image', 'seedream/5-pro-layer-decomposition',  // size-tiered / per-layer billing
   'wan/3-0-video', 'wan/3-0-video-prime',  // resolution-tiered + input-duration billing, published not empirical
   'kling-3-omni/text-to-video', 'kling-3-omni/image-to-video', 'kling-3-omni/reference-to-video', 'kling-3-omni/transformation',  // resolution/audio-tiered, published not yet empirical
