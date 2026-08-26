@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [Unreleased — 4.9.0]
+
+### Fixed
+
+- **`grok_image_edit` now supports kie's new whole-image mode** (#75) — kie added an `image_urls` + `aspect_ratio` input mode to `grok-imagine-image-2-0/image-edit` (verified live 2026-08-26, 4 cr): instruction-based editing of ANY uploaded/external image, not just prior Grok generations. The tool accepts either mode with clear validation; the registry research entry and MODEL GUIDE no longer claim uploaded photos can't be edited (region-targeted `mask_indexs` editing still requires a 2.0-generated `task_id` — `segment-map` was re-probed and remains task-only).
+
 ## [4.8.0] — 2026-08-15
 
 ### Added
