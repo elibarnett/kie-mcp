@@ -9,7 +9,7 @@ import { MODEL_REGISTRY, VIDEO_MODEL_REGISTRY, renderProfileBrief } from '../ser
 const knownModel = (id) => !!(MODEL_REGISTRY[id] || VIDEO_MODEL_REGISTRY[id]);
 
 // Snake_case tokens in workflow steps that are NOT tool names (option/param vocab).
-const NON_TOOL_SNAKE = new Set(['prompt_extend', 'image_urls', 'video_urls', 'mask_indexs', 'image_edit', 'text_to_image', 'model_options', 'aspect_ratio', 'first_frame_url', 'last_frame_url', 'file_path', 'base64_data', 'og_image', 'safe_zone']);
+const NON_TOOL_SNAKE = new Set(['prompt_extend', 'image_urls', 'video_urls', 'mask_indexs', 'image_edit', 'text_to_image', 'model_options', 'aspect_ratio', 'first_frame_url', 'last_frame_url', 'file_path', 'base64_data', 'og_image', 'safe_zone', 'multi_prompt']);
 const TOOL_NAMES = new Set([
   'generate_image', 'generate_video', 'generate_music', 'generate_sfx', 'generate_tts', 'generate_gemini_tts',
   'upload_file', 'download_result', 'check_task', 'list_tasks', 'list_models', 'check_credits',

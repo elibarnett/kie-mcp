@@ -11,9 +11,13 @@ import architecture from './architecture.mjs';
 import gameAssets from './game-assets.mjs';
 import advertising from './advertising.mjs';
 import webProduct from './web-product.mjs';
+import filmStoryboard from './film-storyboard.mjs';
+import productPhotography from './product-photography.mjs';
+import brandDesign from './brand-design.mjs';
+import editorial from './editorial.mjs';
 
 export const PROFILES = Object.fromEntries(
-  [architecture, gameAssets, advertising, webProduct].map((p) => [p.id, p]),
+  [architecture, gameAssets, advertising, webProduct, filmStoryboard, productPhotography, brandDesign, editorial].map((p) => [p.id, p]),
 );
 
 // Cheap keyword inference for profile_brief calls that pass a request but no
@@ -23,6 +27,10 @@ const KEYWORDS = {
   architecture: ['architect', 'building', 'house', 'facade', 'interior', 'render', 'floor plan', 'site plan', 'elevation', 'room', 'furniture', 'real estate', 'construction', 'apartment', 'kitchen', 'bathroom', 'landscape design'],
   'game-assets': ['game', 'sprite', 'pixel art', 'character sheet', 'tileset', 'tileable', 'texture', 'unity', 'godot', 'unreal', 'rpg', 'platformer', 'skybox', 'game icon', 'npc', 'level', 'key art'],
   advertising: ['ad', 'advert', 'campaign', 'banner', 'social post', 'instagram', 'marketing', 'brand', 'product shot', 'packshot', 'billboard', 'promo', 'cta', 'a/b', 'story cover', 'thumbnail'],
+  'film-storyboard': ['storyboard', 'shot list', 'film', 'movie', 'cinematic frame', 'scene concept', 'screenplay', 'director', 'mood frame', 'lookdev', 'costume', 'set design', 'animatic'],
+  'product-photography': ['packshot', 'product photo', 'ecommerce', 'e-commerce', 'listing', 'amazon', 'shopify', 'white background', 'lifestyle shot', 'sku', 'catalog', 'product shot'],
+  'brand-design': ['logo', 'brand identity', 'poster', 'typography', 'wordmark', 'stationery', 'business card', 'letterhead', 'brand pattern', 'album cover', 'book cover design'],
+  editorial: ['article', 'editorial', 'magazine', 'illustration for a story', 'book cover', 'op-ed', 'column', 'publication', 'newsletter header', 'infographic'],
   'web-product': ['empty state', 'onboarding', 'landing page', 'hero image', 'og image', 'og:image', 'favicon', 'illustration for', 'feature section', 'ui illustration', 'saas', 'app icon', 'icon set', 'icons', '404', 'dashboard', 'web app', 'website'],
 };
 
