@@ -138,7 +138,7 @@ export const PRICING = {
   'kling/v3-turbo-image-to-video': 18,
   // ── Seedance 2 Mini (June 2026) — kie published: 20.5 cr/s @720p (default) / 9.5 @480p, no video input; 12.5/6 with video input.
   //    480p rate empirically confirmed 2026-07-02: one 4s 480p T2V consumed exactly 38.00 credits (9.5 cr/s). ──
-  'bytedance/seedance-2-mini': 20.5,
+  'bytedance/seedance-2-mini': 8.2,  // kie cut prices (drift 2026-08-26): 480p 2.4 (w/video-input)/3.8, 720p 5/8.2 — table = 720p no-video default (was 20.5)
   // ── Grok Imagine Video 1.5 preview (June 2026) — 3 cr/s @720p (default), 1.6 cr/s @480p.
   //    720p rate empirically confirmed 2026-07-02: one 4s 720p I2V consumed exactly 12.00 credits (3 cr/s). ──
   'grok-imagine-video-1-5-preview': 3,
