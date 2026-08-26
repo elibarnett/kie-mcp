@@ -6,6 +6,7 @@ All notable changes to kie-mcp will be documented here.
 
 ### Added
 
+- **Wan 3.0 + Wan 3.0 Prime** (#78) — `wan/3-0-video` and `wan/3-0-video-prime`: Alibaba's unified next-gen endpoint ("prompt or media" input), optional audio, 480P/720P/1080P. Published: standard 8/16/32 cr/s, Prime 12.2/25.2/50.4. NOTE the billing rule: (input video duration + output duration) × rate. Live-probed; `PRICING_ESTIMATED`.
 - **Kling 3.0 Omni ("Kling O3")** (#77) — 4 entries: `kling-3-omni/{text-to-video, image-to-video, reference-to-video, transformation}` (API slugs `kling-3.0-omni/*` — docs paths differ). Unified multi-shot family: per-shot scripting via `customize_multi_shots` + `multi_prompt`, optional native audio, up to 4K, and a new **Transformation** modality (restyle existing video preserving motion, via `model_options.video_urls`). Published pricing: T2V/I2V/R2V 14 cr/s @720p no-audio (audio 18; 1080p 18/23; 4K 67); Transformation 20/27/67. All slugs live-probed; `PRICING_ESTIMATED`.
 
 ### Fixed

@@ -87,6 +87,8 @@ export const PRICING = {
   'wan/animate-move': 3,
   'wan/animate-replace': 3,
   'wan/speech-to-video': 3,
+  'wan/3-0-video': 8,        // 480P sample default; 720P 16, 1080P 32. Billing = (input+output duration) x rate (published, drift 2026-08-26)
+  'wan/3-0-video-prime': 12.2, // 480P default; 720P 25.2, 1080P 50.4
   'wan/2-7-text-to-video': 5,
   'wan/2-7-image-to-video': 5,
   'wan/2-7-video-edit': 5,
@@ -207,6 +209,7 @@ export const PRICING = {
 };
 
 export const PRICING_ESTIMATED = new Set([
+  'wan/3-0-video', 'wan/3-0-video-prime',  // resolution-tiered + input-duration billing, published not empirical
   'kling-3-omni/text-to-video', 'kling-3-omni/image-to-video', 'kling-3-omni/reference-to-video', 'kling-3-omni/transformation',  // resolution/audio-tiered, published not yet empirical
   'grok-imagine/text-to-video',        // resolution-tiered 2.4/4.5/8 cr/s — table prices the 720p default
   'grok-imagine/image-to-video',       // same tiers — table prices the 480p default
