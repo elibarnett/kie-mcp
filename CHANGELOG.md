@@ -2,7 +2,9 @@
 
 All notable changes to kie-mcp will be documented here.
 
-## [Unreleased — 5.0.0]
+## [5.0.0] — 2026-08-26
+
+The Vertical Profiles release (#91): kie-mcp now ships per-domain job intelligence alongside its per-model intelligence.
 
 ### Added
 

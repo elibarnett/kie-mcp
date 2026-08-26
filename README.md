@@ -6,6 +6,8 @@ A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.a
 
 Most MCPs are thin API wrappers. This one is different:
 
+- **Vertical profiles (NEW in 5.0)** — per-domain playbooks: `profile_brief` returns the intake questions a professional would ask, model routing per deliverable with live costs, per-model prompt formulas, and multi-tool workflows. Profiles double as MCP prompts (`/kie-art:architecture` in Claude Code). Launch verticals: architecture & interiors, video game assets, advertising & marketing, web & software product imagery.
+
 - **Deep research embedded** — Every major model has a `research` field with verdicts, prompt techniques, weaknesses, cost-efficiency analysis, and competitor comparisons. Researched by **Averiguare**, our model intelligence agent.
 - **Cost-aware** — Every model has pricing in credits and USD. The MCP tells you the cheapest option for your use case.
 - **Smart filtering** — `list_models filter="lip sync"` or `filter="architecture"` or `filter="cheapest video"` — searches across capability tags, descriptions, AND research fields.
@@ -146,6 +148,7 @@ extend_music, cover_audio, upload_extend_audio,
 add_instrumental, add_vocals, replace_section,
 convert_to_wav, separate_vocals, boost_style,
 get_timestamped_lyrics, audio_isolation, speech_to_text,
+profile_brief,
 list_models, check_task, list_tasks, check_credits,
 download_result, list_raw_assets, upload_file,
 grok_segment_map, grok_image_edit, seedream_layer_decompose,
