@@ -8,10 +8,10 @@ export default {
   name: 'Architecture & Interior Design',
   media: ['image'],
   summary: 'Exterior/interior renders, elevations, site plans, concept sketches, material boards — with the questions an architect would ask first.',
-  lastReviewed: '2026-08-26',
+  lastReviewed: '2026-08-27',
 
   intake: [
-    { key: 'deliverable', ask: 'What kind of drawing? (exterior render / interior render / elevation or section / site plan / concept sketch / material board)', why: 'Drives model choice, prompt formula, and whether photorealism matters at all.' },
+    { key: 'deliverable', ask: 'What kind of drawing? (exterior render / interior render / renovation preview from a photo / elevation or section / site plan / concept sketch / material board)', why: 'Drives model choice, prompt formula, and whether photorealism matters at all.' },
     { key: 'purpose', ask: 'Client presentation, planning submission, or internal concept?', why: 'Presentation wants photoreal + entourage; planning wants sober accuracy; concept tolerates looseness and benefits from cheaper draft tiers.' },
     { key: 'camera', ask: 'Camera: eye-level (1.6m), elevated 3/4, aerial, or axonometric? Wide or normal lens feel?', appliesTo: ['exterior render', 'interior render'], why: 'The single biggest realism lever. Eye-level + corrected verticals reads professional; unspecified cameras produce drone-ish nowhere views.' },
     { key: 'light', ask: 'Time of day, season, weather? (e.g. golden hour autumn, overcast winter, dusk with interior lights on)', appliesTo: ['exterior render', 'interior render'], why: 'Light is the mood. Dusk shots sell warmth (interior glow); overcast flattens material contrast; hard noon sun is rarely flattering.' },
@@ -21,6 +21,8 @@ export default {
     { key: 'entourage', ask: 'People, cars, vegetation in shot — and how much?', appliesTo: ['exterior render', 'interior render'], why: 'Presentation renders usually want sparse, believable entourage; models over-populate unless told.' },
     { key: 'interior_specifics', ask: 'Ceiling height, floor level, and what the window view shows?', appliesTo: ['interior render'], why: 'Interior scale errors (4m-tall doors) are the telltale AI artifact; the view out the window grounds the space.' },
     { key: 'reference', ask: 'Do you have plans, massing screenshots, or sketches to work from? (upload_file → image-to-image)', why: 'A reference image moves the job from imagination to visualization — different models and much higher fidelity to the actual design.' },
+    { key: 'reno_changes', ask: 'For renovation previews: list each change with its EXACT material/finish (e.g. "carpet → wide-plank European oak, matte"), one by one.', appliesTo: ['renovation preview'], why: 'The edit model executes a change-list; vague "modernize" instructions make it invent a different room.' },
+    { key: 'reno_keep', ask: 'What must stay exactly as photographed? (furniture, window, layout, the camera itself)', appliesTo: ['renovation preview'], why: 'The preserve clause is what keeps the client\'s room being THEIR room — the single highest-leverage sentence in the prompt.' },
   ],
 
   routing: [
@@ -35,6 +37,11 @@ export default {
         value: { model: 'seedream/5-pro-text-to-image', note: '' },
         final: { model: 'nano-banana-pro', note: 'handles furniture scale + window views best' },
         from_reference: { model: 'flux-kontext-pro', note: 'surgical edits on existing interior photos (staging swaps, material changes)' },
+    }},
+    { deliverable: 'renovation preview', tiers: {
+        default: { model: 'flux-kontext-pro', note: 'surgical instruction-based edits of the client\'s photo; one coherent change-set per pass' },
+        alt: { tool: 'grok_image_edit', note: 'whole-image mode — cheaper (4 cr); good for bolder restyles where pixel-fidelity matters less' },
+        iterate: { tool: 'grok_segment_map', note: 'free segmentation of a result → region-targeted follow-up edits' },
     }},
     { deliverable: 'elevation or section', tiers: {
         default: { model: 'qwen3/text-to-image', note: 'prompt_extend OFF; ask for "flat orthographic architectural elevation, line drawing, no perspective"' },
@@ -77,6 +84,19 @@ export default {
         'Mixed light ("daylight from the left, warm pendant over the table") beats single-source.',
       ],
     },
+    'renovation preview': {
+      structure: '[change 1 with exact material] + [change 2...] + [removals stated as removals] + PRESERVE CLAUSE: "Keep everything else exactly unchanged: the same camera angle, [window/light], [each kept furniture piece], [ceiling/lighting]"',
+      example: 'Replace the wall-to-wall carpet with wide-plank European oak flooring, matte finish, planks running toward the window. Repaint walls warm off-white. Remove the TV cabinet. Install a floor-to-ceiling black steel-framed glass partition in the hallway opening. Keep everything else exactly unchanged: the same camera angle, the window and daylight, the leather sofa, the coffee table, ceiling and lighting.',
+      perModel: {
+        'flux-kontext-pro': 'Pure instruction register — state ONLY what changes, never describe the whole room (describing it invites redrawing it).',
+      },
+      pitfalls: [
+        'The preserve clause is mandatory — without it the model hallucinates new geometry (moved windows, phantom rooms).',
+        'One coherent change-set per pass; pile-ons degrade. Iterate: floor+walls first, joinery second.',
+        'Name materials exactly per change; "modernize" is an invitation to invent.',
+        'Verify structural sanity after: same window positions, same door openings, same room proportions.',
+      ],
+    },
     'elevation or section': {
       structure: '"Flat orthographic architectural [elevation/section], no perspective, line drawing" + [facade description left-to-right] + [material hatching notes] + [scale figures y/n]',
       pitfalls: ['Models fight orthographic projection — repeat "flat, no perspective, no vanishing point".', 'Dimension text will be gibberish below the text-rendering tier (gpt-image-2/ideogram).'],
@@ -90,6 +110,13 @@ export default {
       'Regenerate hero at final tier with the full formula',
       'seedream_layer_decompose the hero → sky/building/foreground layers for post tweaks',
       'recraft/crisp-upscale for print or large-format decks',
+    ]},
+    { name: 'Renovation preview from client photo', steps: [
+      'upload_file the client photo (file_path mode)',
+      'Intake: change-list with exact materials + the keep-list',
+      'flux-kontext-pro: change-list + preserve clause, one coherent pass',
+      'Second pass for remaining changes or fixes (grok_segment_map free → grok_image_edit region fixes)',
+      'Present before/after side by side',
     ]},
     { name: 'Sketch-to-render ladder', steps: [
       'upload_file the hand sketch or massing screenshot',
