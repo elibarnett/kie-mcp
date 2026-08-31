@@ -15,9 +15,11 @@ import filmStoryboard from './film-storyboard.mjs';
 import productPhotography from './product-photography.mjs';
 import brandDesign from './brand-design.mjs';
 import editorial from './editorial.mjs';
+import socialVideo from './social-video.mjs';
+import audioBranding from './audio-branding.mjs';
 
 export const PROFILES = Object.fromEntries(
-  [architecture, gameAssets, advertising, webProduct, filmStoryboard, productPhotography, brandDesign, editorial].map((p) => [p.id, p]),
+  [architecture, gameAssets, advertising, webProduct, filmStoryboard, productPhotography, brandDesign, editorial, socialVideo, audioBranding].map((p) => [p.id, p]),
 );
 
 // Cheap keyword inference for profile_brief calls that pass a request but no
@@ -32,6 +34,8 @@ const KEYWORDS = {
   'brand-design': ['logo', 'brand identity', 'poster', 'typography', 'wordmark', 'stationery', 'business card', 'letterhead', 'brand pattern', 'album cover', 'book cover design'],
   editorial: ['article', 'editorial', 'magazine', 'illustration for a story', 'book cover', 'op-ed', 'column', 'publication', 'newsletter header', 'infographic'],
   'web-product': ['empty state', 'onboarding', 'landing page', 'hero image', 'og image', 'og:image', 'favicon', 'illustration for', 'feature section', 'ui illustration', 'saas', 'app icon', 'icon set', 'icons', '404', 'dashboard', 'web app', 'website'],
+  'social-video': ['tiktok', 'reels', 'reel', 'shorts', 'short-form', 'vertical video', '9:16', 'hook', 'viral', 'ugc', 'talking head', 'avatar video', 'b-roll', 'video ad', 'video series', 'animate this image', 'clip for', 'influencer'],
+  'audio-branding': ['jingle', 'music', 'song', 'track', 'podcast intro', 'podcast', 'voiceover', 'voice over', 'narration', 'tts', 'sound effect', 'sfx', 'sonic logo', 'audio logo', 'theme song', 'background music', 'soundtrack', 'dialogue audio'],
 };
 
 export function inferProfile(request) {
