@@ -73,14 +73,6 @@ export const PRICING = {
   'veo-3-lite/image-to-video': 3.75,  // assumed same as T2V
   'runway/text-to-video': 2.4,        // 12 credits/5s ($0.06)
   'runway/aleph-edit': 6,
-  'sora/text-to-video': 3,            // ~30 credits/10s ($0.15)
-  'sora/image-to-video': 3,
-  'sora-pro/text-to-video': 4.5,      // ~$0.045/s at 720p
-  'sora-pro/image-to-video': 4.5,
-  'sora/characters': 3,
-  'sora/characters-pro': 4.5,
-  'sora/watermark-remover': 10,       // flat
-  'sora/storyboard': 6,
   'seedance-2/text-to-video': 25,     // 720p with video input, per second
   'seedance-2-fast/text-to-video': 20,// 720p with video input, per second
   'seedance/text-to-video': 8,
