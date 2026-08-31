@@ -41,7 +41,6 @@ Just ask Claude things like:
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
 - **ByteDance Seedance**: 2.5 (NEW — 30s single takes, live Aug 2026) / 2.0 / 2.0 Fast / 2.0 Mini / 1.5 Pro
-- **OpenAI Sora 2** ⏸: T2V/I2V, Pro, Characters, Storyboard, Watermark Remover — *paused upstream by kie.ai (June 2026); OpenAI sunsets the Sora API Sept 2026*
 - **Kuaishou Kling**: 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
 - **Alibaba Wan**: 3.0 + 3.0 Prime (NEW — unified prompt-or-media, audio), 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
 - **MiniMax Hailuo**: H3 (NEW — 2K + native stereo audio, image+video+audio references, first→last-frame I2V), 2.3 Pro/Standard, 02 Pro/Standard

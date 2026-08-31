@@ -957,7 +957,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (86+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (16cr/s @768P, NEW). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p, NEW; transformation=restyle existing video). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family is paused upstream by kie.ai (June 2026) — not usable. Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (86+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (16cr/s @768P, NEW). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p, NEW; transformation=restyle existing video). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -966,7 +966,7 @@ const handleListTools = async () => ({
           prompt: { type: 'string', description: 'Video description prompt' },
           model: {
             type: 'string',
-            description: 'Model ID (e.g. "veo-3/text-to-video", "sora/text-to-video", "kling/image-to-video")',
+            description: 'Model ID (e.g. "veo-3/text-to-video", "kling/image-to-video", "wan/3-0-video")',
             default: 'veo-3/text-to-video',
           },
           aspect_ratio: {
@@ -1877,7 +1877,7 @@ const handleCallTool = async (request) => {
         }
 
         if (imageEntries.length === 0 && videoEntries.length === 0 && audioEntries.length === 0) {
-          return { content: [{ type: 'text', text: `No models matching "${filter}". Try: gpt, flux, seedream, imagen, nano, grok, ideogram, qwen, veo, sora, kling, wan, hailuo, seedance, runway, suno, elevenlabs, music, speech, sfx, photorealistic, reasoning, cinematic, lip-sync, upscale` }] };
+          return { content: [{ type: 'text', text: `No models matching "${filter}". Try: gpt, flux, seedream, imagen, nano, grok, ideogram, qwen, veo, kling, wan, hailuo, seedance, runway, suno, elevenlabs, music, speech, sfx, photorealistic, reasoning, cinematic, lip-sync, upscale` }] };
         }
 
         const sections = [];
