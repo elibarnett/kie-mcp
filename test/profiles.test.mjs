@@ -12,6 +12,7 @@ const knownModel = (id) => !!(MODEL_REGISTRY[id] || VIDEO_MODEL_REGISTRY[id]);
 const NON_TOOL_SNAKE = new Set(['prompt_extend', 'image_urls', 'video_urls', 'mask_indexs', 'image_edit', 'text_to_image', 'model_options', 'aspect_ratio', 'first_frame_url', 'last_frame_url', 'file_path', 'base64_data', 'og_image', 'safe_zone', 'multi_prompt', 'competitive_context']);
 const TOOL_NAMES = new Set([
   'generate_image', 'generate_video', 'generate_music', 'generate_sfx', 'generate_tts', 'generate_gemini_tts',
+  'generate_dialogue', 'generate_lyrics', 'extend_music', 'separate_vocals', 'create_music_video',
   'upload_file', 'download_result', 'check_task', 'list_tasks', 'list_models', 'check_credits',
   'grok_segment_map', 'grok_image_edit', 'seedream_layer_decompose',
   'veo_extend', 'veo_upscale_1080p', 'veo_upscale_4k', 'runway_extend', 'profile_brief',

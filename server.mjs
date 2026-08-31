@@ -1561,7 +1561,7 @@ const handleListTools = async () => ({
     // ── Veo Extend & Upscale ──
     {
       name: 'profile_brief',
-      description: 'Get a vertical playbook before generating: the intake questions a professional in that domain would ask, model routing per deliverable with live costs, per-model prompt formulas, and multi-tool workflows. Call with no args to list available profiles. Call this FIRST when the user\'s request belongs to a known vertical (architecture/interiors, and more) — then ask the user only the unanswered intake questions, conversationally.',
+      description: 'Get a vertical playbook before generating: the intake questions a professional in that domain would ask, model routing per deliverable with live costs, per-model prompt formulas, and multi-tool workflows. Call with no args to list available profiles. Covers image, video, and audio verticals (architecture, game assets, advertising, product photography, film, brand, web product, editorial, short-form social video, audio branding). Call this FIRST when the user\'s request belongs to a known vertical — then ask the user only the unanswered intake questions, conversationally.',
       inputSchema: {
         type: 'object',
         properties: {

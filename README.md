@@ -6,7 +6,7 @@ A comprehensive **Model Context Protocol** server for the [kie.ai](https://kie.a
 
 Most MCPs are thin API wrappers. This one is different:
 
-- **Vertical profiles (NEW in 5.0)** — per-domain playbooks: `profile_brief` returns the intake questions a professional would ask, model routing per deliverable with live costs, per-model prompt formulas, and multi-tool workflows. Profiles double as MCP prompts (`/kie-art:architecture` in Claude Code). Launch verticals (8): architecture & interiors, video game assets, advertising & marketing, web & software product imagery, film & storyboarding, product photography & e-commerce, brand & graphic design, editorial & publishing.
+- **Vertical profiles (NEW in 5.0)** — per-domain playbooks: `profile_brief` returns the intake questions a professional would ask, model routing per deliverable with live costs, per-model prompt formulas, and multi-tool workflows. Profiles double as MCP prompts (`/kie-art:architecture` in Claude Code). Verticals (10): architecture & interiors, video game assets, advertising & marketing, web & software product imagery, film & storyboarding, product photography & e-commerce, brand & graphic design, editorial & publishing, short-form social video, and audio branding & music.
 
 - **Deep research embedded** — Every major model has a `research` field with verdicts, prompt techniques, weaknesses, cost-efficiency analysis, and competitor comparisons. Researched by **Averiguare**, our model intelligence agent.
 - **Cost-aware** — Every model has pricing in credits and USD. The MCP tells you the cheapest option for your use case.
