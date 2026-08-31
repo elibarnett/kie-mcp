@@ -2,6 +2,20 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.1.0] — 2026-08-31
+
+Complete-coverage release (#98–#100): profiles now span the full image + video + audio catalog, and the dead Sora family is gone.
+
+### Added
+
+- **social-video profile** (#99) — the first video vertical: TikTok/Reels/Shorts playbook with hook-first structure (the first 2 seconds are a creative input), the image-first cost discipline (approve a 4 cr still before spending 10–50x on video), platform UI safe zones, talking-head/avatar routing (kling avatar, omnihuman-1-5, infinitalk, volcengine re-dub) with platform AI-disclosure and voice-consent gates, multi-scene stories on kling-3-omni, b-roll loops via pixverse-v6/transition, and series consistency via reference-to-video (happyhorse-1-1 / minimax-h3 / seedance-2).
+- **audio-branding profile** (#99) — the first audio vertical: Suno jingles and brand tracks with exact-lyrics proofing, Gemini/ElevenLabs voiceover and multi-speaker dialogue casting, SFX families, sonic logos, `extend_music` length variants of one sonic identity (never regenerated lookalikes), loudness targets per destination (~-14 LUFS streaming, ~-16 podcasts), and a hard voice-clone consent gate. 10 verticals total.
+- **Video handoff tiers in the image verticals** (#100) — architecture gains a walkthrough-video deliverable, advertising a video-ad deliverable, product-photography a product-video deliverable — all on the animate-the-approved-still doctrine (the still carries the design/brand/label QA; video only adds motion). Film-storyboard's animatic handoff now names concrete models (pixverse-v6/transition first/last morph, minimax-h3 first→last interpolation).
+
+### Removed
+
+- **The Sora 2 family** (#98) — all 8 slugs (T2V/I2V, Pro, Characters ×2, Storyboard, Watermark Remover) return "temporarily paused" upstream as of the 2026-08-31 drift scan, ahead of OpenAI's September 24 API shutdown. Registry entries, pricing, MODEL GUIDE references, and README line removed so agents can no longer route to dead endpoints.
+
 ## [5.0.0] — 2026-08-26
 
 The Vertical Profiles release (#91): kie-mcp now ships per-domain job intelligence alongside its per-model intelligence.
