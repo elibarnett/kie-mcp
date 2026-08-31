@@ -5,7 +5,7 @@
 export default {
   id: 'architecture',
   name: 'Architecture & Interior Design',
-  media: ['image'],
+  media: ['image', 'video'],
   summary: 'Exterior/interior renders, renovation previews, elevations, site plans, sketches, material boards — with the questions an architect would ask first.',
   lastReviewed: '2026-08-27',
 
@@ -63,6 +63,12 @@ export default {
     { deliverable: 'material board', tiers: {
         default: { model: 'gpt-image/2-text-to-image', note: 'labeled grid boards — label legibility is the point' },
         composed: { model: 'nano-banana-pro', note: 'multi-image composition from uploaded swatch references' },
+    }},
+    { deliverable: 'walkthrough video', tiers: {
+        default: { model: 'pixverse-v6/image-to-video', note: 'animate the APPROVED still — slow push-in or gentle orbit; the still carries the design, the video only adds motion' },
+        draft: { model: 'wan/flash-image-to-video', note: '6-8 cr/s motion tests' },
+        multi_room_tour: { model: 'kling-3-omni/image-to-video', note: 'per-shot scripted tour via multi_prompt — one approved still per room' },
+        hero: { model: 'veo-3/image-to-video', note: '50 cr/s cinematic final with ambient audio — client-presentation money shot only' },
     }},
   ],
 

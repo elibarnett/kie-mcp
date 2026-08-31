@@ -5,7 +5,7 @@
 export default {
   id: 'product-photography',
   name: 'Product Photography & E-commerce',
-  media: ['image'],
+  media: ['image', 'video'],
   summary: 'Packshots, lifestyle scenes, listing sets, and marketplace-compliant product imagery — built around the REAL product via reference photos.',
   lastReviewed: '2026-08-27',
 
@@ -45,6 +45,12 @@ export default {
     }},
     { deliverable: 'channel adaptation', tiers: {
         default: { model: 'ideogram/v3-reframe', note: 'approved hero → per-ratio outpainting; keep the product inside the original region' },
+    }},
+    { deliverable: 'product video', tiers: {
+        default: { model: 'pixverse-v6/image-to-video', note: 'orbit/hero motion from the APPROVED packshot — "slow 360 orbit, product static, label stays facing camera as long as possible"' },
+        draft: { model: 'wan/flash-image-to-video', note: 'cheap motion tests' },
+        hero: { model: 'veo-3/image-to-video', note: 'ad-grade material physics (fabric, liquid pours, steam) with native audio' },
+        lifestyle_clip: { model: 'kling/image-to-video', note: 'animate the approved lifestyle scene — hands and pours get the same QC as stills' },
     }},
   ],
 

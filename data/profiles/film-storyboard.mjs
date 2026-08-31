@@ -5,7 +5,7 @@
 export default {
   id: 'film-storyboard',
   name: 'Film & Storyboarding',
-  media: ['image'],
+  media: ['image', 'video'],
   summary: 'Storyboards, shot concepts, character/costume lookdev, set design, and mood frames — lens-language-aware, continuity-conscious.',
   lastReviewed: '2026-08-27',
 
@@ -96,7 +96,7 @@ export default {
     ]},
     { name: 'Board → animatic handoff', steps: [
       'Keep TWO exports per panel: annotated (arrows, numbers) for meetings, CLEAN for downstream',
-      'Feed clean frames to image-to-video (panel N and N+1 as first/last frame — the video registry\'s interpolation models); baked annotations poison the animatic',
+      'Feed clean frames to image-to-video: pixverse-v6/transition (first/last-frame morph, panel N → N+1) or minimax-h3/image-to-video (first→last interpolation); baked annotations poison the animatic',
     ]},
   ],
 

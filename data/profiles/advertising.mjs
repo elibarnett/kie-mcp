@@ -5,7 +5,7 @@
 export default {
   id: 'advertising',
   name: 'Advertising & Marketing',
-  media: ['image'],
+  media: ['image', 'video'],
   summary: 'Social posts, display ads, product heroes, campaign key visuals, and A/B variant sets — brand-safe, platform-sized, text-accurate, disclosure-aware.',
   lastReviewed: '2026-08-27',
 
@@ -49,6 +49,12 @@ export default {
     { deliverable: 'OOH-poster mock', tiers: {
         default: { model: 'ideogram/v3-text-to-image', note: 'poster-native typography' },
         final: { model: 'gpt-image/2-text-to-image', note: 'then topaz/image-upscale for large-format' },
+    }},
+    { deliverable: 'video ad', tiers: {
+        default: { model: 'pixverse-v6/image-to-video', note: 'animate the APPROVED key visual — the KV carries the brand QA (hex, logo, copy), the video adds motion' },
+        budget_variants: { model: 'grok-imagine-video-1-5-preview', note: '1.6-3 cr/s with audio — hook/variant testing before committing' },
+        multi_scene: { model: 'kling-3-omni/text-to-video', note: '6-15s bumpers with per-shot scripting via multi_prompt' },
+        hero: { model: 'veo-3/text-to-video', note: '50 cr/s cinematic finals with native audio; ad disclosure rules from the placement intake apply doubly to video' },
     }},
   ],
 
