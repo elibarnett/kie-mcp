@@ -174,7 +174,7 @@ export const PRICING = {
   'volcengine/video-to-video-lip-sync': 8,
   // ── Gemini Omni (Google, May 2026) ──
   'gemini-omni/video': 13.125,            // kie published (2026-09-22): 720P/1080P 63/84/105/126 cr for 4/6/8/10s, 4K +84; video input flat 168 (4K 252). Table = 8s 720P default (105/8)
-  'gemini-omni/flash-1-1': 13.125,         // Gemini Omni 1.1 Flash (Sept 2026) — unpublished; empirical 2026-09-22: 4s @360p charged 63 cr = Omni video's 4s price (360p is NOT cheaper). Table = 8s default like Omni video
+  'gemini-omni/flash-1-1': 13.125,         // Gemini Omni 1.1 Flash (Sept 2026) — unpublished; 2026-09-22: a 4s @360p submit held 63 cr (= Omni video's 4s price, so 360p looks NOT cheaper), but that run failed upstream (timeout) and was refunded — output + final charge unverified. Table = 8s default like Omni video
   'gemini-omni/voice-create': 5,          // flat per voice
   'gemini-omni/character-create': 5,      // flat per character
 

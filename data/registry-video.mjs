@@ -1825,7 +1825,7 @@ export const VIDEO_MODEL_REGISTRY = {
   },  // ── Gemini Omni 1.1 Flash (NEW Sept 2026) — adds 360p and first/last-frame mode ──
   'gemini-omni/flash-1-1': {
     name: 'Gemini Omni 1.1 Flash (Google)',
-    description: 'NEW (Sept 2026) — Gemini Omni 1.1 Flash. Same "anything from anything" surface as gemini-omni/video (7 images / 3 voices / 1 video / character IDs) PLUS a first→last-frame mode (model_options.first_frame_url + last_frame_url) and a 360p tier (faster, but NOT cheaper — a 4s 360p run cost 63 cr, same as Omni video 720p). ~63 cr per 4s clip, ~105 per 8s.',
+    description: 'NEW (Sept 2026) — Gemini Omni 1.1 Flash. Same "anything from anything" surface as gemini-omni/video (7 images / 3 voices / 1 video / character IDs) PLUS a first→last-frame mode (model_options.first_frame_url + last_frame_url) and a 360p tier (a 4s 360p submit held 63 cr, the same as Omni video 720p, so 360p is likely NOT cheaper). Est. ~63 cr per 4s clip, ~105 per 8s. New upstream — the first live run timed out on kie\'s side (refunded); retry or fall back to gemini-omni/video.',
     capabilities: ['cinematic', 'animation', 'audio', 'character', 'multi-reference', 'first-last-frame', 'latest', 'new', 'multimodal', '4k'],
     type: 'market',
     apiModel: 'google/gemini-omni-flash-1-1',
