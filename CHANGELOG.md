@@ -2,6 +2,29 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.2.0] — 2026-09-22
+
+September 2026 model pass: 4 new model families found via a docs-index diff, plus price corrections from the drift watch. Every new endpoint was run live (all succeeded except Gemini Omni 1.1 Flash, which timed out upstream), and every corrected price was confirmed by a real charge except Imagen 4 Standard/Ultra and 2K H3.
+
+### Added
+
+- **GPT Image 2.5** — `gpt-image-2-5/{flare,sunburst}-{text-to-image,image-to-image}`. Flare is the fast default tier and Sunburst the premium tier. Both do 1K/2K/4K (6/10/16 cr), `background: transparent|opaque|auto`, 13 aspect ratios, and up to 16 refs for img2img.
+- **Qwen Image 2.1** — `qwen2-1/text-to-image` + `qwen2-1/image-to-image` (4 cr @1K, 8 @2K). Transparent background, prompt enhancement, 1–10 reference compositing, and `mask_url` inpainting.
+- **Gemini Omni 1.1 Flash** — `gemini-omni/flash-1-1` (`google/gemini-omni-flash-1-1`). The Omni reference surface plus a first→last-frame mode and a 360p tier. kie hasn't published pricing; a live 4s 360p submit held 63 cr (the same as Omni video at 720p), but that first run timed out upstream and was refunded, so output and final cost are still unverified.
+- **OmniHuman 1.5 Human Identification** — `omnihuman-1-5/human-identification`, a free (live-verified) pre-check that a portrait has a usable subject before an omnihuman-1-5 run. The result is reported as a verdict, not a missing file.
+
+### Fixed
+
+- **Upstream-outage guidance** — when kie fails a task with its bare `Internal Error` (500), the error now says it's a kie-side outage, tells the agent NOT to change the prompt, voice, or parameters, and names a fallback: `generate_gemini_tts` for ElevenLabs TTS/dialogue, `nano-banana-2` for Nano Banana. The old wording said it was "safe to retry with changed inputs", which sent agents cycling through voices and models during the Sept 22–23 ElevenLabs and nano-banana-edit outages. Also covers kie's "upstream API service timed out" failures.
+- **Human Identification results** are reported as a verdict (`subject_status`) instead of "completed but no result URLs found".
+
+### Changed (pricing — kie published rates, drift watch 2026-09-22)
+
+- MiniMax H3 (all 3 endpoints): 16 → **8** cr/s @768P (2K 26 → 13). The first 5 input images are now free, then 4 cr each.
+- Imagen 4: standard 5 → **8**, Fast 3 → **4**, Ultra 10 → **12**.
+- Recraft remove-background: 2 → **1**.
+- Gemini Omni video: 30 cr/s estimate → **13.125** (published: 105 cr for the 8s 720P/1080P default; 4K +84; video-input runs flat 168/252).
+
 ## [5.1.0] — 2026-08-31
 
 Complete-coverage release (#98–#100): profiles now span the full image + video + audio catalog, and the dead Sora family is gone.

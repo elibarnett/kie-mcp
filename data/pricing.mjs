@@ -11,6 +11,10 @@ export const PRICING = {
   'gpt-image/1.5-image-to-image': 6,
   'gpt-image/2-text-to-image': 8,     // latest flagship, premium pricing
   'gpt-image/2-image-to-image': 8,
+  'gpt-image-2-5/flare-text-to-image': 6,        // GPT Image 2.5 (Sept 2026) — kie published 6/10/16 cr @1K/2K/4K; 1K empirically 6.0 on all 4 endpoints (2026-09-22)
+  'gpt-image-2-5/flare-image-to-image': 6,
+  'gpt-image-2-5/sunburst-text-to-image': 6,
+  'gpt-image-2-5/sunburst-image-to-image': 6,
   'grok-imagine/text-to-image': 4,
   'grok-imagine/image-to-image': 4,
   'grok-imagine-image-2-0/text-to-image': 4,   // empirical 2026-08-14: exactly 4.0 cr
@@ -25,15 +29,16 @@ export const PRICING = {
   'bytedance/seedream-v4-edit': 3.5,
   'seedream/4.5-text-to-image': 5,
   'seedream/4.5-edit': 5,
-  'google/imagen4': 5,
-  'google/imagen4-fast': 3,
-  'google/imagen4-ultra': 10,
+  'google/imagen4': 8,        // kie raised 5→8 (drift watch 2026-09-22)
+  'google/imagen4-fast': 4,   // kie raised 3→4 (drift watch 2026-09-22; empirically 4.0)
+  'google/imagen4-ultra': 12, // kie raised 10→12 (drift watch 2026-09-22)
   'google/nano-banana': 4,
   'google/nano-banana-edit': 4,
   'nano-banana-2': 4,
   'nano-banana-2-lite': 4,             // empirical 2026-07-02: one 1K gen consumed exactly 4.00 credits (kie's site advertises 3 — the balance delta says otherwise)
   'nano-banana-pro': 24,
   'omnihuman-1-5/subject-detection': 0, // FREE — empirical 2026-07-02: creditsConsumed=0 on a live run
+  'omnihuman-1-5/human-identification': 0, // FREE — empirical 2026-09-22: creditsConsumed=0; returns resultObject.subject_status
   'z-image': 3,
   'ideogram/character': 5,
   'ideogram/character-edit': 5,
@@ -51,8 +56,10 @@ export const PRICING = {
   'qwen/image-edit': 3,
   'qwen2/image-edit': 3,
   'qwen2/text-to-image': 3,
+  'qwen2-1/text-to-image': 4,      // Qwen Image 2.1 (Sept 2026) — kie published: 4 cr @1K, 8 @2K; 1K empirically 4.0 (T2I + I2I, 2026-09-22)
+  'qwen2-1/image-to-image': 4,     // same tiers
   'recraft/crisp-upscale': 2,
-  'recraft/remove-background': 2,
+  'recraft/remove-background': 1, // kie cut 2→1 (drift watch 2026-09-22; empirically 1.0)
   'topaz/image-upscale': 4,
   'seedream/5-pro-text-to-image': 7,       // 1K/1.5K; 2K 14 (published, drift 2026-08-26)
   'seedream/5-pro-image-to-image': 7,      // + 0.5 cr per input image, first free
@@ -99,9 +106,9 @@ export const PRICING = {
   'hailuo/text-to-video-standard': 4,
   'hailuo/image-to-video': 8,
   'hailuo/image-to-video-standard': 4,
-  'minimax-h3/text-to-video': 16,      // 768P; 2K 26; +8 cr per extra input image (published)
-  'minimax-h3/image-to-video': 16,     // same tiers
-  'minimax-h3/reference-to-video': 16, // same tiers; video refs billed at resolution rate
+  'minimax-h3/text-to-video': 8,       // kie halved (drift 2026-09-22): 768P 8, 2K 13 (was 16/26); input images 4 cr each. Empirical: 6s 768P T2V = 48.0 cr
+  'minimax-h3/image-to-video': 8,      // same tiers
+  'minimax-h3/reference-to-video': 8,  // same tiers; video refs billed at resolution rate
   'hailuo/2-3-image-to-video-pro': 8,
   'hailuo/2-3-image-to-video-standard': 4,
   'kling/text-to-video': 10,
@@ -166,7 +173,8 @@ export const PRICING = {
   // ── Volcengine lip-sync — kie published: 8 cr/s of generated video (follows audio duration) ──
   'volcengine/video-to-video-lip-sync': 8,
   // ── Gemini Omni (Google, May 2026) ──
-  'gemini-omni/video': 30,                // per second — estimated based on 4K capability
+  'gemini-omni/video': 13.125,            // kie published (2026-09-22): 720P/1080P 63/84/105/126 cr for 4/6/8/10s, 4K +84; video input flat 168 (4K 252). Table = 8s 720P default (105/8)
+  'gemini-omni/flash-1-1': 13.125,         // Gemini Omni 1.1 Flash (Sept 2026) — unpublished; 2026-09-22: a 4s @360p submit held 63 cr (= Omni video's 4s price, so 360p looks NOT cheaper), but that run failed upstream (timeout) and was refunded — output + final charge unverified. Table = 8s default like Omni video
   'gemini-omni/voice-create': 5,          // flat per voice
   'gemini-omni/character-create': 5,      // flat per character
 
@@ -239,6 +247,10 @@ export const PRICING_ESTIMATED = new Set([
   'happyhorse/reference-to-video',
   'happyhorse/video-edit',
   'gemini-omni/video',
+  'gemini-omni/flash-1-1',
+  'gpt-image-2-5/flare-text-to-image', 'gpt-image-2-5/flare-image-to-image',  // resolution-tiered 6/10/16
+  'gpt-image-2-5/sunburst-text-to-image', 'gpt-image-2-5/sunburst-image-to-image',
+  'qwen2-1/text-to-image', 'qwen2-1/image-to-image',  // 2K doubles
   // v4.1.0 additions: kie publishes per-second rates for these, but the rate varies by
   // resolution (and for seedance-2-mini by video-input presence) — the single number in
   // PRICING assumes the default config, so flag it as an estimate.
@@ -303,4 +315,7 @@ export const PROMPT_CAPS = {
   'bytedance/v1-pro-fast-image-to-video': 10000,
   'bytedance/v1-lite-text-to-video': 10000, 'bytedance/v1-lite-image-to-video': 10000,
   'bytedance/seedance-2': 20000, 'bytedance/seedance-2-fast': 20000,
+  'gpt-image-2-5-flare-text-to-image': 20000, 'gpt-image-2-5-flare-image-to-image': 20000,
+  'gpt-image-2-5-sunburst-text-to-image': 20000, 'gpt-image-2-5-sunburst-image-to-image': 20000,
+  'qwen2-1/text-to-image': 5000, 'qwen2-1/image-to-image': 5000,
 };

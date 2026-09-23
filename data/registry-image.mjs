@@ -103,6 +103,82 @@ export const MODEL_REGISTRY = {
     },
   },
 
+  // GPT Image 2.5 (Sept 2026) — Flare = fast default, Sunburst = premium. Priced 6/10/16 cr (1K/2K/4K) for both.
+  'gpt-image-2-5/flare-text-to-image': {
+    name: 'GPT Image 2.5 Flare',
+    description: 'NEW (Sept 2026) — OpenAI GPT Image 2.5 Flare: fast default tier — lower latency, built for social/product/high-volume work. 1K/2K/4K + transparent background. 6 cr @1K, 10 @2K, 16 @4K.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'latest', 'new', 'transparent-background', '4k', 'architecture', 'concept-art', 'game-art', 'fast'],
+    type: 'market',
+    apiModel: 'gpt-image-2-5-flare-text-to-image',
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '27:16', '16:27', '9:8', '8:9'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '1K 6 cr, 2K 10 cr, 4K 16 cr. 27:16/16:27/9:8/8:9 are 1K-only' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto', description: 'transparent = real alpha channel PNG' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto' };
+      if (opts.resolution) input.resolution = opts.resolution;
+      if (opts.background) input.background = opts.background;
+      return input;
+    },
+  },
+  'gpt-image-2-5/flare-image-to-image': {
+    name: 'GPT Image 2.5 Flare (img2img)',
+    description: 'NEW (Sept 2026) — OpenAI GPT Image 2.5 Flare (img2img, up to 16 refs): fast default tier — lower latency, built for social/product/high-volume work. 1K/2K/4K + transparent background. 6 cr @1K, 10 @2K, 16 @4K.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'latest', 'new', 'transparent-background', '4k', 'editing', 'multi-reference', 'composition', 'fast'],
+    type: 'market',
+    apiModel: 'gpt-image-2-5-flare-image-to-image',
+    requiresImage: true,
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '27:16', '16:27', '9:8', '8:9'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '1K 6 cr, 2K 10 cr, 4K 16 cr. 27:16/16:27/9:8/8:9 are 1K-only' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto', description: 'transparent = real alpha channel PNG' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, input_urls: imageUrls, aspect_ratio: aspectRatio || 'auto' };
+      if (opts.resolution) input.resolution = opts.resolution;
+      if (opts.background) input.background = opts.background;
+      return input;
+    },
+  },
+  'gpt-image-2-5/sunburst-text-to-image': {
+    name: 'GPT Image 2.5 Sunburst',
+    description: 'NEW (Sept 2026) — OpenAI GPT Image 2.5 Sunburst: premium tier — tighter control and more polished output for campaign/branded/production assets. 1K/2K/4K + transparent background. 6 cr @1K, 10 @2K, 16 @4K.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'latest', 'new', 'transparent-background', '4k', 'architecture', 'concept-art', 'game-art', 'premium'],
+    type: 'market',
+    apiModel: 'gpt-image-2-5-sunburst-text-to-image',
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '27:16', '16:27', '9:8', '8:9'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '1K 6 cr, 2K 10 cr, 4K 16 cr. 27:16/16:27/9:8/8:9 are 1K-only' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto', description: 'transparent = real alpha channel PNG' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto' };
+      if (opts.resolution) input.resolution = opts.resolution;
+      if (opts.background) input.background = opts.background;
+      return input;
+    },
+  },
+  'gpt-image-2-5/sunburst-image-to-image': {
+    name: 'GPT Image 2.5 Sunburst (img2img)',
+    description: 'NEW (Sept 2026) — OpenAI GPT Image 2.5 Sunburst (img2img, up to 16 refs): premium tier — tighter control and more polished output for campaign/branded/production assets. 1K/2K/4K + transparent background. 6 cr @1K, 10 @2K, 16 @4K.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'latest', 'new', 'transparent-background', '4k', 'editing', 'multi-reference', 'composition', 'premium'],
+    type: 'market',
+    apiModel: 'gpt-image-2-5-sunburst-image-to-image',
+    requiresImage: true,
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '27:16', '16:27', '9:8', '8:9'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '1K 6 cr, 2K 10 cr, 4K 16 cr. 27:16/16:27/9:8/8:9 are 1K-only' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto', description: 'transparent = real alpha channel PNG' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, input_urls: imageUrls, aspect_ratio: aspectRatio || 'auto' };
+      if (opts.resolution) input.resolution = opts.resolution;
+      if (opts.background) input.background = opts.background;
+      return input;
+    },
+  },
+
   // GPT Image 1.5
   'gpt-image/1.5-text-to-image': {
     name: 'GPT Image 1.5',
@@ -407,6 +483,17 @@ export const MODEL_REGISTRY = {
     description: 'FREE utility (creditsConsumed=0, verified live 2026-07-02) — detects up to 5 subjects in an image and returns mask images. Feed the masks to omnihuman-1-5 (mask_url) to control which subject speaks in multi-person scenes.',
     capabilities: ['utility', 'mask', 'avatar-prep'],
     research: { verdict: 'Companion utility for the OmniHuman 1.5 pipeline, mirroring BytePlus\'s official Subject Detection pre-step: pass a portrait image, get back mask images for each detected subject (up to 5). Functionally required for multi-person OmniHuman work — you pass the chosen mask(s) as mask_url in the omnihuman-1-5 call so the correct subject speaks. For single-person, front-facing portraits you can skip it entirely. kie also exposes omnihuman-1-5/human-identification (validates that an image contains a usable animatable subject before spending generation credits); we deliberately did not add a tool for it — OmniHuman itself fails fast with a clear error on unusable images, so the pre-check adds a roundtrip without saving meaningful cost.', bestFor: ['multi-person OmniHuman scenes: isolate each character, generate per-character clips with their audio', 'building conversation videos where different subjects speak in turn'], weaknesses: ['only useful as OmniHuman prep — not a general segmentation tool', 'image must be JPG/PNG ≤5MB, resolution under 4096x4096'], promptTechniques: ['no prompt needed — pass the portrait via image_urls', 'use a clear image where each subject is distinct'], communityInsights: ['mirrors the documented BytePlus Subject Recognition → Subject Detection → Video Generation workflow'], costEfficiency: 'FREE — a live run on 2026-07-02 reported creditsConsumed: 0. No reason not to use it before any multi-person OmniHuman generation.', comparedTo: { 'omnihuman-1-5': 'This is the prep step; omnihuman-1-5 consumes its mask output via mask_url.' }, lastResearched: '2026-07-02', sources: ['https://docs.kie.ai/market/omnihuman-1-5/subject-detection', 'https://docs.byteplus.com/en/docs/byteplus-vision/omnihuman1_5overview'] },
+    type: 'market',
+    requiresImage: true,
+    options: {},
+    buildInput(_prompt, _ar, imageUrls) {
+      return { image_url: imageUrls?.[0] };
+    },
+  },
+  'omnihuman-1-5/human-identification': {
+    name: 'OmniHuman 1.5 Human Identification',
+    description: 'NEW (Sept 2026) utility — checks whether a portrait contains a usable human / human-like / anthropomorphic subject before you spend credits on omnihuman-1-5. Pass one image (JPG/PNG <5MB, <4096px). FREE (verified live 2026-09-22) — returns a verdict (subject_status), no file.',
+    capabilities: ['utility', 'avatar-prep'],
     type: 'market',
     requiresImage: true,
     options: {},
@@ -900,6 +987,56 @@ export const MODEL_REGISTRY = {
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
       return { prompt, image_size: aspectRatio, ...opts };
+    },
+  },
+  // Qwen Image 2.1 (Sept 2026)
+  'qwen2-1/text-to-image': {
+    name: 'Qwen Image 2.1',
+    description: 'NEW (Sept 2026) — Qwen Image 2.1. 1K/2K, transparent background, prompt enhancement. 4 cr @1K, 8 @2K.',
+    capabilities: ['illustration', 'anime', 'photorealistic', 'text-rendering', 'transparent-background', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'qwen2-1/text-to-image',
+    aspectRatios: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16', '21:9', '9:21'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K'], default: '1K', description: '1K 4 cr, 2K 8 cr' },
+      background: { type: 'string', enum: ['opaque', 'transparent'], default: 'opaque', description: 'transparent needs png/webp output; describe only the subject' },
+      output_format: { type: 'string', enum: ['png', 'webp', 'jpeg'], default: 'png' },
+      enhance_prompt: { type: 'boolean', default: true, description: 'Let Qwen expand the prompt' },
+      seed: { type: 'number' },
+      nsfw_checker: { type: 'boolean' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || '1:1', resolution: opts.resolution || '1K' };
+      for (const k of ['background', 'output_format', 'enhance_prompt', 'seed', 'nsfw_checker']) {
+        if (opts[k] !== undefined) input[k] = opts[k];
+      }
+      return input;
+    },
+  },
+  'qwen2-1/image-to-image': {
+    name: 'Qwen Image 2.1 (img2img)',
+    description: 'NEW (Sept 2026) — Qwen Image 2.1: 1-10 reference images with multi-image compositing and mask inpainting. 1K/2K, transparent background, prompt enhancement. 4 cr @1K, 8 @2K.',
+    capabilities: ['editing', 'multi-reference', 'inpainting', 'transparent-background', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'qwen2-1/image-to-image',
+    requiresImage: true,
+    aspectRatios: ['auto', '1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16', '21:9', '9:21'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K'], default: '1K', description: '1K 4 cr, 2K 8 cr' },
+      background: { type: 'string', enum: ['opaque', 'transparent'], default: 'opaque', description: 'transparent needs png/webp output; describe only the subject' },
+      output_format: { type: 'string', enum: ['png', 'webp', 'jpeg'], default: 'png' },
+      enhance_prompt: { type: 'boolean', default: true, description: 'Let Qwen expand the prompt' },
+      seed: { type: 'number' },
+      nsfw_checker: { type: 'boolean' },
+      mask_url: { type: 'string', description: 'Inpaint mask (white = change, black = keep). Needs exactly ONE reference image; ignores aspect_ratio; not compatible with transparent background' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto', resolution: opts.resolution || '1K' };
+      input.image_urls = (imageUrls || []).slice(0, 10);
+      for (const k of ['background', 'output_format', 'enhance_prompt', 'seed', 'nsfw_checker', 'mask_url']) {
+        if (opts[k] !== undefined) input[k] = opts[k];
+      }
+      return input;
     },
   },
 };
