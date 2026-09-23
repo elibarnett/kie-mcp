@@ -347,3 +347,31 @@ test('resolveVoice — name/id acceptance + catalog on miss (issues #26, 4.0.5)'
   assert.equal(resolveVoice(id), id, 'passes through a valid id');
   assert.throws(() => resolveVoice('DefinitelyNotARealVoiceName'), /allowed voice set/, 'unknown throws with catalog');
 });
+
+test('Sept 2026 model pass — new entries build the documented inputs', async () => {
+  const { MODEL_REGISTRY, VIDEO_MODEL_REGISTRY, PRICING } = await import('../server.mjs');
+  const flare = MODEL_REGISTRY['gpt-image-2-5/flare-text-to-image'];
+  assert.deepEqual(flare.buildInput('p', undefined, [], { resolution: '4K', background: 'transparent' }),
+    { prompt: 'p', aspect_ratio: 'auto', resolution: '4K', background: 'transparent' });
+  const sunI2I = MODEL_REGISTRY['gpt-image-2-5/sunburst-image-to-image'];
+  assert.equal(sunI2I.apiModel, 'gpt-image-2-5-sunburst-image-to-image');
+  assert.deepEqual(sunI2I.buildInput('p', '1:1', ['u'], {}).input_urls, ['u']);
+
+  const qwen = MODEL_REGISTRY['qwen2-1/image-to-image'];
+  const qi = qwen.buildInput('p', undefined, Array(12).fill('u'), { mask_url: 'm', resolution: '2K' });
+  assert.equal(qi.image_urls.length, 10, 'caps refs at 10');
+  assert.equal(qi.mask_url, 'm');
+  assert.equal(qi.aspect_ratio, 'auto');
+
+  const omni = VIDEO_MODEL_REGISTRY['gemini-omni/flash-1-1'];
+  assert.equal(omni.apiModel, 'google/gemini-omni-flash-1-1');
+  const ff = omni.buildInput('p', '9:16', [], { first_frame_url: 'a', last_frame_url: 'b', resolution: '360p' });
+  assert.deepEqual([ff.first_frame_url, ff.last_frame_url, ff.resolution, ff.image_urls], ['a', 'b', '360p', undefined]);
+  assert.throws(() => omni.buildInput('p', '16:9', ['img'], { first_frame_url: 'a' }), /cannot be combined/);
+  assert.throws(() => omni.buildInput('p', '16:9', [], { last_frame_url: 'b' }), /requires first_frame_url/);
+
+  for (const k of ['gpt-image-2-5/flare-text-to-image', 'qwen2-1/text-to-image', 'gemini-omni/flash-1-1', 'omnihuman-1-5/human-identification']) {
+    assert.equal(typeof PRICING[k], 'number', `${k} priced`);
+  }
+  assert.equal(PRICING['minimax-h3/text-to-video'], 8, 'H3 price halved Sept 2026');
+});

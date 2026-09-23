@@ -495,6 +495,13 @@ async function pollOnce(method, path) {
   }
 }
 
+// Closest working substitute to suggest when a model's provider is down.
+function upstreamFallback(model = '') {
+  if (/^elevenlabs\/text-to-(speech|dialogue)/.test(model)) return 'generate_gemini_tts (Google voices; also does 2-speaker dialogue)';
+  if (model === 'google/nano-banana-edit' || model === 'google/nano-banana') return 'nano-banana-2 (pass the reference in image_urls)';
+  return null;
+}
+
 // Tag an error with the task it belongs to so the top-level handler can append
 // recovery guidance. stillRunning=true means the task was NOT observed to fail —
 // it likely completes upstream (and is billed), so callers must poll, not re-submit.
@@ -861,7 +868,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.1.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.2.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -869,7 +876,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (47+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest). Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -957,7 +964,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (86+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (16cr/s @768P, NEW). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p, NEW; transformation=restyle existing video). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, ~63cr per 4s clip at any res up to 1080p). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p, NEW; transformation=restyle existing video). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1740,6 +1747,18 @@ const handleCallTool = async (request) => {
         // Poll until done — pass modelId so dedicated endpoints use their own polling URL
         const result = await pollTask(taskId, pollBudgetMs('image', args), modelId);
         const resultUrls = extractResultUrls(result);
+
+        // OmniHuman human-identification returns a verdict, not a file:
+        // resultJson = {"resultObject":{"subject_status":1}} (live-verified 2026-09-22).
+        if (modelId === 'omnihuman-1-5/human-identification') {
+          let status;
+          try { const rj = typeof result.resultJson === 'string' ? JSON.parse(result.resultJson) : result.resultJson; status = rj?.resultObject?.subject_status; } catch { /* fall through */ }
+          if (status !== undefined) {
+            taskEntry.status = 'success'; appendTaskLog(taskEntry);
+            const ok = status === 1 || status === true;
+            return { content: [{ type: 'text', text: `${ok ? '✅ Usable subject detected' : '⚠️ No usable human/humanoid subject detected'} (subject_status=${status}).\n${ok ? 'Safe to use this image with omnihuman-1-5.' : 'Pick a clearer front-facing portrait before spending credits on omnihuman-1-5.'}\nCost: ${formatCost(modelId, result)}` }] };
+          }
+        }
 
         if (resultUrls.length === 0) {
           taskEntry.status = 'no_urls'; appendTaskLog(taskEntry);
@@ -2984,6 +3003,14 @@ const handleCallTool = async (request) => {
         ].join('\n');
       } else {
         text += `\n\nTask ID: ${error.taskId} — the task failed upstream (failed tasks are typically not billed; verify with check_credits). Inspect with check_task task_id=${error.taskId}.`;
+        // kie's bare "Internal Error" (failCode 500) is a provider-side outage, not a
+        // bad request — replaying the identical input succeeds once it clears
+        // (observed 2026-09-22/23 for ElevenLabs and nano-banana-edit). Stop agents
+        // from burning turns tweaking voices/prompts, and point at a fallback.
+        if (/internal error|try again later/i.test(error.message)) {
+          const fallback = upstreamFallback(entry?.model);
+          text += `\n\nℹ️ This is a kie.ai-side outage for this model, not a problem with your input — do NOT change the prompt, voice, or parameters. Retry the same call in a few minutes${fallback ? `, or switch to ${fallback}` : ', or switch to a different model'}.`;
+        }
       }
     }
     return { content: [{ type: 'text', text }], isError: true };
@@ -3048,7 +3075,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '5.1.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '5.2.0', sessions: sessions.size }));
       return;
     }
 

@@ -694,15 +694,15 @@ export const VIDEO_MODEL_REGISTRY = {
   // ── MiniMax H3 (Hailuo-03) — unified 2K generation + editing with native stereo audio ──
   'minimax-h3/text-to-video': {
     name: 'MiniMax H3',
-    description: 'NEW (Aug 2026) — MiniMax\'s Hailuo-03 flagship: unified generation + editing, up to 2K with native stereo sound. 16 cr/s @768P, 26 @2K (+8 cr per extra input image).',
+    description: 'NEW (Aug 2026) — MiniMax\'s Hailuo-03 flagship: unified generation + editing, up to 2K with native stereo sound. 8 cr/s @768P, 13 @2K (kie halved prices Sept 2026; first 5 input images free, then 4 cr each).',
     capabilities: ['cinematic', 'audio', 'character', 'latest', 'new'],
-    research: { verdict: 'MiniMax\'s Hailuo-03 ("H3") became official on kie in August 2026 after a soft launch (slugs routed since Aug 10; docs pages and catalog card followed) — pitched as unified video generation AND editing: prompts plus multimodal references produce up to 2K output with native stereo sound and consistent characters. Three endpoints: T2V (prompt + aspect + duration), I2V (first_frame_url AND optional last_frame_url — first/last-frame interpolation like PixVerse Transition but with the flagship engine), and R2V accepting reference images, videos, AND audio in one call — the broadest reference surface on kie alongside Gemini Omni. Video input is billed at the output-resolution rate; extra input images 8 cr each. Live-probed repeatedly Aug 10-26; no kie-side generations yet, and the family\'s Arena placement is pending — Hailuo 2.3 remains the benchmarked fallback.', bestFor: ['2K output with native stereo audio in one pass', 'first→last-frame interpolation on a flagship engine (I2V with both frames)', 'multimodal reference workflows: character images + motion video + audio reference in one call', 'succeeding Hailuo 2.3 where audio matters'], weaknesses: ['no independent benchmarks yet for H3 specifically', 'reference videos billed at the resolution rate — long refs inflate cost', '8 cr per additional input image adds up in multi-ref calls', 'resolution field is pricing-tier-derived (768P/2K) — not shown in docs samples'], promptTechniques: ['I2V: supply both first_frame_url and last_frame_url for controlled interpolation', 'R2V: keep reference videos short (billed by duration at the output rate)', 'describe camera movement explicitly — samples lead with it'], costEfficiency: '16 cr/s @768P / 26 @2K published (+8 cr/extra image; video input at resolution rate). Between Hailuo 2.3 Standard and Pro. PRICING_ESTIMATED pending empirical confirmation.', comparedTo: { 'hailuo/2-3-image-to-video-pro': '2.3 Pro is benchmark-proven; H3 adds 2K, stereo audio, and the unified edit/reference surface.', 'happyhorse/text-to-video': 'Both are Chinese flagship unifieds; HappyHorse 1.1 has the lip-sync/language edge, H3 the 2K+stereo pitch.', 'pixverse-v6/transition': 'PixVerse Transition is the budget first→last-frame morph; H3 I2V does it on a flagship engine at ~2-3x the rate.' }, lastResearched: '2026-08-26', sources: ['https://docs.kie.ai/market/minimax-h3/text-to-video', 'https://docs.kie.ai/market/minimax-h3/reference-to-video', 'https://kie.ai/minimax-h3'] },
+    research: { verdict: 'MiniMax\'s Hailuo-03 ("H3") became official on kie in August 2026 after a soft launch (slugs routed since Aug 10; docs pages and catalog card followed) — pitched as unified video generation AND editing: prompts plus multimodal references produce up to 2K output with native stereo sound and consistent characters. Three endpoints: T2V (prompt + aspect + duration), I2V (first_frame_url AND optional last_frame_url — first/last-frame interpolation like PixVerse Transition but with the flagship engine), and R2V accepting reference images, videos, AND audio in one call — the broadest reference surface on kie alongside Gemini Omni. Video input is billed at the output-resolution rate; extra input images (beyond 5 free) 4 cr each. Live-probed repeatedly Aug 10-26; no kie-side generations yet, and the family\'s Arena placement is pending — Hailuo 2.3 remains the benchmarked fallback.', bestFor: ['2K output with native stereo audio in one pass', 'first→last-frame interpolation on a flagship engine (I2V with both frames)', 'multimodal reference workflows: character images + motion video + audio reference in one call', 'succeeding Hailuo 2.3 where audio matters'], weaknesses: ['no independent benchmarks yet for H3 specifically', 'reference videos billed at the resolution rate — long refs inflate cost', 'images beyond the first 5 cost 4 cr each', 'resolution field is pricing-tier-derived (768P/2K) — not shown in docs samples'], promptTechniques: ['I2V: supply both first_frame_url and last_frame_url for controlled interpolation', 'R2V: keep reference videos short (billed by duration at the output rate)', 'describe camera movement explicitly — samples lead with it'], costEfficiency: '8 cr/s @768P / 13 @2K published Sept 2026 (halved from 16/26; first 5 images free, then 4 cr each; video input at resolution rate). Now at Hailuo 2.3 Pro parity. PRICING_ESTIMATED pending empirical confirmation.', comparedTo: { 'hailuo/2-3-image-to-video-pro': '2.3 Pro is benchmark-proven; H3 adds 2K, stereo audio, and the unified edit/reference surface.', 'happyhorse/text-to-video': 'Both are Chinese flagship unifieds; HappyHorse 1.1 has the lip-sync/language edge, H3 the 2K+stereo pitch.', 'pixverse-v6/transition': 'PixVerse Transition is the budget first→last-frame morph; H3 I2V does it on a flagship engine at ~2-3x the rate.' }, lastResearched: '2026-08-26', sources: ['https://docs.kie.ai/market/minimax-h3/text-to-video', 'https://docs.kie.ai/market/minimax-h3/reference-to-video', 'https://kie.ai/minimax-h3'] },
     type: 'market',
     apiModel: 'minimax-h3/text-to-video',
     aspectRatios: ['16:9', '9:16', '1:1', 'adaptive'],
     options: {
       duration: { type: 'number', min: 3, max: 10, default: 6, description: 'Duration in seconds (docs sample: 6)' },
-      resolution: { type: 'string', enum: ['768P', '2K'], description: 'Pricing tier: 768P 16 cr/s, 2K 26 cr/s. Omit for kie default (field derived from pricing, not docs samples).' },
+      resolution: { type: 'string', enum: ['768P', '2K'], description: 'Pricing tier: 768P 8 cr/s, 2K 13 cr/s. Omit for kie default (field derived from pricing, not docs samples).' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
       const input = { prompt, aspect_ratio: aspectRatio, duration: opts.duration ?? 6 };
@@ -712,7 +712,7 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'minimax-h3/image-to-video': {
     name: 'MiniMax H3 I2V',
-    description: 'NEW (Aug 2026) — H3 image-to-video with first→last-frame interpolation (pass first_frame_url via image_urls[0]; optional last frame via model_options.last_frame_url). 16 cr/s @768P, 26 @2K.',
+    description: 'NEW (Aug 2026) — H3 image-to-video with first→last-frame interpolation (pass first_frame_url via image_urls[0]; optional last frame via model_options.last_frame_url). 8 cr/s @768P, 13 @2K.',
     capabilities: ['cinematic', 'audio', 'latest', 'new'],
     type: 'market',
     apiModel: 'minimax-h3/image-to-video',
@@ -732,7 +732,7 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'minimax-h3/reference-to-video': {
     name: 'MiniMax H3 R2V',
-    description: 'NEW (Aug 2026) — H3 reference-to-video: reference IMAGES + VIDEOS + AUDIO in one call (broadest reference surface on kie). Images via image_urls; videos/audio via model_options. +8 cr per extra image; video refs billed at resolution rate.',
+    description: 'NEW (Aug 2026) — H3 reference-to-video: reference IMAGES + VIDEOS + AUDIO in one call (broadest reference surface on kie). Images via image_urls; videos/audio via model_options. first 5 images free, then 4 cr each; video refs billed at resolution rate.',
     capabilities: ['character', 'cinematic', 'audio', 'latest', 'new'],
     type: 'market',
     apiModel: 'minimax-h3/reference-to-video',
@@ -1819,6 +1819,59 @@ export const VIDEO_MODEL_REGISTRY = {
       if (audioIds.length) input.audio_ids = audioIds;
       if (characterIds.length) input.character_ids = characterIds;
       if (videoList.length) input.video_list = videoList;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },  // ── Gemini Omni 1.1 Flash (NEW Sept 2026) — adds 360p and first/last-frame mode ──
+  'gemini-omni/flash-1-1': {
+    name: 'Gemini Omni 1.1 Flash (Google)',
+    description: 'NEW (Sept 2026) — Gemini Omni 1.1 Flash. Same "anything from anything" surface as gemini-omni/video (7 images / 3 voices / 1 video / character IDs) PLUS a first→last-frame mode (model_options.first_frame_url + last_frame_url) and a 360p tier (faster, but NOT cheaper — a 4s 360p run cost 63 cr, same as Omni video 720p). ~63 cr per 4s clip, ~105 per 8s.',
+    capabilities: ['cinematic', 'animation', 'audio', 'character', 'multi-reference', 'first-last-frame', 'latest', 'new', 'multimodal', '4k'],
+    type: 'market',
+    apiModel: 'google/gemini-omni-flash-1-1',
+    aspectRatios: ['16:9', '9:16'],
+    maxPromptChars: 20000,
+    options: {
+      duration: { type: 'string', enum: ['4', '6', '8', '10'], default: '8', description: 'Duration in seconds (ignored when a video reference is supplied)' },
+      resolution: { type: 'string', enum: ['360p', '720p', '1080p', '4k'], default: '720p' },
+      first_frame_url: { type: 'string', description: 'Start frame. Exclusive with image_urls, audio_ids, character_ids and video_list' },
+      last_frame_url: { type: 'string', description: 'End frame — requires first_frame_url' },
+      audio_ids: { type: 'array', items: { type: 'string' }, description: 'Voice IDs from create_omni_voice' },
+      character_ids: { type: 'array', items: { type: 'string' }, description: 'Character IDs from create_omni_character (1 slot each; 2 for portrait+body sets)' },
+      video_list: { type: 'array', items: { type: 'object' }, description: 'Max 1 reference video {url, start, ends} (≤100MB, ≤30s, ends-start ≤10s; takes 2 image slots)' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = {
+        prompt,
+        aspect_ratio: aspectRatio || '16:9',
+        duration: String(opts.duration || '8'),
+        resolution: opts.resolution || '720p',
+      };
+      const images = Array.isArray(imageUrls) ? imageUrls.slice(0, 7) : [];
+      const audioIds = Array.isArray(opts.audio_ids) ? opts.audio_ids.slice(0, 3) : [];
+      const characterIds = Array.isArray(opts.character_ids) ? opts.character_ids.slice(0, 7) : [];
+      const videoList = Array.isArray(opts.video_list) ? opts.video_list.slice(0, 1) : [];
+      if (opts.last_frame_url && !opts.first_frame_url) {
+        throw new Error('gemini-omni/flash-1-1: last_frame_url requires first_frame_url');
+      }
+      if (opts.first_frame_url) {
+        if (images.length || audioIds.length || characterIds.length || videoList.length) {
+          throw new Error('gemini-omni/flash-1-1: first_frame_url cannot be combined with image_urls, audio_ids, character_ids or video_list');
+        }
+        input.first_frame_url = opts.first_frame_url;
+        if (opts.last_frame_url) input.last_frame_url = opts.last_frame_url;
+      } else {
+        // Reference slot quota: images + videos×2 + character_ids ≤ 7 (per kie.ai docs).
+        const quota = images.length + videoList.length * 2 + characterIds.length;
+        if (quota > 7) {
+          throw new Error(`gemini-omni/flash-1-1 reference quota exceeded: images(${images.length}) + videos×2(${videoList.length * 2}) + character_ids(${characterIds.length}) = ${quota}, must be ≤ 7`);
+        }
+        if (images.length) input.image_urls = images;
+        if (audioIds.length) input.audio_ids = audioIds;
+        if (characterIds.length) input.character_ids = characterIds;
+        if (videoList.length) input.video_list = videoList;
+      }
       if (opts.seed !== undefined) input.seed = opts.seed;
       return input;
     },
