@@ -25,7 +25,7 @@ export const PRICING = {
   'flux-2/flex-text-to-image': 4,
   'flux-2/flex-image-to-image': 4,
   'bytedance/seedream': 3.5,
-  'bytedance/seedream-v4-text-to-image': 3.5,
+  'bytedance/seedream-v4-text-to-image': 5,   // empirical 2026-09-24: a square T2I charged exactly 5.0 (table said 3.5)
   'bytedance/seedream-v4-edit': 3.5,
   'seedream/4.5-text-to-image': 5,
   'seedream/4.5-edit': 5,
