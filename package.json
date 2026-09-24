@@ -1,7 +1,7 @@
 {
   "name": "kie-mcp",
   "mcpName": "io.github.elibarnett/kie-mcp",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "private": false,
   "type": "module",
   "description": "MCP server for kie.ai — 60+ image models, 85+ video models, 20+ audio tools with deep model intelligence",

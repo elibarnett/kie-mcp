@@ -2,7 +2,7 @@
 
 All notable changes to kie-mcp will be documented here.
 
-## [Unreleased]
+## [5.2.1] — 2026-09-24
 
 ### Fixed
 

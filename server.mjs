@@ -947,7 +947,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.2.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.2.1' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -3189,7 +3189,7 @@ if (httpFlag) {
     // Health check
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '5.2.0', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: '5.2.1', sessions: sessions.size }));
       return;
     }
 
