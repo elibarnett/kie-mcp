@@ -2,6 +2,14 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **upload_file names images by their real format.** kie's upload host serves files with a Content-Type taken from the filename. A JPEG saved as `.png` was therefore served as `image/png`, and Veo image-to-video rejected it with a misleading "The Google model was unable to generate audio" failure on every tier and prompt. (Kling and Grok Imagine tolerate the mismatch.) All three upload paths (file_path, file_url, base64_data) now read the magic bytes (JPEG/PNG/WebP/GIF), fix the extension, and say so in the result.
+- **Veo I2V preflight** — `generate_video` on `veo-*` models range-GETs each `image_urls` entry and refuses a Content-Type/bytes mismatch up front, with the fix, instead of spending a task on it.
+- **Veo I2V "unable to generate audio" guidance** — across 20 live runs, a type-mismatched image failed 7/7 (now blocked by the preflight). Correctly-typed images still hit this error about half the time: roughly 60% succeeded with an explicit sound cue in the prompt ("SFX: …") vs 20% without. The error now says to retry the same call, add a sound cue, or use Kling/Grok I2V, instead of implying the prompt content is wrong. The generate_video model guide recommends the sound cue.
+
 ## [5.2.0] — 2026-09-22
 
 September 2026 model pass: 4 new model families found via a docs-index diff, plus price corrections from the drift watch. Every new endpoint was run live (all succeeded except Gemini Omni 1.1 Flash, which timed out upstream), and every corrected price was confirmed by a real charge except Imagen 4 Standard/Ultra and 2K H3.

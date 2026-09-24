@@ -375,3 +375,21 @@ test('Sept 2026 model pass — new entries build the documented inputs', async (
   }
   assert.equal(PRICING['minimax-h3/text-to-video'], 8, 'H3 price halved Sept 2026');
 });
+
+test('image format sniffing — upload names follow the bytes, not the extension', async () => {
+  const { sniffImageExt, fixImageFilename } = await import('../server.mjs');
+  const pad = (arr) => Buffer.concat([Buffer.from(arr), Buffer.alloc(16)]);
+  const jpg = pad([0xff, 0xd8, 0xff, 0xe0]);
+  const png = pad([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(8)]);
+  assert.equal(sniffImageExt(jpg), 'jpg');
+  assert.equal(sniffImageExt(png), 'png');
+  assert.equal(sniffImageExt(webp), 'webp');
+  assert.equal(sniffImageExt(Buffer.from('not an image at all')), null);
+  // the reported bug: JPEG bytes under a .png name
+  assert.deepEqual(fixImageFilename('maria-retail-1.png', jpg), { name: 'maria-retail-1.jpg', renamedFrom: 'maria-retail-1.png' });
+  assert.deepEqual(fixImageFilename('photo.jpeg', jpg), { name: 'photo.jpeg' }, 'jpeg ≡ jpg');
+  assert.deepEqual(fixImageFilename('a.png', png), { name: 'a.png' });
+  assert.deepEqual(fixImageFilename('noext', png), { name: 'noext.png', renamedFrom: 'noext' });
+  assert.deepEqual(fixImageFilename('clip.mp4', Buffer.alloc(32)), { name: 'clip.mp4' }, 'non-images untouched');
+});

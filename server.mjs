@@ -90,6 +90,50 @@ function sanitizeFilename(name) {
   return name == null ? name : basename(String(name));
 }
 
+// Real image format from magic bytes — never trust the extension. kie's upload
+// host serves files with a Content-Type derived from the NAME, and Veo I2V
+// rejects a JPEG served as image/png with a misleading "unable to generate
+// audio" failure (reported 2026-09-24; Kling/Grok tolerate the mismatch).
+const IMAGE_MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+function sniffImageExt(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  if (buf.toString('ascii', 0, 4) === 'GIF8') return 'gif';
+  return null;
+}
+// Make a filename's extension agree with the bytes. Non-images (or unknown
+// formats) pass through untouched. Returns { name, renamedFrom? }.
+function fixImageFilename(name, buf) {
+  const real = sniffImageExt(buf);
+  if (!real || !name) return { name };
+  const m = name.match(/^(.*?)(\.[A-Za-z0-9]+)?$/);
+  const cur = (m[2] || '').slice(1).toLowerCase().replace('jpeg', 'jpg');
+  if (cur === real) return { name };
+  return { name: `${m[1]}.${real}`, renamedFrom: name };
+}
+// Best-effort remote check: does the URL's served Content-Type match its bytes?
+// Returns { ok: true } or { ok: false, served, actual } — network trouble counts
+// as ok (never block a generation on a flaky probe).
+async function checkImageUrlType(url, timeoutMs = 8000) {
+  try {
+    const res = await fetch(url, { headers: { Range: 'bytes=0-31' }, signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) return { ok: true };
+    const served = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    const buf = Buffer.from(await res.arrayBuffer()).subarray(0, 32);
+    const actual = sniffImageExt(buf);
+    if (!actual || !served.startsWith('image/')) return { ok: true };
+    return served === IMAGE_MIME[actual] ? { ok: true } : { ok: false, served, actual: IMAGE_MIME[actual] };
+  } catch {
+    return { ok: true };
+  }
+}
+
+function renameNote(from, to) {
+  return from ? `\n⚠️ Renamed ${from} → ${to}: the file's bytes are ${to.split('.').pop().toUpperCase()}, not what the extension said. kie serves uploads with a Content-Type taken from the name, and Veo image-to-video rejects a mismatch.` : '';
+}
+
 // Normalize + validate base64 before sending it to kie's uploader, whose atob()
 // rejects anything non-conformant with an opaque doubled "Base64 decoding
 // failed" error (issue #62). Handles the real-world ways a payload arrives
@@ -964,7 +1008,7 @@ const handleListTools = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p, NEW; transformation=restyle existing video). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video, kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (NEW). Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p, NEW; transformation=restyle existing video). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1553,7 +1597,7 @@ const handleListTools = async () => ({
     // ── File Upload ──
     {
       name: 'upload_file',
-      description: 'Upload a file to kie.ai and get a public URL back. Use this to upload local images/audio/video before passing them to generation tools (image-to-image, image-to-video, reference/ingredient inputs). PREFER file_path for local files. Files expire after 3 days (kie temp storage).',
+      description: 'Upload a file to kie.ai and get a public URL back. Image files are named by their REAL format (magic bytes), so a JPEG saved as .png is uploaded as .jpg — kie serves files with a Content-Type taken from the name, and Veo I2V rejects a mismatch. Use this to upload local images/audio/video before passing them to generation tools (image-to-image, image-to-video, reference/ingredient inputs). PREFER file_path for local files. Files expire after 3 days (kie temp storage).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -2011,6 +2055,17 @@ const handleCallTool = async (request) => {
         }
         if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
           return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls.` }] };
+        }
+        // Veo I2V rejects an image whose served Content-Type disagrees with its
+        // bytes (e.g. a JPEG uploaded as .png) — and reports it as "unable to
+        // generate audio", which sends callers rewriting prompts. Catch it here.
+        if (modelId.startsWith('veo-') && Array.isArray(image_urls) && image_urls.length) {
+          for (const url of image_urls) {
+            const chk = await checkImageUrlType(url);
+            if (!chk.ok) {
+              return { content: [{ type: 'text', text: `Image ${url} is served as ${chk.served} but its bytes are ${chk.actual}. Veo image-to-video rejects this mismatch (it fails with a misleading "unable to generate audio" error). Re-upload the file with upload_file, which now names it by its real format, then retry with the new URL. Other I2V models (Kling, Grok Imagine) tolerate the mismatch.` }], isError: true };
+            }
+          }
         }
         // Coerce duration to the type this model's option spec declares (issue
         // #28) — kie is silently type-strict per model (5 fails where "5" works
@@ -2678,9 +2733,11 @@ const handleCallTool = async (request) => {
           if (size > MAX_UPLOAD) {
             return { content: [{ type: 'text', text: `File is ${(size / 1048576).toFixed(1)}MB — larger than the 100MB upload guard for kie temp storage.` }], isError: true };
           }
-          const name = sanitizeFilename(file_name) || basename(file_path);
+          const bytes = readFileSync(file_path);
+          const { name, renamedFrom } = fixImageFilename(sanitizeFilename(file_name) || basename(file_path), bytes);
+          const realExt = sniffImageExt(bytes);
           const form = new FormData();
-          form.append('file', new Blob([readFileSync(file_path)]), name);
+          form.append('file', new Blob([bytes], realExt ? { type: IMAGE_MIME[realExt] } : {}), name);
           form.append('uploadPath', upload_path);
           form.append('fileName', name);
           const res = await fetch(`${UPLOAD_BASE}/api/file-stream-upload`, {
@@ -2692,7 +2749,7 @@ const handleCallTool = async (request) => {
           if (!result || (!result.success && result.code !== 200)) {
             return { content: [{ type: 'text', text: `Upload failed: ${result ? JSON.stringify(result) : `HTTP ${res.status}`}` }], isError: true };
           }
-          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || name} (${result.data?.fileSize ?? size} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}` }] };
+          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || name} (${result.data?.fileSize ?? size} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}${renameNote(renamedFrom, name)}` }] };
         }
 
         if (file_url) {
@@ -2707,7 +2764,17 @@ const handleCallTool = async (request) => {
             return { content: [{ type: 'text', text: `file_url points at a private/local address (${host}) that kie.ai's servers cannot reach — the URL must be PUBLICLY accessible. For local files, read the file and use base64_data instead.` }], isError: true };
           }
           const body = { fileUrl: file_url, uploadPath: upload_path };
-          if (file_name) body.fileName = file_name;
+          // Sniff the source's first bytes so the stored name (and therefore the
+          // served Content-Type) matches the real format, not the URL's extension.
+          let head = null;
+          try {
+            const r = await fetch(file_url, { headers: { Range: 'bytes=0-31' }, signal: AbortSignal.timeout(8000) });
+            if (r.ok) head = Buffer.from(await r.arrayBuffer()).subarray(0, 32);
+          } catch { /* best-effort */ }
+          let urlName = '';
+          try { urlName = decodeURIComponent(basename(new URL(file_url).pathname)); } catch { /* ignore */ }
+          const fixedUrlName = fixImageFilename(file_name || urlName, head);
+          if (file_name || fixedUrlName.renamedFrom) body.fileName = fixedUrlName.name;
           const res = await fetch(`${UPLOAD_BASE}/api/file-url-upload`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
@@ -2717,7 +2784,7 @@ const handleCallTool = async (request) => {
           if (!result.success && result.code !== 200) {
             return { content: [{ type: 'text', text: `Upload failed: ${JSON.stringify(result)}\nNote: kie.ai's servers must be able to fetch this URL — it needs to be publicly reachable (no auth, not expired). For local or private files, use base64_data.` }], isError: true };
           }
-          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || ''} (${result.data?.fileSize ?? '?'} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}` }] };
+          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || ''} (${result.data?.fileSize ?? '?'} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}${renameNote(fixedUrlName.renamedFrom, fixedUrlName.name)}` }] };
         }
 
         if (base64_data) {
@@ -2728,8 +2795,9 @@ const handleCallTool = async (request) => {
           if (norm.error) return { content: [{ type: 'text', text: `Invalid base64_data: ${norm.error}` }], isError: true };
           const raw = norm.data;
           const body = { base64Data: raw, uploadPath: upload_path };
-          if (file_name) body.fileName = file_name;
-          else if (norm.ext) body.fileName = `upload-${Date.now()}.${norm.ext}`;
+          const head = Buffer.from(raw.slice(0, 44), 'base64');
+          const b64Name = fixImageFilename(file_name || (norm.ext ? `upload-${Date.now()}.${norm.ext}` : ''), head);
+          if (b64Name.name) body.fileName = b64Name.name;
           const res = await fetch(`${UPLOAD_BASE}/api/file-base64-upload`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
@@ -2737,7 +2805,7 @@ const handleCallTool = async (request) => {
           });
           const result = await res.json();
           if (!result.success && result.code !== 200) return { content: [{ type: 'text', text: `Upload failed: ${JSON.stringify(result)}` }], isError: true };
-          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || ''} (${result.data?.fileSize ?? '?'} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}` }] };
+          return { content: [{ type: 'text', text: `✅ File uploaded!\nURL: ${result.data?.fileUrl || result.data?.downloadUrl}\nFile: ${result.data?.fileName || ''} (${result.data?.fileSize ?? '?'} bytes)\nExpires: ${result.data?.expiresAt || '~3 days (kie temp storage)'}${renameNote(b64Name.renamedFrom, b64Name.name)}` }] };
         }
 
         return { content: [{ type: 'text', text: 'Provide file_path (local file — preferred), file_url (public URL), or base64_data.' }] };
@@ -3007,7 +3075,12 @@ const handleCallTool = async (request) => {
         // bad request — replaying the identical input succeeds once it clears
         // (observed 2026-09-22/23 for ElevenLabs, nano-banana-edit and Gemini Omni 1.1 Flash). Stop agents
         // from burning turns tweaking voices/prompts, and point at a fallback.
-        if (/internal error|try again|upstream api service timed out/i.test(error.message)) {
+        if (/unable to generate audio/i.test(error.message) && entry?.model?.startsWith('veo-') && entry.model.includes('image-to-video')) {
+          // Measured 2026-09-24 (20 veo I2V runs): a Content-Type/bytes mismatch
+          // failed 7/7 (now blocked by the preflight above); correctly-typed images
+          // still hit this ~50% of the time, less often with an explicit sound cue.
+          text += `\n\nℹ️ Veo image-to-video fails this way intermittently (Google's audio pass). It is not a problem with your subject or the image type (generate_video already checks that). Retry the SAME call, and add an explicit sound cue to the prompt, e.g. "SFX: quiet office room tone." Across 13 correctly-typed test runs, ~60% succeeded with a cue vs ~20% without. A different I2V model (kling/image-to-video, grok-imagine-video-1-5-preview) avoids it.`;
+        } else if (/internal error|try again|upstream api service timed out/i.test(error.message)) {
           const fallback = upstreamFallback(entry?.model);
           text += `\n\nℹ️ This is a kie.ai-side outage for this model, not a problem with your input — do NOT change the prompt, voice, or parameters. Retry the same call in a few minutes${fallback ? `, or switch to ${fallback}` : ', or switch to a different model'}.`;
         }
@@ -3133,6 +3206,9 @@ if (httpFlag) {
 // server. Importing this module is side-effect-free except for creating the
 // (gitignored) RAW_DIR.
 export {
+  sniffImageExt,
+  fixImageFilename,
+  checkImageUrlType,
   renderProfileBrief,
   extractResultUrls,
   classifyKieCode,
