@@ -5,9 +5,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync, existsSync, mkdirSync, readdirSync, statSync, appendFileSync, readFileSync } from 'fs';
-import { join, basename, isAbsolute } from 'path';
+import { join, basename, dirname, isAbsolute } from 'path';
 import { createServer } from 'http';
 import crypto from 'crypto';
+import { AsyncLocalStorage } from 'async_hooks';
 import { fileURLToPath } from 'url';
 import { realpathSync } from 'fs';
 
@@ -96,23 +97,45 @@ function sanitizeFilename(name) {
 // audio" failure (reported 2026-09-24; Kling/Grok tolerate the mismatch).
 const IMAGE_MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
 function sniffImageExt(buf) {
+  const ext = sniffFileExt(buf);
+  return ext && IMAGE_MIME[ext] ? ext : null;
+}
+// Real media format from magic bytes (images, video, audio, MIDI), or null.
+function sniffFileExt(buf) {
   if (!buf || buf.length < 12) return null;
+  const ascii = (a, b) => buf.toString('ascii', a, b);
   if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
-  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'webp';
-  if (buf.toString('ascii', 0, 4) === 'GIF8') return 'gif';
+  if (buf[0] === 0x89 && ascii(1, 4) === 'PNG') return 'png';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'webp';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return 'wav';
+  if (ascii(0, 4) === 'GIF8') return 'gif';
+  if (ascii(0, 4) === 'MThd') return 'mid';
+  if (ascii(4, 8) === 'ftyp') {
+    const brand = ascii(8, 12);
+    if (brand === 'qt  ') return 'mov';
+    if (/^M4A|^M4B/.test(brand)) return 'm4a';
+    return 'mp4';
+  }
+  if (ascii(0, 3) === 'ID3' || (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0 && (buf[1] & 0x06) !== 0) /* MPEG audio, layer bits != 00 (excludes AAC ADTS) */) return 'mp3';
   return null;
 }
-// Make a filename's extension agree with the bytes. Non-images (or unknown
-// formats) pass through untouched. Returns { name, renamedFrom? }.
-function fixImageFilename(name, buf) {
-  const real = sniffImageExt(buf);
+// Extensions that are fine for a sniffed format (container aliases etc.).
+const EXT_OK = {
+  jpg: ['jpg', 'jpeg'], png: ['png'], webp: ['webp'], gif: ['gif'], wav: ['wav', 'wave'],
+  mid: ['mid', 'midi'], mov: ['mov', 'mp4', 'm4v'], mp4: ['mp4', 'm4v', 'mov'],
+  m4a: ['m4a', 'mp4', 'aac'], mp3: ['mp3'],
+};
+// Make a filename's extension agree with the bytes. Unknown formats pass
+// through untouched. Returns { name, renamedFrom? }.
+function fixMediaFilename(name, buf) {
+  const real = sniffFileExt(buf);
   if (!real || !name) return { name };
   const m = name.match(/^(.*?)(\.[A-Za-z0-9]+)?$/);
-  const cur = (m[2] || '').slice(1).toLowerCase().replace('jpeg', 'jpg');
-  if (cur === real) return { name };
+  const cur = (m[2] || '').slice(1).toLowerCase();
+  if (EXT_OK[real].includes(cur)) return { name };
   return { name: `${m[1]}.${real}`, renamedFrom: name };
 }
+const fixImageFilename = fixMediaFilename;
 // Best-effort remote check: does the URL's served Content-Type match its bytes?
 // Returns { ok: true } or { ok: false, served, actual } — network trouble counts
 // as ok (never block a generation on a flaky probe).
@@ -687,9 +710,9 @@ async function pollSunoRecord(taskId, recordPath, maxWaitMs = 300000) {
 async function downloadUrlList(urls, outFilename, ext, outDir) {
   const files = [];
   for (let i = 0; i < urls.length; i++) {
-    const p = join(outDir, sunoTrackName(outFilename, i, ext));
+    let p = join(outDir, sunoTrackName(outFilename, i, ext));
     if (existsSync(p)) console.error(`[kie-mcp] overwriting existing file: ${p}`);
-    await downloadToFile(urls[i], p);
+    p = await downloadToFile(urls[i], p);
     files.push(p);
   }
   return files;
@@ -791,9 +814,9 @@ async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3', outDir = R
     const track = sunoData[i];
     const url = track.audioUrl || track.videoUrl || track.midiUrl || track.wavUrl;
     if (!url) continue;
-    const trackPath = join(outDir, sunoTrackName(outFilename, i, ext));
+    let trackPath = join(outDir, sunoTrackName(outFilename, i, ext));
     if (existsSync(trackPath)) console.error(`[kie-mcp] overwriting existing file: ${trackPath}`);
-    await downloadToFile(url, trackPath);
+    trackPath = await downloadToFile(url, trackPath);
     downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration });
   }
   return downloadedFiles;
@@ -857,9 +880,21 @@ async function downloadToFile(url, destPath) {
 
   const response = await fetch(downloadUrl);
   if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-  writeFileSync(destPath, Buffer.from(await response.arrayBuffer()));
-  return destPath;
+  const bytes = Buffer.from(await response.arrayBuffer());
+  // Never write one format under another's extension (a Seedream JPEG saved as
+  // .png was later uploaded as image/png and broke Veo I2V, 2026-09-24). Save
+  // under the real extension and report it on the tool result.
+  const { name, renamedFrom } = fixMediaFilename(basename(destPath), bytes);
+  const finalPath = renamedFrom ? join(dirname(destPath), name) : destPath;
+  writeFileSync(finalPath, bytes);
+  if (renamedFrom) {
+    downloadNotes.getStore()?.push(`⚠️ Saved as ${name.split('.').pop().toUpperCase()}: ${finalPath} (requested ${renamedFrom} — the model returned ${name.split('.').pop().toUpperCase()} bytes). Use this path, not the requested one.`);
+  }
+  return finalPath;
 }
+// Per-tool-call collector for download rename notes (AsyncLocalStorage keeps
+// concurrent HTTP-mode calls apart). handleCallTool appends them to the result.
+const downloadNotes = new AsyncLocalStorage();
 
 // ─── MCP Server ───
 
@@ -1728,7 +1763,13 @@ const handleListTools = async () => ({
   ],
 });
 
-const handleCallTool = async (request) => {
+const handleCallTool = (request) => downloadNotes.run([], async () => {
+  const res = await handleCallToolInner(request);
+  const notes = downloadNotes.getStore();
+  if (notes.length && res?.content?.[0]?.type === 'text') res.content[0].text += `\n\n${notes.join('\n')}`;
+  return res;
+});
+const handleCallToolInner = async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
@@ -1753,7 +1794,7 @@ const handleCallTool = async (request) => {
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const safeModelName = modelId.replace(/\//g, '-');
         const outFilename = sanitizeFilename(filename) || `${safeModelName}-${ts}.png`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         let taskId;
 
@@ -1817,8 +1858,8 @@ const handleCallTool = async (request) => {
         // Download all results
         const downloadedFiles = [];
         for (let i = 0; i < resultUrls.length; i++) {
-          const path = i === 0 ? outPath : join(resolveOutputDir(args), outFilename.replace(/\.png$/, `-${i + 1}.png`));
-          await downloadToFile(resultUrls[i], path);
+          let path = i === 0 ? outPath : join(resolveOutputDir(args), outFilename.replace(/\.png$/, `-${i + 1}.png`));
+          path = await downloadToFile(resultUrls[i], path);
           downloadedFiles.push(path);
         }
 
@@ -2022,8 +2063,8 @@ const handleCallTool = async (request) => {
         }
         // Prefer the filename recorded when the task was created (right extension)
         const outName = sanitizeFilename(args.filename) || entry?.filename || `download-${args.task_id.slice(0, 8)}.png`;
-        const outPath = join(resolveOutputDir(args), outName);
-        await downloadToFile(urls[0], outPath);
+        let outPath = join(resolveOutputDir(args), outName);
+        outPath = await downloadToFile(urls[0], outPath);
         if (entry) { entry.status = 'success'; appendTaskLog(entry); }
         return { content: [{ type: 'text', text: `Downloaded to: ${outPath}\nResult URL: ${urls[0]} (temporary; not pattern-stable — reuse verbatim for chaining)` }] };
       }
@@ -2083,7 +2124,7 @@ const handleCallTool = async (request) => {
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const safeModelName = modelId.replace(/\//g, '-');
         const outFilename = sanitizeFilename(filename) || `${safeModelName}-${ts}.mp4`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         let taskId;
 
@@ -2110,7 +2151,7 @@ const handleCallTool = async (request) => {
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Task ${taskId} done but no result URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
-        await downloadToFile(resultUrls[0], outPath);
+        outPath = await downloadToFile(resultUrls[0], outPath);
         return {
           content: [{
             type: 'text',
@@ -2190,7 +2231,7 @@ const handleCallTool = async (request) => {
         const apiModel = gModel === 'pro' ? 'google/gemini-2-5-pro-tts' : 'google/gemini-3-1-flash-tts';
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `gemini-tts-${ts}.wav`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         // Simple mode (text) builds a single-speaker request; dialogue mode passes through.
         let spk = speakers, turns = dialogue_turns;
@@ -2214,7 +2255,7 @@ const handleCallTool = async (request) => {
         const pollResult = await pollTask(taskId, pollBudgetMs('speech', args));
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Gemini TTS task ${taskId} done but no URLs found.\n${JSON.stringify(pollResult).slice(0, 500)}` }] };
-        await downloadToFile(urls[0], outPath);
+        outPath = await downloadToFile(urls[0], outPath);
         return { content: [{ type: 'text', text: [`✅ Gemini TTS generated!`, `Model: ${apiModel}`, `Task ID: ${taskId}`, `Cost: ${formatCost(apiModel, pollResult)}`, ``, `Downloaded to: ${outPath}`].join('\n') }] };
       }
 
@@ -2223,7 +2264,7 @@ const handleCallTool = async (request) => {
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `tts-${ts}.mp3`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         const apiModel = ttsModel === 'multilingual-v2' ? 'elevenlabs/text-to-speech-multilingual-v2' : 'elevenlabs/text-to-speech-turbo-2-5';
         // kie.ai requires a voice (422 "voiceId cannot be empty" without one) despite docs claiming a server-side default
@@ -2241,7 +2282,7 @@ const handleCallTool = async (request) => {
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `TTS task ${taskId} done but no URLs found.` }] };
 
-        await downloadToFile(urls[0], outPath);
+        outPath = await downloadToFile(urls[0], outPath);
         return { content: [{ type: 'text', text: `✅ TTS generated!\nModel: ${apiModel}\nText: "${text.slice(0, 80)}"\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2250,7 +2291,7 @@ const handleCallTool = async (request) => {
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `dialogue-${ts}.mp3`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         // Validate every segment's voice client-side (issue #26). Accept the
         // `voice_id` alias — agents copy the param name from generate_tts, and
@@ -2296,7 +2337,7 @@ const handleCallTool = async (request) => {
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Dialogue task ${taskId} done but no URLs found.` }] };
 
-        await downloadToFile(urls[0], outPath);
+        outPath = await downloadToFile(urls[0], outPath);
         return { content: [{ type: 'text', text: `✅ Dialogue generated!\nSpeakers: ${dialogue.length} lines\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2305,7 +2346,7 @@ const handleCallTool = async (request) => {
 
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `isolated-${ts}.mp3`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/audio-isolation', input: { audio_url } });
         const taskId = result.data?.taskId || result.taskId;
@@ -2316,7 +2357,7 @@ const handleCallTool = async (request) => {
         const urls = extractResultUrls(pollResult);
         if (urls.length === 0) return { content: [{ type: 'text', text: `Audio isolation task ${taskId} done but no URLs found.` }] };
 
-        await downloadToFile(urls[0], outPath);
+        outPath = await downloadToFile(urls[0], outPath);
         return { content: [{ type: 'text', text: `✅ Audio isolated!\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2442,7 +2483,7 @@ const handleCallTool = async (request) => {
         const { taskId: origTaskId, audioId, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `wav-${ts}.wav`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
         const body = { taskId: origTaskId, audioId };
         const result = await sunoCreate('/api/v1/wav/generate', body);
         const taskId = result.data?.taskId || result.taskId;
@@ -2452,7 +2493,7 @@ const handleCallTool = async (request) => {
         const wavRec = await pollSunoRecord(taskId, SUNO_RECORD_ENDPOINTS['suno/wav'], pollBudgetMs('audio', args));
         const wavUrls = extractResultUrls(wavRec);
         if (!wavUrls.length) return { content: [{ type: 'text', text: `WAV task ${taskId} done but no URL found.\n${JSON.stringify(wavRec)}` }] };
-        await downloadToFile(wavUrls[0], outPath);
+        outPath = await downloadToFile(wavUrls[0], outPath);
         return { content: [{ type: 'text', text: `✅ WAV converted!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2477,7 +2518,7 @@ const handleCallTool = async (request) => {
         const { taskId: origTaskId, audioId, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `midi-${ts}.mid`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
         const body = { taskId: origTaskId };
         if (audioId) body.audioId = audioId;
         const result = await sunoCreate('/api/v1/midi/generate', body);
@@ -2488,7 +2529,7 @@ const handleCallTool = async (request) => {
         const midiRec = await pollSunoRecord(taskId, SUNO_RECORD_ENDPOINTS['suno/midi'], pollBudgetMs('audio', args));
         const midiUrls = extractResultUrls(midiRec);
         if (!midiUrls.length) return { content: [{ type: 'text', text: `MIDI task ${taskId} done but no URL found.\n${JSON.stringify(midiRec)}` }] };
-        await downloadToFile(midiUrls[0], outPath);
+        outPath = await downloadToFile(midiUrls[0], outPath);
         return { content: [{ type: 'text', text: `✅ MIDI exported!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2496,7 +2537,7 @@ const handleCallTool = async (request) => {
         const { taskId: origTaskId, audioId, author, domainName, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `musicvideo-${ts}.mp4`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
         const body = { taskId: origTaskId, audioId };
         if (author) body.author = author;
         if (domainName) body.domainName = domainName;
@@ -2508,7 +2549,7 @@ const handleCallTool = async (request) => {
         const mp4Rec = await pollSunoRecord(taskId, SUNO_RECORD_ENDPOINTS['suno/mp4'], pollBudgetMs('audio', args));
         const mp4Urls = extractResultUrls(mp4Rec);
         if (!mp4Urls.length) return { content: [{ type: 'text', text: `Music video task ${taskId} done but no URL found.\n${JSON.stringify(mp4Rec)}` }] };
-        await downloadToFile(mp4Urls[0], outPath);
+        outPath = await downloadToFile(mp4Urls[0], outPath);
         return { content: [{ type: 'text', text: `✅ Music video created!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2630,7 +2671,7 @@ const handleCallTool = async (request) => {
         const { taskId, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `cover-art-${ts}.png`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
         const result = await sunoCreate('/api/v1/suno/cover/generate', { taskId });
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
@@ -2638,7 +2679,7 @@ const handleCallTool = async (request) => {
         const pollResult = await pollSunoTask(newTaskId, pollBudgetMs('audio', args));
         const urls = pollResult.images || pollResult.data?.images || (pollResult.imageUrl ? [pollResult.imageUrl] : []);
         if (!urls.length) return { content: [{ type: 'text', text: `Cover art task ${newTaskId} done but no images.\n${JSON.stringify(pollResult, null, 2)}` }] };
-        await downloadToFile(urls[0], outPath);
+        outPath = await downloadToFile(urls[0], outPath);
         return { content: [{ type: 'text', text: `✅ Cover art generated!\nTask ID: ${newTaskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2856,8 +2897,8 @@ const handleCallTool = async (request) => {
 
         const files = [];
         for (let i = 0; i < resultUrls.length; i++) {
-          const path = join(resolveOutputDir(args), i === 0 ? outFilename : outFilename.replace(new RegExp(`\\.${ext}$`), `-${i + 1}.${ext}`));
-          await downloadToFile(resultUrls[i], path);
+          let path = join(resolveOutputDir(args), i === 0 ? outFilename : outFilename.replace(new RegExp(`\\.${ext}$`), `-${i + 1}.${ext}`));
+          path = await downloadToFile(resultUrls[i], path);
           files.push(path);
         }
         taskEntry.status = 'downloaded'; appendTaskLog(taskEntry);
@@ -2919,7 +2960,7 @@ const handleCallTool = async (request) => {
         }
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `grok2-edit-${ts}.jpg`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         const input = regionMode ? { task_id, prompt, mask_indexs } : { prompt, image_urls, aspect_ratio };
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'grok-imagine-image-2-0/image-edit', input });
@@ -2933,7 +2974,7 @@ const handleCallTool = async (request) => {
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Edit task ${taskId} done but no URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
-        await downloadToFile(resultUrls[0], outPath);
+        outPath = await downloadToFile(resultUrls[0], outPath);
         taskEntry.status = 'downloaded'; appendTaskLog(taskEntry);
         return {
           content: [{
@@ -2954,7 +2995,7 @@ const handleCallTool = async (request) => {
         const { task_id, prompt, model = 'fast', seeds, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `veo-extend-${ts}.mp4`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         const body = { taskId: task_id, prompt, model };
         if (seeds !== undefined) body.seeds = seeds;
@@ -2969,7 +3010,7 @@ const handleCallTool = async (request) => {
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Extend task ${taskId} done but no URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
-        await downloadToFile(resultUrls[0], outPath);
+        outPath = await downloadToFile(resultUrls[0], outPath);
         return { content: [{ type: 'text', text: `✅ Veo video extended!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -2977,7 +3018,7 @@ const handleCallTool = async (request) => {
         const { task_id, index = 0, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `veo-1080p-${ts}.mp4`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         // 1080p uses GET; kie returns code 500 during processing (kieRequest would
         // throw), then code 200 + data.resultUrl on success. Use the tolerant fetch.
@@ -2992,7 +3033,7 @@ const handleCallTool = async (request) => {
         }
         if (!resultUrl) return { content: [{ type: 'text', text: `1080p upscale timed out for task ${task_id}. Try again in a minute.` }] };
 
-        await downloadToFile(resultUrl, outPath);
+        outPath = await downloadToFile(resultUrl, outPath);
         return { content: [{ type: 'text', text: `✅ Veo 1080p upscale complete!\nDownloaded to: ${outPath}` }] };
       }
 
@@ -3000,7 +3041,7 @@ const handleCallTool = async (request) => {
         const { task_id, index = 0, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `veo-4k-${ts}.mp4`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         // 4K uses POST; first call kicks off the upscale (billed immediately), then
         // every subsequent POST polls. kie returns code 422 with msg "...processing..."
@@ -3020,7 +3061,7 @@ const handleCallTool = async (request) => {
         }
         if (!resultUrl) return { content: [{ type: 'text', text: `4K upscale timed out for task ${task_id}. May still be processing — try again.` }] };
 
-        await downloadToFile(resultUrl, outPath);
+        outPath = await downloadToFile(resultUrl, outPath);
         return { content: [{ type: 'text', text: `✅ Veo 4K upscale complete!\nDownloaded to: ${outPath}` }] };
       }
 
@@ -3030,7 +3071,7 @@ const handleCallTool = async (request) => {
         const { task_id, prompt, quality = '720p', filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `runway-extend-${ts}.mp4`;
-        const outPath = join(resolveOutputDir(args), outFilename);
+        let outPath = join(resolveOutputDir(args), outFilename);
 
         const body = { taskId: task_id, prompt, quality };
         const result = await kieRequest('POST', '/api/v1/runway/extend', body);
@@ -3044,7 +3085,7 @@ const handleCallTool = async (request) => {
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Extend task ${taskId} done but no URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
-        await downloadToFile(resultUrls[0], outPath);
+        outPath = await downloadToFile(resultUrls[0], outPath);
         return { content: [{ type: 'text', text: `✅ Runway video extended!\nTask ID: ${taskId}\nDownloaded to: ${outPath}` }] };
       }
 
@@ -3207,6 +3248,8 @@ if (httpFlag) {
 // (gitignored) RAW_DIR.
 export {
   sniffImageExt,
+  sniffFileExt,
+  fixMediaFilename,
   fixImageFilename,
   checkImageUrlType,
   renderProfileBrief,

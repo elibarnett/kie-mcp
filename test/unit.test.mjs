@@ -393,3 +393,22 @@ test('image format sniffing — upload names follow the bytes, not the extension
   assert.deepEqual(fixImageFilename('noext', png), { name: 'noext.png', renamedFrom: 'noext' });
   assert.deepEqual(fixImageFilename('clip.mp4', Buffer.alloc(32)), { name: 'clip.mp4' }, 'non-images untouched');
 });
+
+test('media sniffing — saved results keep their real format (download side)', async () => {
+  const { sniffFileExt, fixMediaFilename } = await import('../server.mjs');
+  const b = (...parts) => Buffer.concat([...parts.map((x) => (typeof x === 'string' ? Buffer.from(x, 'latin1') : Buffer.from(x))), Buffer.alloc(16)]);
+  assert.equal(sniffFileExt(b([0, 0, 0, 0x20], 'ftypisom')), 'mp4');
+  assert.equal(sniffFileExt(b([0, 0, 0, 0x14], 'ftypqt  ')), 'mov');
+  assert.equal(sniffFileExt(b([0, 0, 0, 0x20], 'ftypM4A ')), 'm4a');
+  assert.equal(sniffFileExt(b('RIFF', [0, 0, 0, 0], 'WAVEfmt ')), 'wav');
+  assert.equal(sniffFileExt(b('ID3', [4, 0, 0])), 'mp3');
+  assert.equal(sniffFileExt(b([0xff, 0xfb, 0x90, 0x64])), 'mp3', 'bare MPEG-1 layer III frame');
+  assert.equal(sniffFileExt(b([0xff, 0xf1, 0x50, 0x80])), null, 'AAC ADTS is not mp3');
+  assert.equal(sniffFileExt(b('MThd', [0, 0, 0, 6])), 'mid');
+  // the reported bug: Seedream JPEG saved under the requested .png name
+  const jpg = b([0xff, 0xd8, 0xff, 0xe0]);
+  assert.deepEqual(fixMediaFilename('maria-retail-1.png', jpg), { name: 'maria-retail-1.jpg', renamedFrom: 'maria-retail-1.png' });
+  // container aliases are not renamed
+  assert.deepEqual(fixMediaFilename('clip.mov', b([0, 0, 0, 0x20], 'ftypisom')), { name: 'clip.mov' });
+  assert.deepEqual(fixMediaFilename('voice.mp3', b('RIFF', [0, 0, 0, 0], 'WAVEfmt ')), { name: 'voice.wav', renamedFrom: 'voice.mp3' });
+});
