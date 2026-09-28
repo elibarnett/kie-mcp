@@ -13,6 +13,8 @@ services:
       - KIE_API_KEY=${KIE_API_KEY}
       - KIE_PROJECT_ROOT=/workspace
       - KIE_MCP_PORT=3100
+      # Required in HTTP mode (clients send "Authorization: Bearer <token>"). Generate: openssl rand -hex 32
+      - KIE_MCP_AUTH_TOKEN=${KIE_MCP_AUTH_TOKEN:?set KIE_MCP_AUTH_TOKEN (openssl rand -hex 32)}
     volumes:
       # Persist generated assets on the host
       - ./kie/assets/raw:/workspace/kie/assets/raw
