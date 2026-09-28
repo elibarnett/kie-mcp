@@ -983,7 +983,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.2.2' };
+const SERVER_INFO = { name: 'kie-art', version: '5.3.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -991,7 +991,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (2cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1182,7 +1182,7 @@ const handleListTools = async () => ({
         properties: {
           wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
           max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600 },
-          model: { type: 'string', enum: ['flash', 'pro'], default: 'flash', description: 'flash = Gemini 3.1 Flash TTS (most expressive, 200+ inline tags, best <60s); pro = Gemini 2.5 Pro TTS (more stable long-form). Same price.' },
+          model: { type: 'string', enum: ['flash', 'flash-3.8', 'flash-lite', 'pro'], default: 'flash', description: 'flash = Gemini 3.1 Flash TTS (most expressive, 200+ inline tags, best <60s; ~4.2 cr/min). flash-3.8 = Gemini 3.8 Flash TTS (NEW Sept 2026, same inputs, ~1.9 cr/min, ~40% cheaper per clip in live tests). flash-lite = Gemini 3.8 Flash Lite TTS (NEW, cheapest at ~1.3 cr/min; draft/bulk narration). pro = Gemini 2.5 Pro TTS (more stable long-form, ~4.2 cr/min). 3.8 prices are kie limited-time pricing until 2026-12-31.' },
           text: { type: 'string', description: 'Simple mode: the text to speak (single speaker). Inline tone tags like [whispers] work on flash. Ignored if dialogue_turns is set.' },
           voice_name: { type: 'string', enum: ['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi'], description: 'Simple mode voice (default Zephyr)' },
           speakers: { type: 'array', description: 'Dialogue mode: 1-2 speakers as [{speaker_id: "Speaker 1", voice_name, audio_profile?, accent?, style?, pace?}]. accent: Neutral|American (Gen)|American (Valley)|American (South)|British (RP)|British (Brixton)|Transatlantic|Australian. style: Vocal Smile|Newscaster|Whisper|Empathetic|Promo/Hype|Deadpan. pace: Natural|Rapid Fire|The Drift|Staccato.' },
@@ -1728,8 +1728,8 @@ const handleListTools = async () => ({
           task_id: { type: 'string', description: 'Region mode: source task ID — a Grok Image 2.0 generation (or a previous grok_image_edit result). Mutually exclusive with image_urls.' },
           prompt: { type: 'string', description: 'Region mode: what the masked region(s) should become plus what to preserve. Whole-image mode: the edit instruction for the full image.' },
           mask_indexs: { type: 'array', items: { type: 'number' }, description: 'Region mode only: region indices from grok_segment_map (e.g. [1] or [0, 2]). Field name matches kie\'s API spelling.' },
-          image_urls: { type: 'array', items: { type: 'string' }, description: 'Whole-image mode: public URL(s) of the image to edit — any image, not just Grok generations (upload local files with upload_file first). Mutually exclusive with task_id.' },
-          aspect_ratio: { type: 'string', enum: ['1:1', '2:3', '3:2', '16:9', '9:16'], description: 'Whole-image mode: required output aspect ratio.' },
+          image_urls: { type: 'array', items: { type: 'string' }, maxItems: 5, description: 'Whole-image mode: 1-5 public URL(s) of the image(s) to edit — any image, not just Grok generations (upload local files with upload_file first). Mutually exclusive with task_id.' },
+          aspect_ratio: { type: 'string', enum: ['auto', '1:1', '2:3', '3:2', '16:9', '9:16'], description: 'Whole-image mode: required output aspect ratio (auto keeps the input\'s shape).' },
           filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
@@ -2264,7 +2264,11 @@ const handleCallToolInner = async (request) => {
 
       case 'generate_gemini_tts': {
         const { model: gModel = 'flash', text, voice_name, speakers, dialogue_turns, scene, sample_context, temperature, filename } = args;
-        const apiModel = gModel === 'pro' ? 'google/gemini-2-5-pro-tts' : 'google/gemini-3-1-flash-tts';
+        const apiModel = {
+          pro: 'google/gemini-2-5-pro-tts',
+          'flash-3.8': 'google/gemini-3-8-flash-tts',
+          'flash-lite': 'google/gemini-3-8-flash-lite-tts',
+        }[gModel] || 'google/gemini-3-1-flash-tts';
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `gemini-tts-${ts}.wav`;
         let outPath = join(resolveOutputDir(args), outFilename);
@@ -2996,19 +3000,26 @@ const handleCallToolInner = async (request) => {
           return { content: [{ type: 'text', text: 'Region mode needs a non-empty mask_indexs array — run grok_segment_map first to get region indices.' }], isError: true };
         }
         if (wholeMode && !aspect_ratio) {
-          return { content: [{ type: 'text', text: 'Whole-image mode requires aspect_ratio (1:1, 2:3, 3:2, 16:9 or 9:16).' }], isError: true };
+          return { content: [{ type: 'text', text: 'Whole-image mode requires aspect_ratio (auto, 1:1, 2:3, 3:2, 16:9 or 9:16 — auto keeps the input\'s shape).' }], isError: true };
         }
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `grok2-edit-${ts}.jpg`;
         let outPath = join(resolveOutputDir(args), outFilename);
 
+        // kie split the endpoint (Sept 2026): region edits moved to …/segment-edit;
+        // …/image-edit now only takes whole-image input and rejects task_id+mask_indexs
+        // with "This field is required" (verified live 2026-09-28).
+        const editModel = regionMode ? 'grok-imagine-image-2-0/segment-edit' : 'grok-imagine-image-2-0/image-edit';
+        if (wholeMode && image_urls.length > 5) {
+          return { content: [{ type: 'text', text: `Whole-image mode accepts at most 5 image_urls (got ${image_urls.length}).` }], isError: true };
+        }
         const input = regionMode ? { task_id, prompt, mask_indexs } : { prompt, image_urls, aspect_ratio };
-        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'grok-imagine-image-2-0/image-edit', input });
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: editModel, input });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start edit — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        const taskEntry = { taskId, model: 'grok-imagine-image-2-0/image-edit', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
+        const taskEntry = { taskId, model: editModel, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
         trackTask(taskEntry);
-        if (args.wait === false) return submitOnly(taskId, 'grok-imagine-image-2-0/image-edit', outFilename);
+        if (args.wait === false) return submitOnly(taskId, editModel, outFilename);
 
         const pollResult = await pollTask(taskId, pollBudgetMs('image', args));
         const resultUrls = extractResultUrls(pollResult);
@@ -3020,10 +3031,10 @@ const handleCallToolInner = async (request) => {
           content: [{
             type: 'text',
             text: [
-              `✅ Region edit done!`,
+              regionMode ? `✅ Region edit done!` : `✅ Image edit done!`,
               `Task ID: ${taskId}  (chain again: grok_segment_map / grok_image_edit on this ID for another 4 cr round)`,
               regionMode ? `Edited regions: [${mask_indexs.join(', ')}] of source ${task_id}` : `Whole-image edit of ${image_urls.length} input image(s)`,
-              `Cost: ${formatCost('grok-imagine-image-2-0/image-edit', pollResult)}`,
+              `Cost: ${formatCost(editModel, pollResult)}`,
               `Downloaded to: ${outPath}`,
               `Result URL (temporary ~24h; not pattern-stable): ${resultUrls[0]}`,
             ].join('\n'),

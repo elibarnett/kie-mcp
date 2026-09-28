@@ -2,6 +2,23 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.3.0] — 2026-09-28
+
+September 28 model pass: new Gemini 3.8 TTS models, a fix for Grok region edits (kie split the endpoint), and price corrections. Everything below was verified with live calls.
+
+### Added
+
+- **Gemini 3.8 Flash TTS** (`generate_gemini_tts` `model: "flash-3.8"`) and **Gemini 3.8 Flash Lite TTS** (`model: "flash-lite"`). They take the same inputs as 3.1 Flash (speakers, dialogue_turns, scene, tone tags). kie's limited-time pricing to 2026-12-31 is 1,260 and 840 cr per 1M audio-output tokens (vs 2,800 for 3.1 Flash), about 1.9 and 1.3 cr/min. The same 25-word line charged 1.38 cr on 3.1 Flash, 0.82 on 3.8 Flash and 0.29 on 3.8 Flash Lite. Flash Lite hit one kie queue error before succeeding. The default stays `flash` (3.1).
+- **Grok whole-image edit** accepts `aspect_ratio: "auto"` and up to 5 `image_urls`.
+
+### Fixed
+
+- **Grok region edits were broken** — kie moved region edits (`task_id` + `mask_indexs`) to the new `grok-imagine-image-2-0/segment-edit` slug. The old `…/image-edit` now takes only whole-image input and rejects region input with `500 This field is required`, so every `grok_image_edit` region-mode call has been failing. Region mode now calls `segment-edit`.
+
+### Changed (pricing)
+
+- Recraft Crisp Upscale 2 → **0.5** cr (drift watch; live charge 0.5).
+
 ## [5.2.2] — 2026-09-28
 
 Security release. **Upgrade now if you run `--http`.** stdio users (the default) were not exposed to the HTTP issues, but should still upgrade for the upload restriction.
