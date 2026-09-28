@@ -19,7 +19,8 @@ export const PRICING = {
   'grok-imagine/image-to-image': 4,
   'grok-imagine-image-2-0/text-to-image': 4,   // empirical 2026-08-14: exactly 4.0 cr
   'grok-imagine-image-2-0/segment-map': 0,     // empirical 2026-08-14: FREE (0.0 cr) — returns named regions + mask PNGs
-  'grok-imagine-image-2-0/image-edit': 4,      // empirical 2026-08-14: exactly 4.0 cr per region-targeted edit
+  'grok-imagine-image-2-0/image-edit': 4,      // whole-image edit; empirical 2026-09-28: exactly 4.0 cr
+  'grok-imagine-image-2-0/segment-edit': 4,    // region edit (split out of image-edit Sept 2026); empirical 2026-09-28: exactly 4.0 cr
   'flux-2/pro-text-to-image': 5,
   'flux-2/pro-image-to-image': 5,
   'flux-2/flex-text-to-image': 4,
@@ -58,7 +59,7 @@ export const PRICING = {
   'qwen2/text-to-image': 3,
   'qwen2-1/text-to-image': 4,      // Qwen Image 2.1 (Sept 2026) — kie published: 4 cr @1K, 8 @2K; 1K empirically 4.0 (T2I + I2I, 2026-09-22)
   'qwen2-1/image-to-image': 4,     // same tiers
-  'recraft/crisp-upscale': 2,
+  'recraft/crisp-upscale': 0.5,   // kie cut 2→0.5 (drift watch 2026-09-28; empirically 0.5)
   'recraft/remove-background': 1, // kie cut 2→1 (drift watch 2026-09-22; empirically 1.0)
   'topaz/image-upscale': 4,
   'seedream/5-pro-text-to-image': 7,       // 1K/1.5K; 2K 14 (published, drift 2026-08-26)
@@ -205,6 +206,10 @@ export const PRICING = {
   // Google bills 25 audio tokens/sec → ~4.2 cr per MINUTE of audio). Value below ≈ 1 minute.
   'google/gemini-3-1-flash-tts': 4.2,
   'google/gemini-2-5-pro-tts': 4.2,
+  // Gemini 3.8 TTS (Sept 2026) — kie limited-time pricing until 2026-12-31: Flash 70 in / 1260 out, Flash Lite 70 / 840 cr per 1M tokens.
+  // Same ~1 minute basis as above. Empirical, same 25-word line: 3.1 Flash 1.38 cr, 3.8 Flash 0.82, 3.8 Flash Lite 0.29.
+  'google/gemini-3-8-flash-tts': 1.89,
+  'google/gemini-3-8-flash-lite-tts': 1.26,
   'elevenlabs/text-to-speech-turbo-2-5': 6,  // per 1000 chars, ceil-rounded (empirical 2026-06-11: 35/150/600 chars→6, 1500→12, 3000→18)
   'elevenlabs/text-to-speech-multilingual-v2': 12, // per 1000 chars, ceil-rounded (empirical 2026-06-11: 33/150 chars→12, 1500→24)
   'elevenlabs/text-to-dialogue-v3': 14, // per 1000 chars, linear no rounding (empirical 2026-06-11: 67 chars→0.98, 1330→18.62)
@@ -238,6 +243,8 @@ export const PRICING_ESTIMATED = new Set([
   'pixverse-v6/reference-to-video',
   'google/gemini-3-1-flash-tts',
   'google/gemini-2-5-pro-tts',
+  'google/gemini-3-8-flash-tts',
+  'google/gemini-3-8-flash-lite-tts',
   'wan/2-5-text-to-video',
   'wan/2-5-image-to-video',
   'suno/voice-generate',
