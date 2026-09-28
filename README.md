@@ -104,26 +104,29 @@ claude mcp add -s user kie-art /usr/bin/env -- KIE_API_KEY=your-key node /path/t
 
 ### Run as HTTP MCP (Cowork, remote clients)
 
+HTTP mode requires a bearer token and listens on `127.0.0.1` by default.
+
 ```bash
+export KIE_MCP_AUTH_TOKEN=$(openssl rand -hex 32)
 KIE_API_KEY=your-key node server.mjs --http --port=3100
 ```
 
-Then expose via ngrok / Cloudflare Tunnel / VPS deployment:
-```bash
-ngrok http 3100
-```
-
-Configure your MCP client to use the resulting URL:
+Configure your MCP client with the URL and the token:
 ```json
 {
   "mcpServers": {
     "kie-art": {
       "type": "http",
-      "url": "https://your-tunnel.ngrok-free.dev/mcp"
+      "url": "http://127.0.0.1:3100/mcp",
+      "headers": { "Authorization": "Bearer <your KIE_MCP_AUTH_TOKEN>" }
     }
   }
 }
 ```
+
+To reach it remotely, put it behind a tunnel (ngrok / Cloudflare Tunnel) or a reverse proxy. The server stays on loopback and the tunnel forwards to it. Add the tunnel's hostname to `KIE_MCP_ALLOWED_HOSTS`. Treat the token like a password: anyone who has it can spend your kie credits and upload media files from the server's disk.
+
+> **Security note (5.2.2):** earlier versions ran HTTP mode on `0.0.0.0` with no authentication and `Access-Control-Allow-Origin: *`. Any web page open in your browser, or anyone who had the tunnel URL, could call the tools, including reading local files through `upload_file`. Upgrade if you use `--http`.
 
 ## Environment variables
 
@@ -132,6 +135,10 @@ Configure your MCP client to use the resulting URL:
 | `KIE_API_KEY` | yes | Your kie.ai API key |
 | `KIE_PROJECT_ROOT` | no | Server-wide default for where generated files are saved (default: server cwd; files go to `$KIE_PROJECT_ROOT/kie/assets/raw/`). Per-call `download_dir` (absolute path) on any file-writing tool overrides this |
 | `KIE_MCP_PORT` | no | Port for HTTP mode (default: 3100) |
+| `KIE_MCP_AUTH_TOKEN` | HTTP mode | Bearer token HTTP clients must send (`Authorization: Bearer …`). The server refuses to start in HTTP mode without it |
+| `KIE_MCP_HOST` | no | HTTP bind address (default `127.0.0.1`). Set `0.0.0.0` only inside a container or behind a firewall |
+| `KIE_MCP_ALLOWED_HOSTS` | no | Comma-separated extra `Host` header names to accept (e.g. your tunnel hostname). On loopback, localhost names are always accepted; other hosts are rejected to block DNS rebinding |
+| `KIE_MCP_ALLOWED_ORIGINS` | no | Comma-separated browser origins allowed to call the server (CORS). Requests with any other `Origin` header are rejected. Non-browser MCP clients send no Origin and are unaffected |
 | `KIE_CALLBACK_URL` | no | Callback URL sent with Suno generation requests (kie.ai requires the field; results are fetched by polling regardless). Defaults to an inert placeholder — set this only if you want to receive the callbacks yourself |
 | `KIE_MAX_CONCURRENT` | no | Max simultaneous task-creation calls (default 4). Excess parallel generations queue inside the server instead of hitting kie.ai's rate limits — parallel tool calls are safe |
 | `KIE_POLL_BUDGET_IMAGE` / `_VIDEO` / `_AUDIO` / `_SPEECH` | no | Blocking-mode polling budget per tool category, in seconds (defaults: 600 / 900 / 300 / 300). Per-call `max_wait_seconds` takes precedence. For long generations prefer `wait: false` (async mode): the tool returns the `task_id` immediately; poll with `check_task`, fetch with `download_result` |

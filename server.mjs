@@ -9,6 +9,7 @@ import { join, basename, dirname, isAbsolute } from 'path';
 import { createServer } from 'http';
 import crypto from 'crypto';
 import { AsyncLocalStorage } from 'async_hooks';
+import { lookup as dnsLookup } from 'dns/promises';
 import { fileURLToPath } from 'url';
 import { realpathSync } from 'fs';
 
@@ -110,6 +111,11 @@ function sniffFileExt(buf) {
   if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return 'wav';
   if (ascii(0, 4) === 'GIF8') return 'gif';
   if (ascii(0, 4) === 'MThd') return 'mid';
+  if (ascii(0, 4) === '%PDF') return 'pdf';
+  if (ascii(0, 4) === 'OggS') return 'ogg';
+  if (ascii(0, 4) === 'fLaC') return 'flac';
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return 'webm';
+  if (buf[0] === 0xff && (buf[1] & 0xf6) === 0xf0) return 'aac'; // ADTS
   if (ascii(4, 8) === 'ftyp') {
     const brand = ascii(8, 12);
     if (brand === 'qt  ') return 'mov';
@@ -123,7 +129,8 @@ function sniffFileExt(buf) {
 const EXT_OK = {
   jpg: ['jpg', 'jpeg'], png: ['png'], webp: ['webp'], gif: ['gif'], wav: ['wav', 'wave'],
   mid: ['mid', 'midi'], mov: ['mov', 'mp4', 'm4v'], mp4: ['mp4', 'm4v', 'mov'],
-  m4a: ['m4a', 'mp4', 'aac'], mp3: ['mp3'],
+  m4a: ['m4a', 'mp4', 'aac'], mp3: ['mp3'], pdf: ['pdf'], ogg: ['ogg', 'oga', 'opus'],
+  flac: ['flac'], webm: ['webm', 'mkv'], aac: ['aac', 'm4a'],
 };
 // Make a filename's extension agree with the bytes. Unknown formats pass
 // through untouched. Returns { name, renamedFrom? }.
@@ -136,10 +143,39 @@ function fixMediaFilename(name, buf) {
   return { name: `${m[1]}.${real}`, renamedFrom: name };
 }
 const fixImageFilename = fixMediaFilename;
+// SSRF guard: is this URL's host (or anything it resolves to) private,
+// loopback, link-local (incl. the 169.254.169.254 cloud metadata endpoint) or
+// otherwise not a public internet address? Unresolvable → treated as private.
+function isPrivateIp(ip) {
+  const a = String(ip).toLowerCase();
+  if (a === '::1' || a === '::' || a.startsWith('fe80:') || a.startsWith('fc') || a.startsWith('fd')) return true;
+  const v4 = a.startsWith('::ffff:') ? a.slice(7) : a;
+  const m = v4.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+  if (!m) return false;
+  const [x, y] = [Number(m[1]), Number(m[2])];
+  return x === 0 || x === 10 || x === 127 || (x === 169 && y === 254) || (x === 172 && y >= 16 && y <= 31)
+    || (x === 192 && y === 168) || (x === 100 && y >= 64 && y <= 127);
+}
+async function isPrivateUrl(url) {
+  let host;
+  try {
+    const u = new URL(url);
+    if (!['http:', 'https:'].includes(u.protocol)) return true;
+    host = u.hostname.replace(/^\[|\]$/g, '');
+  } catch { return true; }
+  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.localhost')) return true;
+  if (isPrivateIp(host)) return true;
+  try {
+    const addrs = await dnsLookup(host, { all: true });
+    return addrs.some((r) => isPrivateIp(r.address));
+  } catch { return true; }
+}
+
 // Best-effort remote check: does the URL's served Content-Type match its bytes?
 // Returns { ok: true } or { ok: false, served, actual } — network trouble counts
 // as ok (never block a generation on a flaky probe).
 async function checkImageUrlType(url, timeoutMs = 8000) {
+  if (await isPrivateUrl(url)) return { ok: true }; // never probe internal addresses (kie will reject them anyway)
   try {
     const res = await fetch(url, { headers: { Range: 'bytes=0-31' }, signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) return { ok: true };
@@ -947,7 +983,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.2.1' };
+const SERVER_INFO = { name: 'kie-art', version: '5.2.2' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -2775,6 +2811,13 @@ const handleCallToolInner = async (request) => {
             return { content: [{ type: 'text', text: `File is ${(size / 1048576).toFixed(1)}MB — larger than the 100MB upload guard for kie temp storage.` }], isError: true };
           }
           const bytes = readFileSync(file_path);
+          // Only media leaves the machine: upload_file publishes the file at a
+          // public URL, so an arbitrary path (~/.ssh/id_rsa, .env) would be an
+          // exfiltration primitive for a prompt-injected agent. Checked on the
+          // BYTES, so renaming a secret to .png doesn't get it through.
+          if (!sniffFileExt(bytes)) {
+            return { content: [{ type: 'text', text: `Refusing to upload ${file_path}: its contents are not a recognized image, audio, video or PDF file. upload_file only publishes media (JPEG/PNG/WebP/GIF, MP4/MOV/WebM, MP3/WAV/M4A/AAC/OGG/FLAC, MIDI, PDF).` }], isError: true };
+          }
           const { name, renamedFrom } = fixImageFilename(sanitizeFilename(file_name) || basename(file_path), bytes);
           const realExt = sniffImageExt(bytes);
           const form = new FormData();
@@ -2798,10 +2841,7 @@ const handleCallToolInner = async (request) => {
           // with an opaque upstream error. Catch the obvious cases first (#29).
           let host = '';
           try { host = new URL(file_url).hostname; } catch { return { content: [{ type: 'text', text: `file_url is not a valid URL: ${file_url}` }], isError: true }; }
-          const isPrivate = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)
-            || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-            || host.endsWith('.local') || host.endsWith('.internal');
-          if (isPrivate) {
+          if (await isPrivateUrl(file_url)) {
             return { content: [{ type: 'text', text: `file_url points at a private/local address (${host}) that kie.ai's servers cannot reach — the URL must be PUBLICLY accessible. For local files, read the file and use base64_data instead.` }], isError: true };
           }
           const body = { fileUrl: file_url, uploadPath: upload_path };
@@ -3157,6 +3197,37 @@ function createMcpServer() {
   return s;
 }
 
+// ── HTTP request guards (pure; unit-tested) ──
+function csvEnv(v) {
+  return String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
+}
+function isLoopbackHost(h) {
+  return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(String(h).toLowerCase());
+}
+function safeEqual(a, b) {
+  const ab = Buffer.from(String(a)); const bb = Buffer.from(String(b));
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
+// Returns null when the request may proceed, else { status, message }.
+function checkHttpRequest(headers, cfg, { skipAuth = false } = {}) {
+  const origin = headers.origin;
+  if (origin && !cfg.allowedOrigins.includes(origin)) {
+    return { status: 403, message: `Origin ${origin} is not allowed. Add it to KIE_MCP_ALLOWED_ORIGINS to permit browser clients from it.` };
+  }
+  // DNS-rebinding guard: on loopback, the Host header must name this machine.
+  const hostName = String(headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  if (cfg.allowedHosts.length ? !cfg.allowedHosts.map((h) => h.toLowerCase()).includes(hostName) && !(cfg.loopbackOnly && isLoopbackHost(hostName))
+    : cfg.loopbackOnly && !isLoopbackHost(hostName)) {
+    return { status: 403, message: `Host ${hostName || '(missing)'} is not allowed. Add it to KIE_MCP_ALLOWED_HOSTS if this is intended.` };
+  }
+  if (skipAuth) return null;
+  const m = String(headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  if (!m || !cfg.token || !safeEqual(m[1].trim(), cfg.token)) {
+    return { status: 401, message: 'Unauthorized: send "Authorization: Bearer <KIE_MCP_AUTH_TOKEN>".' };
+  }
+  return null;
+}
+
 // ─── Dual-Mode Transport ───
 // Default: stdio (for Claude Code local use)
 // --http or --port=N: HTTP Streamable transport (for Cowork / remote use)
@@ -3165,6 +3236,17 @@ const args = process.argv.slice(2);
 const httpFlag = args.includes('--http') || args.some(a => a.startsWith('--port'));
 const portArg = args.find(a => a.startsWith('--port='));
 const PORT = portArg ? parseInt(portArg.split('=')[1]) : parseInt(process.env.KIE_MCP_PORT || '3100');
+// HTTP mode security (5.2.2): loopback by default, bearer token required,
+// browser Origins and Host headers allowlisted. Before this, --http listened on
+// 0.0.0.0 with CORS * and no auth — any web page (or anyone reaching an ngrok
+// URL) could call upload_file file_path and exfiltrate local files.
+const HTTP_HOST = process.env.KIE_MCP_HOST || '127.0.0.1';
+const HTTP_CFG = {
+  token: process.env.KIE_MCP_AUTH_TOKEN || '',
+  allowedOrigins: csvEnv(process.env.KIE_MCP_ALLOWED_ORIGINS),
+  allowedHosts: csvEnv(process.env.KIE_MCP_ALLOWED_HOSTS),
+  loopbackOnly: isLoopbackHost(HTTP_HOST),
+};
 
 // Only stand up a transport when run as the entrypoint — importing this module
 // (e.g. from unit tests) must not start a server. See issue #41.
@@ -3173,12 +3255,30 @@ if (httpFlag) {
   // HTTP Streamable mode — supports multiple concurrent sessions
   const sessions = new Map();
 
+  if (!HTTP_CFG.token) {
+    console.error('[kie-mcp] HTTP mode requires KIE_MCP_AUTH_TOKEN (clients send it as "Authorization: Bearer <token>").');
+    console.error('[kie-mcp] Generate one with:  openssl rand -hex 32');
+    process.exit(1);
+  }
+
   const httpServer = createServer(async (req, res) => {
-    // CORS headers for remote access
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id');
-    res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id');
+    // CORS only for explicitly allowed browser origins (never *).
+    const origin = req.headers.origin;
+    if (origin && HTTP_CFG.allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, mcp-session-id, mcp-protocol-version');
+      res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id');
+    }
+
+    // Host/Origin checks apply to everything, including preflight and /health.
+    const hostOrOriginErr = checkHttpRequest(req.headers, HTTP_CFG, { skipAuth: true });
+    if (hostOrOriginErr) {
+      res.writeHead(hostOrOriginErr.status, { 'Content-Type': 'text/plain' });
+      res.end(hostOrOriginErr.message);
+      return;
+    }
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -3186,10 +3286,17 @@ if (httpFlag) {
       return;
     }
 
-    // Health check
+    // Health check (unauthenticated; reveals only liveness + version)
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', version: '5.2.1', sessions: sessions.size }));
+      res.end(JSON.stringify({ status: 'ok', version: SERVER_INFO.version }));
+      return;
+    }
+
+    const authErr = checkHttpRequest(req.headers, HTTP_CFG);
+    if (authErr) {
+      res.writeHead(authErr.status, { 'Content-Type': 'text/plain', ...(authErr.status === 401 ? { 'WWW-Authenticate': 'Bearer' } : {}) });
+      res.end(authErr.message);
       return;
     }
 
@@ -3229,10 +3336,10 @@ if (httpFlag) {
     await transport.handleRequest(req, res);
   });
 
-  httpServer.listen(PORT, () => {
-    console.error(`[kie-mcp] HTTP Streamable MCP server running on http://0.0.0.0:${PORT}/mcp`);
-    console.error(`[kie-mcp] Health check: http://0.0.0.0:${PORT}/health`);
-    console.error(`[kie-mcp] Use this URL in Cowork/remote MCP configs`);
+  httpServer.listen(PORT, HTTP_HOST, () => {
+    console.error(`[kie-mcp] HTTP Streamable MCP server running on http://${HTTP_HOST}:${PORT}/mcp (bearer token required)`);
+    console.error(`[kie-mcp] Health check: http://${HTTP_HOST}:${PORT}/health`);
+    if (!HTTP_CFG.loopbackOnly) console.error('[kie-mcp] ⚠️ Bound to a non-loopback address — reachable from the network. Keep KIE_MCP_AUTH_TOKEN secret.');
   });
 } else {
   // Stdio mode — standard Claude Code local use
@@ -3247,6 +3354,9 @@ if (httpFlag) {
 // server. Importing this module is side-effect-free except for creating the
 // (gitignored) RAW_DIR.
 export {
+  checkHttpRequest,
+  isPrivateIp,
+  isPrivateUrl,
   sniffImageExt,
   sniffFileExt,
   fixMediaFilename,

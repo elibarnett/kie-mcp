@@ -2,6 +2,27 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.2.2] — 2026-09-28
+
+Security release. **Upgrade now if you run `--http`.** stdio users (the default) were not exposed to the HTTP issues, but should still upgrade for the upload restriction.
+
+### Security
+
+- **HTTP mode was unauthenticated and open to any website.** `--http` listened on `0.0.0.0`, with no authentication and `Access-Control-Allow-Origin: *`. Any web page open in the user's browser (DNS rebinding / cross-origin requests), or anyone who had the ngrok URL the README suggested, could call every tool. That meant spending kie credits and reading any local file by `upload_file`-ing it to a public URL. HTTP mode now:
+  - **requires `KIE_MCP_AUTH_TOKEN`** (`Authorization: Bearer …`, constant-time compare); the server refuses to start without one;
+  - **binds to `127.0.0.1` by default** (`KIE_MCP_HOST` to override; the Docker images set `0.0.0.0` inside the container, and compose still publishes on 127.0.0.1 only);
+  - **rejects browser `Origin`s** not in `KIE_MCP_ALLOWED_ORIGINS`, and sends CORS headers only to those (never `*`);
+  - **rejects `Host` headers** other than localhost when bound to loopback (DNS-rebinding guard; `KIE_MCP_ALLOWED_HOSTS` adds tunnel hostnames).
+  **Breaking for HTTP users:** set a token and add the `Authorization` header to the client config (see README).
+- **`upload_file` `file_path` only publishes media.** It used to read and publish any file it was pointed at, so a prompt-injected agent could leak `~/.ssh/id_rsa` or `.env` as a public URL, even in stdio mode. The file's *bytes* must now be a recognized image, audio, video, MIDI or PDF, so renaming a secret to `.png` doesn't get it through.
+- **SSRF guard** — the Veo image preflight (added in 5.2.1) and the `file_url` sniff could make the server fetch internal addresses. Both now refuse private, loopback, link-local (incl. the `169.254.169.254` cloud metadata endpoint) and CGNAT addresses, checked after DNS resolution. `file_url`'s old hostname-only check is replaced by the same resolver-based guard.
+- **Dependencies** — `@modelcontextprotocol/sdk` floor raised to `^1.30.1` and the lockfile refreshed. `npm audit` now reports 0, down from 4 high, 3 moderate and 1 low, all transitive via the SDK's Express/Hono stack, which kie-mcp doesn't use. Fresh `npx` installs of 5.2.1 were already clean, because the lockfile isn't published; the stale lockfile only affected installs from a clone of the repo.
+
+### Fixed
+
+- `Dockerfile.local` now copies `data/` — the image couldn't start since the registries moved there (#46).
+- `/health` reports the version from `SERVER_INFO` (one less version string to bump) and no longer exposes the session count.
+
 ## [5.2.1] — 2026-09-24
 
 ### Fixed

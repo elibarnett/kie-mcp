@@ -3,9 +3,11 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY server.mjs ./
+COPY data ./data
 RUN mkdir -p /workspace/kie/assets/raw
 ENV KIE_PROJECT_ROOT=/workspace
 ENV KIE_MCP_PORT=3100
+ENV KIE_MCP_HOST=0.0.0.0
 EXPOSE 3100
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3100/health || exit 1

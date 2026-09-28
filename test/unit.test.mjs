@@ -403,7 +403,12 @@ test('media sniffing — saved results keep their real format (download side)', 
   assert.equal(sniffFileExt(b('RIFF', [0, 0, 0, 0], 'WAVEfmt ')), 'wav');
   assert.equal(sniffFileExt(b('ID3', [4, 0, 0])), 'mp3');
   assert.equal(sniffFileExt(b([0xff, 0xfb, 0x90, 0x64])), 'mp3', 'bare MPEG-1 layer III frame');
-  assert.equal(sniffFileExt(b([0xff, 0xf1, 0x50, 0x80])), null, 'AAC ADTS is not mp3');
+  assert.equal(sniffFileExt(b([0xff, 0xf1, 0x50, 0x80])), 'aac', 'AAC ADTS is not mp3');
+  assert.equal(sniffFileExt(b('%PDF-1.7')), 'pdf');
+  assert.equal(sniffFileExt(b('OggS', [0, 2])), 'ogg');
+  assert.equal(sniffFileExt(b([0x1a, 0x45, 0xdf, 0xa3])), 'webm');
+  assert.equal(sniffFileExt(b('-----BEGIN OPENSSH PRIVATE KEY-----')), null, 'secrets are not media');
+  assert.equal(sniffFileExt(b('KIE_API_KEY=abc123')), null, '.env is not media');
   assert.equal(sniffFileExt(b('MThd', [0, 0, 0, 6])), 'mid');
   // the reported bug: Seedream JPEG saved under the requested .png name
   const jpg = b([0xff, 0xd8, 0xff, 0xe0]);
@@ -411,4 +416,36 @@ test('media sniffing — saved results keep their real format (download side)', 
   // container aliases are not renamed
   assert.deepEqual(fixMediaFilename('clip.mov', b([0, 0, 0, 0x20], 'ftypisom')), { name: 'clip.mov' });
   assert.deepEqual(fixMediaFilename('voice.mp3', b('RIFF', [0, 0, 0, 0], 'WAVEfmt ')), { name: 'voice.wav', renamedFrom: 'voice.mp3' });
+});
+
+test('HTTP mode guards — token, Origin allowlist, Host (DNS rebinding) (5.2.2)', async () => {
+  const { checkHttpRequest } = await import('../server.mjs');
+  const cfg = { token: 's3cret-token', allowedOrigins: ['https://app.example'], allowedHosts: [], loopbackOnly: true };
+  const ok = { host: '127.0.0.1:3100', authorization: 'Bearer s3cret-token' };
+  assert.equal(checkHttpRequest(ok, cfg), null, 'valid token on loopback');
+  assert.equal(checkHttpRequest({ ...ok, host: 'localhost:3100' }, cfg), null);
+  assert.equal(checkHttpRequest({ host: '127.0.0.1:3100' }, cfg)?.status, 401, 'no token');
+  assert.equal(checkHttpRequest({ ...ok, authorization: 'Bearer wrong' }, cfg)?.status, 401, 'wrong token');
+  assert.equal(checkHttpRequest({ ...ok, authorization: 'Bearer s3cret-toke' }, cfg)?.status, 401, 'prefix of token');
+  assert.equal(checkHttpRequest({ ...ok, origin: 'https://evil.example' }, cfg)?.status, 403, 'foreign browser origin');
+  assert.equal(checkHttpRequest({ ...ok, origin: 'https://app.example' }, cfg), null, 'allowlisted origin');
+  assert.equal(checkHttpRequest({ ...ok, host: 'attacker.example' }, cfg)?.status, 403, 'DNS-rebinding Host on loopback');
+  assert.equal(checkHttpRequest({ host: 'attacker.example' }, cfg, { skipAuth: true })?.status, 403, 'host check runs even without auth');
+  assert.equal(checkHttpRequest({ ...ok, host: 'my.tunnel.dev' }, { ...cfg, allowedHosts: ['my.tunnel.dev'] }), null, 'allowlisted tunnel host');
+  assert.equal(checkHttpRequest({ ...ok, host: 'anything.example' }, { ...cfg, loopbackOnly: false }), null, 'non-loopback bind relies on the token');
+  assert.equal(checkHttpRequest(ok, { ...cfg, token: '' })?.status, 401, 'empty configured token never matches');
+});
+
+test('SSRF guard — private, loopback, link-local and metadata addresses (5.2.2)', async () => {
+  const { isPrivateIp, isPrivateUrl } = await import('../server.mjs');
+  for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1']) {
+    assert.equal(isPrivateIp(ip), true, ip);
+  }
+  for (const ip of ['8.8.8.8', '172.32.0.1', '1.1.1.1', '2606:4700::1111']) assert.equal(isPrivateIp(ip), false, ip);
+  assert.equal(await isPrivateUrl('http://169.254.169.254/latest/meta-data/'), true);
+  assert.equal(await isPrivateUrl('http://localhost:8080/x.png'), true);
+  assert.equal(await isPrivateUrl('http://[::1]/x.png'), true);
+  assert.equal(await isPrivateUrl('file:///etc/passwd'), true, 'non-http schemes');
+  assert.equal(await isPrivateUrl('not a url'), true);
+  assert.equal(await isPrivateUrl('https://8.8.8.8/x.png'), false, 'public IP literal (no DNS needed)');
 });
