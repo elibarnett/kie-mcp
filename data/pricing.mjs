@@ -183,28 +183,28 @@ export const PRICING = {
   'gemini-omni/character-create': 5,      // flat per character
 
   // ── Audio Models ──
-  'suno-music': 10,                   // flat per track
-  'suno/extend-music': 10,
-  'suno/cover-audio': 10,
-  'suno/add-instrumental': 10,
-  'suno/add-vocals': 10,
-  'suno/replace-section': 8,
-  'suno/generate-lyrics': 2,
-  'suno/convert-to-wav': 2,
-  'suno/separate-vocals': 5,
+  'suno-music': 12,                   // flat per request (kie published Oct 2026; was 10)
+  'suno/extend-music': 12,
+  'suno/cover-audio': 12,
+  'suno/add-instrumental': 12,
+  'suno/add-vocals': 12,
+  'suno/replace-section': 5,
+  'suno/generate-lyrics': 0.4,   // live 2026-10-05: 0.4
+  'suno/convert-to-wav': 0.4,    // live 2026-10-05: 0.4
+  'suno/separate-vocals': 10,    // separate_vocal; split_stem 50 (published). live 2026-10-05: 10
   'suno/generate-midi': 5,
-  'suno/create-music-video': 8,
-  'suno/generate-sounds': 5,
-  'suno/generate-persona': 5,
-  'suno/generate-mashup': 8,
+  'suno/create-music-video': 2,  // live 2026-10-05: 2
+  'suno/generate-sounds': 2.5,   // live 2026-10-05: 2.5
+  'suno/generate-persona': 0,    // free (published)
+  'suno/generate-mashup': 12,
   // ── Suno Voice API (custom voice cloning, #20) ──
   'suno/voice-validate': 0,    // "Generate Voice" — free (kie marketing 2026-07-12)
-  'suno/voice-generate': 5,    // estimate — pricing not disclosed; flagged below
+  'suno/voice-generate': 0,    // "Generate Voice is free" (kie published Oct 2026)
   'suno/voice-regenerate': 5,  // estimate
-  'suno/boost-style': 2,
-  'suno/timestamped-lyrics': 2,
-  'suno/cover-art': 4,
-  'suno/upload-extend': 10,
+  'suno/boost-style': 0.4,       // live 2026-10-05: 0.4
+  'suno/timestamped-lyrics': 0.5,
+  'suno/cover-art': 0,            // free (published; live 2026-10-05: 0)
+  'suno/upload-extend': 12,
   // Gemini TTS (July 2026) — token-priced upstream (140 cr/1M input, 2800 cr/1M audio-out;
   // Google bills 25 audio tokens/sec → ~4.2 cr per MINUTE of audio). Value below ≈ 1 minute.
   'google/gemini-3-1-flash-tts': 4.2,
@@ -250,7 +250,6 @@ export const PRICING_ESTIMATED = new Set([
   'google/gemini-3-8-flash-lite-tts',
   'wan/2-5-text-to-video',
   'wan/2-5-image-to-video',
-  'suno/voice-generate',
   'suno/voice-regenerate',
   'happyhorse/text-to-video',
   'happyhorse/image-to-video',

@@ -2,6 +2,34 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.5.0] — 2026-10-05
+
+**Suno now runs on kie's new market API.** In October 2026 kie moved the whole Suno API onto its generic task endpoint (`/api/v1/jobs/createTask` with `ai-music-api/*` models and snake_case inputs). The old endpoints still work (their docs say `deprecated: false`, with no shutdown date), so this is a planned migration with an instant way back: set `KIE_SUNO_API=legacy`.
+
+### Fixed
+
+- **`generate_lyrics` timed out on the legacy endpoint.** It polled `/generate/record-info`, which never sees lyrics tasks; the correct record is `/api/v1/lyrics/record-info`. The market API doesn't have this problem, and `KIE_SUNO_API=legacy` now polls the right record.
+
+### Changed
+
+- **17 Suno tools moved to the market API:** generate_music, generate_sfx, generate_sounds, extend_music, cover_audio, add_instrumental, add_vocals, replace_section, upload_extend_audio, generate_lyrics, convert_to_wav, separate_vocals, create_music_video, generate_persona, boost_style, get_timestamped_lyrics, generate_cover_art. Each tool still builds its request as before. `sunoCreate` translates it (camelCase→snake_case, legacy-only fields dropped), the market record is polled, and the result is reshaped into the legacy `sunoData` shape, so the tool logic is unchanged. Results now carry `creditsConsumed`.
+- **Stay on the legacy endpoints:**
+  - **MIDI:** on the market API the notes arrive only via callback; the record holds just a reference ID.
+  - **Mashup:** the market version takes uploaded audio URLs, not generated `audioIds`.
+  - **The voice-clone trio:** the new flow can't be verified without a human voice recording.
+- **Suno model versions:** added **V6, V6_MINI and V6_WILD**, and dropped V3_5 (not offered on the market API). The default stays V5.
+- **`separate_vocals` `type: "split_stem_advanced"`** (new on the market API).
+- **Track outputs show each track's `audioId`**, which is needed to chain into WAV, stems, video, persona, timestamped lyrics and extend. It used to be visible only through check_task.
+- **`replace_section` requires `fullLyrics`** (the complete lyrics with the section already edited), as the market API does. The section must be 10–480 s.
+- **`upload_extend_audio` requires `continueAt`.** kie documents it as optional, but every call without it fails upstream. It also always sends `instrumental`, since the old endpoint rejected a null value, so this tool was failing on the old API as well.
+- **`extend_music` / `upload_extend_audio`:** `prompt` is now described as the LYRICS for the extension, which is how both APIs use it. A short instruction like "add an outro" is rejected as malformed lyrics (error 531, refunded).
+- **`get_timestamped_lyrics`** returns the word timings and summarizes the waveform, instead of dumping hundreds of numbers.
+- **Suno prices updated to kie's published rates**, most confirmed by live charges on 2026-10-05:
+  - music, extend, cover, add-instrumental, add-vocals, upload-extend and mashup 10 → **12**;
+  - replace-section 8 → **5**; separate-vocals 5 → **10** (split_stem 50); music video 8 → **2**; sounds 5 → **2.5**;
+  - lyrics 2 → **0.4**; WAV 2 → **0.4**; style boost 2 → **0.4**; timestamped lyrics 2 → **0.5**;
+  - persona, cover art and voice-generate are now **free**.
+
 ## [5.4.0] — 2026-10-05
 
 ### Added

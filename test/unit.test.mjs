@@ -458,3 +458,27 @@ test('v5.4.0 — Seedream 5.0 Flash entries and pricing', async () => {
   assert.equal(i2i.buildInput('p', undefined, Array(12).fill('u'), {}).image_urls.length, 10, 'caps refs at 10');
   for (const k of ['seedream/5-flash-text-to-image', 'seedream/5-flash-image-to-image', 'seedream/5-flash-layer-decomposition']) assert.equal(PRICING[k], 3.24, k);
 });
+
+test('Suno market migration — request translation and result adapter (Oct 2026)', async () => {
+  const { camelToSnake, sunoMarketInput, normalizeSunoMarketRecord, extractResultUrls } = await import('../server.mjs');
+  assert.equal(camelToSnake('customMode'), 'custom_mode');
+  assert.equal(camelToSnake('infillStartS'), 'infill_start_s');
+  assert.equal(camelToSnake('audioId'), 'audio_id');
+  assert.equal(camelToSnake('domainName'), 'domain_name');
+  assert.deepEqual(
+    sunoMarketInput({ prompt: 'p', customMode: true, negativeTags: 'x', callBackUrl: 'cb', defaultParamFlag: true, vocalStart: 1, title: undefined, uploadUrl: 'u' }),
+    { prompt: 'p', custom_mode: true, negative_tags: 'x', upload_url: 'u' },
+    'legacy-only fields and undefined values are dropped');
+  // live shape captured 2026-10-05 (ai-music-api/generate)
+  const gen = { state: 'success', creditsConsumed: 12, resultJson: JSON.stringify({ code: 200, data: [
+    { id: 'a1', audio_url: 'https://x/a1.mp3', stream_audio_url: 'https://s/a1', image_url: 'https://i/a1.jpg', title: 'T', tags: 'pop', duration: 28.6, model_name: 'chirp-hawk' },
+    { id: 'a2', audio_url: 'https://x/a2.mp3', stream_audio_url: 'https://s/a2', image_url: 'https://i/a2.jpg', title: 'T', tags: 'pop', duration: 30 },
+  ], task_id: 't' }) };
+  const n = normalizeSunoMarketRecord(gen);
+  assert.equal(n.status, 'SUCCESS');
+  assert.deepEqual(n.sunoData.map((t) => [t.id, t.audioUrl, t.imageUrl]), [['a1', 'https://x/a1.mp3', 'https://i/a1.jpg'], ['a2', 'https://x/a2.mp3', 'https://i/a2.jpg']]);
+  assert.deepEqual(extractResultUrls(gen), ['https://x/a1.mp3', 'https://x/a2.mp3'], 'download_result takes audio only — no cover images or stream URLs');
+  // lyrics + cover-generate shapes
+  assert.equal(normalizeSunoMarketRecord({ resultJson: JSON.stringify({ resultObject: { lyricsData: [{ text: '[Verse] hi' }] } }) }).sunoData[0].text, '[Verse] hi');
+  assert.deepEqual(normalizeSunoMarketRecord({ resultJson: JSON.stringify({ resultUrls: ['https://c/1.png'] }) }).images, ['https://c/1.png']);
+});
