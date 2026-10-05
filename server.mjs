@@ -598,6 +598,19 @@ async function pollOnce(method, path) {
   }
 }
 
+// ElevenLabs on kie has failed every task (generic "Internal Error", 0 credits)
+// since 2026-09-22 21:50 UTC — re-verified 2026-09-23, 09-28 and 10-05 on kie's
+// own docs-example inputs. Fail fast with a pointer instead of a doomed round
+// trip. Set to null (or KIE_ELEVENLABS_ENABLED=1) once kie restores it.
+const ELEVENLABS_PAUSED = 'ElevenLabs on kie.ai has failed every request since 2026-09-22 (upstream "Internal Error"; nothing is charged).';
+const ELEVENLABS_TOOLS = new Set(['generate_tts', 'generate_dialogue', 'audio_isolation', 'speech_to_text']);
+const ELEVENLABS_FALLBACK = {
+  generate_tts: 'Use generate_gemini_tts instead (30 voices, style direction; model "flash-3.8" ≈1.9 cr/min, "flash-lite" ≈1.3 cr/min).',
+  generate_dialogue: 'Use generate_gemini_tts with speakers + dialogue_turns instead (up to 2 speakers).',
+  audio_isolation: 'No kie alternative right now — clean the audio locally (e.g. ffmpeg afftdn/arnndn, or Demucs/UVR).',
+  speech_to_text: 'No kie alternative right now — transcribe locally (e.g. whisper.cpp / openai-whisper).',
+};
+
 // Closest working substitute to suggest when a model's provider is down.
 function upstreamFallback(model = '') {
   if (/^elevenlabs\/text-to-(speech|dialogue)/.test(model)) return 'generate_gemini_tts (Google voices; also does 2-speaker dialogue)';
@@ -983,7 +996,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.3.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.4.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1694,18 +1707,19 @@ const handleListTools = async () => ({
     },
     {
       name: 'seedream_layer_decompose',
-      description: 'Split ANY image into independent layers with Seedream 5.0 Pro (billed per OUTPUT layer incl. base: 7 cr @1K, 14 @2K — a 3-layer split ≈ 21 cr). Works on any public image URL (upload local files with upload_file first). Describe which elements become layers in the prompt, optionally bounding them with <bbox>x1 y1 x2 y2</bbox> tags. Downloads every layer image to kie/assets/raw/.',
+      description: 'Split ANY image into independent layers with Seedream 5.0 (billed per OUTPUT layer incl. base). tier="pro" (default): 7 cr @1K, 14 @2K, so a 3-layer split ≈ 21 cr. tier="flash" (NEW): 3.24 cr/layer at any size, so ≈ 10 cr. Works on any public image URL (upload local files with upload_file first). Describe which elements become layers in the prompt, optionally bounding them with <bbox>x1 y1 x2 y2</bbox> tags. Downloads every layer image to kie/assets/raw/.',
       inputSchema: {
         type: 'object',
         properties: {
           image_url: { type: 'string', description: 'Public URL of the source image (singular — one image per call)' },
           prompt: { type: 'string', description: 'Which elements to separate into layers, e.g. "Separate the title text <bbox>179 58 809 197</bbox> and the parrot <bbox>330 274 641 991</bbox> into independent layers"' },
-          size: { type: 'string', default: 'auto', description: '1K/1.5K = 7 cr per layer, 2K = 14' },
+          tier: { type: 'string', enum: ['pro', 'flash'], default: 'pro', description: 'pro = Seedream 5.0 Pro (7 cr/layer @1K, 14 @2K; prompt required). flash = Seedream 5.0 Flash (NEW: 3.24 cr/layer at any size; prompt optional — but WITHOUT a prompt it splits out every element: a poster gave 12 layers = 38.9 cr. Name the elements you want to cap the layer count).' },
+          size: { type: 'string', default: 'auto', description: 'auto, 1K, 1.5K or 2K. Pro: 7 cr/layer at 1K/1.5K, 14 at 2K. Flash: 3.24 at any size.' },
           output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png', description: 'png recommended for transparency' },
           filename: { type: 'string', description: 'Base output filename; layers get -2, -3... suffixes' },
           download_dir: { type: 'string', description: 'Absolute directory to save into (created if missing). Defaults to the server\'s kie/assets/raw/.' },
         },
-        required: ['image_url', 'prompt'],
+        required: ['image_url'],
       },
     },
     {
@@ -1807,6 +1821,10 @@ const handleCallTool = (request) => downloadNotes.run([], async () => {
 });
 const handleCallToolInner = async (request) => {
   const { name, arguments: args } = request.params;
+
+  if (ELEVENLABS_TOOLS.has(name) && ELEVENLABS_PAUSED && process.env.KIE_ELEVENLABS_ENABLED !== '1') {
+    return { content: [{ type: 'text', text: `⏸ ${name} is paused: ${ELEVENLABS_PAUSED}\n${ELEVENLABS_FALLBACK[name]}\n(Set KIE_ELEVENLABS_ENABLED=1 to try ElevenLabs anyway.)` }], isError: true };
+  }
 
   try {
     switch (name) {
@@ -2923,15 +2941,19 @@ const handleCallToolInner = async (request) => {
       }
 
       case 'seedream_layer_decompose': {
-        const { image_url, prompt, size = 'auto', output_format = 'png', filename } = args;
+        const { image_url, prompt = '', tier = 'pro', size = 'auto', output_format = 'png', filename } = args;
+        const layerModel = tier === 'flash' ? 'seedream/5-flash-layer-decomposition' : 'seedream/5-pro-layer-decomposition';
+        if (tier !== 'flash' && !prompt) return { content: [{ type: 'text', text: 'tier "pro" needs a prompt describing which elements to separate (tier "flash" can run without one).' }], isError: true };
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const ext = output_format === 'jpeg' ? 'jpg' : 'png';
         const outFilename = sanitizeFilename(filename) || `seedream-layers-${ts}.${ext}`;
 
-        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'seedream/5-pro-layer-decomposition', input: { image_url, prompt, size, output_format } });
+        const layerInput = { image_url, size, output_format };
+        if (prompt) layerInput.prompt = prompt;
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: layerModel, input: layerInput });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start layer decomposition — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
-        const taskEntry = { taskId, model: 'seedream/5-pro-layer-decomposition', prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
+        const taskEntry = { taskId, model: layerModel, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
         trackTask(taskEntry);
         if (args.wait === false) return submitOnly(taskId, 'seedream/5-pro-layer-decomposition', outFilename);
 
@@ -2952,7 +2974,7 @@ const handleCallToolInner = async (request) => {
             text: [
               `✅ Decomposed into ${resultUrls.length} layer(s)!`,
               `Task ID: ${taskId}`,
-              `Cost: ${formatCost('seedream/5-pro-layer-decomposition', pollResult)} (billed per output layer)`,
+              `Cost: ${formatCost(layerModel, pollResult)} (billed per output layer)`,
               ...files.map((f) => `  → ${f}`),
               `Result URL(s) (temporary ~24h): `,
               ...resultUrls.map((u) => `  → ${u}`),

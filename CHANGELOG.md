@@ -2,6 +2,20 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.4.0] — 2026-10-05
+
+### Added
+
+- **Seedream 5.0 Flash** — `seedream/5-flash-text-to-image` and `seedream/5-flash-image-to-image` (up to 10 refs), 3.24 cr flat at 1K, 1.5K or 2K (Pro is 7/14). Also `seedream_layer_decompose` `tier: "flash"` at 3.24 cr per output layer; its prompt is optional. Live: T2I @2K and I2I each charged 3.24. A prompt-less Flash layer split of a poster returned 12 layers for 38.88 cr, so the tool now warns to name the elements to separate.
+
+### Changed
+
+- **ElevenLabs tools paused** — `generate_tts`, `generate_dialogue`, `audio_isolation` and `speech_to_text` now return at once with a pointer to the alternative (Gemini TTS, or local tools for isolation/transcription), instead of a doomed round trip. Every ElevenLabs task on kie has failed with "Internal Error" since 2026-09-22 21:50 UTC, re-verified 09-23, 09-28 and 10-05, and nothing was charged. Set `KIE_ELEVENLABS_ENABLED=1` to try ElevenLabs anyway.
+
+### Fixed
+
+- **Drift watch** — "2,800 credits" now parses as 2800 (it used to read 800), and token-metered prices ("… / 1M tokens") are no longer compared with the per-minute table estimate. Together these removed the recurring Gemini TTS false positives.
+
 ## [5.3.0] — 2026-09-28
 
 September 28 model pass: new Gemini 3.8 TTS models, a fix for Grok region edits (kie split the endpoint), and price corrections. Everything below was verified with live calls.

@@ -65,6 +65,9 @@ export const PRICING = {
   'seedream/5-pro-text-to-image': 7,       // 1K/1.5K; 2K 14 (published, drift 2026-08-26)
   'seedream/5-pro-image-to-image': 7,      // + 0.5 cr per input image, first free
   'seedream/5-pro-layer-decomposition': 7, // PER OUTPUT LAYER incl. base (1K; 2K 14)
+  'seedream/5-flash-text-to-image': 3.24,        // Seedream 5.0 Flash (Oct 2026) — kie published: 3.24 cr flat at 1K/1.5K/2K
+  'seedream/5-flash-image-to-image': 3.24,
+  'seedream/5-flash-layer-decomposition': 3.24,  // PER OUTPUT LAYER incl. base, any size
   'seedream/5-lite-text-to-image': 5,
   'seedream/5-lite-image-to-image': 5,
   'wan/2-7-image': 4.8,       // kie raised it (drift watch 2026-07-27; was 4)

@@ -449,3 +449,12 @@ test('SSRF guard — private, loopback, link-local and metadata addresses (5.2.2
   assert.equal(await isPrivateUrl('not a url'), true);
   assert.equal(await isPrivateUrl('https://8.8.8.8/x.png'), false, 'public IP literal (no DNS needed)');
 });
+
+test('v5.4.0 — Seedream 5.0 Flash entries and pricing', async () => {
+  const { MODEL_REGISTRY, PRICING } = await import('../server.mjs');
+  const t2i = MODEL_REGISTRY['seedream/5-flash-text-to-image'];
+  assert.deepEqual(t2i.buildInput('p', '21:9', [], { size: '2K' }), { prompt: 'p', aspect_ratio: '21:9', size: '2K', output_format: 'png' });
+  const i2i = MODEL_REGISTRY['seedream/5-flash-image-to-image'];
+  assert.equal(i2i.buildInput('p', undefined, Array(12).fill('u'), {}).image_urls.length, 10, 'caps refs at 10');
+  for (const k of ['seedream/5-flash-text-to-image', 'seedream/5-flash-image-to-image', 'seedream/5-flash-layer-decomposition']) assert.equal(PRICING[k], 3.24, k);
+});
