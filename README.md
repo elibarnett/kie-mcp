@@ -135,6 +135,8 @@ To reach it remotely, put it behind a tunnel (ngrok / Cloudflare Tunnel) or a re
 | `KIE_API_KEY` | yes | Your kie.ai API key |
 | `KIE_PROJECT_ROOT` | no | Server-wide default for where generated files are saved (default: server cwd; files go to `$KIE_PROJECT_ROOT/kie/assets/raw/`). Per-call `download_dir` (absolute path) on any file-writing tool overrides this |
 | `KIE_MCP_PORT` | no | Port for HTTP mode (default: 3100) |
+| `KIE_SUNO_API` | no | `legacy` sends Suno tools to kie's old Suno endpoints. Default since 5.5.0 is kie's new market API (`ai-music-api/*`), which reports the actual credits charged. MIDI, mashup and voice cloning always use the old endpoints |
+| `KIE_ELEVENLABS_ENABLED` | no | `1` re-enables the ElevenLabs tools (paused since 5.4.0 while kie's ElevenLabs integration fails) |
 | `KIE_MCP_AUTH_TOKEN` | HTTP mode | Bearer token HTTP clients must send (`Authorization: Bearer …`). The server refuses to start in HTTP mode without it |
 | `KIE_MCP_HOST` | no | HTTP bind address (default `127.0.0.1`). Set `0.0.0.0` only inside a container or behind a firewall |
 | `KIE_MCP_ALLOWED_HOSTS` | no | Comma-separated extra `Host` header names to accept (e.g. your tunnel hostname). On loopback, localhost names are always accepted; other hosts are rejected to block DNS rebinding |

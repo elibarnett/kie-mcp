@@ -520,10 +520,89 @@ async function kieRequest(method, path, body) {
   });
 }
 
-// All async Suno-family create endpoints go through here so the required
-// callBackUrl is always present; an explicit body.callBackUrl wins.
-function sunoCreate(path, body) {
-  return kieRequest('POST', path, { callBackUrl: SUNO_CALLBACK_URL, ...body });
+// ── Suno transport (Oct 2026 migration) ──
+// kie moved the Suno API onto the market endpoint (/api/v1/jobs/createTask with
+// ai-music-api/* models, snake_case inputs, results via /jobs/recordInfo). The
+// old endpoints still work (docs: deprecated: false), so tools keep building
+// their legacy camelCase bodies and sunoCreate translates. KIE_SUNO_API=legacy
+// switches everything back. Not migrated (stay legacy): MIDI (new API delivers
+// notes only via callback), mashup (new API takes uploaded URLs, not audioIds),
+// and the voice-clone trio (needs a human recording to verify the new flow).
+const SUNO_MARKET = process.env.KIE_SUNO_API !== 'legacy';
+const SUNO_MARKET_MODELS = {
+  '/api/v1/generate': 'ai-music-api/generate',
+  '/api/v1/generate/sounds': 'ai-music-api/sounds',
+  '/api/v1/generate/extend': 'ai-music-api/extend',
+  '/api/v1/generate/upload-cover': 'ai-music-api/upload-and-cover-audio',
+  '/api/v1/generate/upload-extend': 'ai-music-api/upload-and-extend-audio',
+  '/api/v1/generate/add-instrumental': 'ai-music-api/add-instrumental',
+  '/api/v1/generate/add-vocals': 'ai-music-api/add-vocals',
+  '/api/v1/generate/replace-section': 'ai-music-api/replace-section',
+  '/api/v1/lyrics': 'ai-music-api/generate-lyrics',
+  '/api/v1/wav/generate': 'ai-music-api/convert-to-wav-format',
+  '/api/v1/vocal-removal/generate': 'ai-music-api/separate-vocals',
+  '/api/v1/mp4/generate': 'ai-music-api/create-music-video',
+  '/api/v1/generate/generate-persona': 'ai-music-api/generate-persona',
+  '/api/v1/style/generate': 'ai-music-api/boost-music-style',
+  '/api/v1/generate/get-timestamped-lyrics': 'ai-music-api/timeStamped-lyrics',
+  '/api/v1/suno/cover/generate': 'ai-music-api/cover-generate',
+};
+// Legacy-only fields with no market equivalent.
+const SUNO_DROP_FIELDS = new Set(['callBackUrl', 'defaultParamFlag', 'vocalStart', 'vocalEnd']);
+// Task IDs created on the market API — the poll helpers branch on this.
+const sunoMarketTasks = new Set();
+
+// customMode → custom_mode, infillStartS → infill_start_s, audioId → audio_id.
+function camelToSnake(k) {
+  return k.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/([A-Z])([A-Z][a-z])/g, '$1_$2').toLowerCase();
+}
+function sunoMarketInput(body) {
+  const input = {};
+  for (const [k, v] of Object.entries(body || {})) {
+    if (v === undefined || SUNO_DROP_FIELDS.has(k)) continue;
+    input[camelToSnake(k)] = v;
+  }
+  return input;
+}
+
+// All Suno-family create calls go through here. Market mode translates the
+// legacy body; legacy mode keeps the old endpoint (callBackUrl always present).
+async function sunoCreate(path, body) {
+  const model = SUNO_MARKET && SUNO_MARKET_MODELS[path];
+  if (!model) return kieRequest('POST', path, { callBackUrl: SUNO_CALLBACK_URL, ...body });
+  const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model, input: sunoMarketInput(body) });
+  const taskId = result?.data?.taskId;
+  if (taskId) sunoMarketTasks.add(taskId);
+  return result;
+}
+
+// Market Suno track → the legacy sunoData shape every tool already reads.
+function legacyTrack(t) {
+  return {
+    id: t.id, audioUrl: t.audio_url, streamAudioUrl: t.stream_audio_url, imageUrl: t.image_url,
+    title: t.title, tags: t.tags, prompt: t.prompt, duration: t.duration, modelName: t.model_name, createTime: t.createTime,
+  };
+}
+// Reshape a finished market record into what pollSunoTask callers expect.
+function normalizeSunoMarketRecord(rec) {
+  let rj = {};
+  try { rj = typeof rec.resultJson === 'string' ? JSON.parse(rec.resultJson) : (rec.resultJson || {}); } catch { /* keep {} */ }
+  const out = { ...rec, status: 'SUCCESS' };
+  if (Array.isArray(rj.data)) out.sunoData = rj.data.map(legacyTrack);
+  if (Array.isArray(rj.resultObject?.lyricsData)) out.sunoData = rj.resultObject.lyricsData;
+  if (Array.isArray(rj.resultUrls)) out.images = rj.resultUrls; // cover-generate returns its images here
+  return out;
+}
+async function pollSunoMarket(taskId, maxWaitMs) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const poll = await pollOnce('GET', `/api/v1/jobs/recordInfo?taskId=${taskId}`);
+    const d = poll?.data;
+    if (d?.state === 'success') return d;
+    if (d?.state === 'fail') throw taskError(`Suno task failed: ${d.failMsg || 'unknown'}${d.failCode ? ` (code: ${d.failCode})` : ''}`, taskId);
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+  throw taskError(`Suno task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
 }
 
 // Veo upscale endpoints return non-standard kie codes during polling that would
@@ -717,6 +796,7 @@ async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
 // polling /generate/record-info made these tools time out despite producing
 // output. See issue #53.
 const SUNO_RECORD_ENDPOINTS = {
+  'suno/lyrics': '/api/v1/lyrics/record-info',
   'suno/wav': '/api/v1/wav/record-info',
   'suno/mp4': '/api/v1/mp4/record-info',
   'suno/midi': '/api/v1/midi/record-info',
@@ -741,6 +821,7 @@ function collectUrls(node, acc = []) {
 
 // Poll a specialized Suno record endpoint until successFlag === 'SUCCESS'.
 async function pollSunoRecord(taskId, recordPath, maxWaitMs = 300000) {
+  if (sunoMarketTasks.has(taskId)) return pollSunoMarket(taskId, maxWaitMs); // extractResultUrls reads its resultJson
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
     const poll = await pollOnce('GET', `${recordPath}?taskId=${taskId}`);
@@ -786,7 +867,19 @@ async function pollVoiceUntil(taskId, targetStates, maxWaitMs = 300000) {
   throw taskError(`Voice task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
 }
 
+async function pollLegacyLyrics(taskId, maxWaitMs = 300000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const d = (await pollOnce('GET', `/api/v1/lyrics/record-info?taskId=${taskId}`))?.data;
+    if (d?.status === 'SUCCESS') return { ...d, sunoData: d.response?.data || [] };
+    if (d?.errorMessage || /FAIL|ERROR/i.test(d?.status || '')) throw taskError(`Lyrics task failed: ${d.errorMessage || d.status}`, taskId);
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+  throw taskError(`Lyrics task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
+}
+
 async function pollSunoTask(taskId, maxWaitMs = 300000) {
+  if (sunoMarketTasks.has(taskId)) return normalizeSunoMarketRecord(await pollSunoMarket(taskId, maxWaitMs));
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
     const poll = await pollOnce('GET', `/api/v1/generate/record-info?taskId=${taskId}`);
@@ -866,7 +959,7 @@ async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3', outDir = R
     let trackPath = join(outDir, sunoTrackName(outFilename, i, ext));
     if (existsSync(trackPath)) console.error(`[kie-mcp] overwriting existing file: ${trackPath}`);
     trackPath = await downloadToFile(url, trackPath);
-    downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration });
+    downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration, id: track.id });
   }
   return downloadedFiles;
 }
@@ -877,6 +970,11 @@ function extractResultUrls(result) {
     try {
       const p = typeof result.resultJson === 'string' ? JSON.parse(result.resultJson) : result.resultJson;
       urls = p.resultUrls || p.result_urls || [];
+      // Market Suno music/extend/sounds: data = [{ audio_url, stream_audio_url, image_url, … }]
+      // — take the audio files only (not cover images or stream URLs).
+      if (Array.isArray(p.data) && p.data.some((t) => t?.audio_url)) {
+        return [...new Set(p.data.map((t) => t.audio_url).filter(Boolean))];
+      }
       if (p.resultObject?.url) urls.push(p.resultObject.url);
       // OmniHuman subject-detection returns resultObject.mask_urls
       if (Array.isArray(p.resultObject?.mask_urls)) urls.push(...p.resultObject.mask_urls);
@@ -996,7 +1094,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.4.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.5.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1141,7 +1239,7 @@ const handleListTools = async () => ({
           },
           model: {
             type: 'string',
-            enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'],
+            enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'],
             default: 'V5',
             description: 'Suno model. V5_5=custom style, V5=best quality. Default: V5',
           },
@@ -1296,11 +1394,11 @@ const handleListTools = async () => ({
           wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
           max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           audioId: { type: 'string', description: 'Audio ID from a previous Suno generation (from sunoData)' },
-          prompt: { type: 'string', description: 'Prompt for the extension' },
+          prompt: { type: 'string', description: 'LYRICS for the extended section (Suno sings this text). Give real lyric lines; a short instruction like "add an outro" is rejected as malformed lyrics (error 531, refunded).' },
           style: { type: 'string', description: 'Style tags for the extension' },
           title: { type: 'string' },
           continueAt: { type: 'number', description: 'Timestamp in seconds to continue from' },
-          model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
+          model: { type: 'string', enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'], default: 'V5' },
           defaultParamFlag: { type: 'boolean', default: false, description: 'Use default params from original track' },
           filename: { type: 'string' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
@@ -1320,7 +1418,7 @@ const handleListTools = async () => ({
           prompt: { type: 'string', description: 'Description of desired cover style' },
           customMode: { type: 'boolean', default: false },
           instrumental: { type: 'boolean', default: false },
-          model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
+          model: { type: 'string', enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'], default: 'V5' },
           style: { type: 'string' },
           title: { type: 'string' },
           negativeTags: { type: 'string', description: 'Tags to avoid in the cover' },
@@ -1343,7 +1441,7 @@ const handleListTools = async () => ({
           title: { type: 'string' },
           tags: { type: 'string', description: 'Style tags for the instrumental' },
           negativeTags: { type: 'string' },
-          model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
+          model: { type: 'string', enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'], default: 'V5' },
           filename: { type: 'string' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
@@ -1363,7 +1461,7 @@ const handleListTools = async () => ({
           title: { type: 'string' },
           style: { type: 'string' },
           negativeTags: { type: 'string' },
-          model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
+          model: { type: 'string', enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'], default: 'V5' },
           filename: { type: 'string' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
@@ -1430,7 +1528,7 @@ const handleListTools = async () => ({
           max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           taskId: { type: 'string', description: 'Task ID of the Suno generation' },
           audioId: { type: 'string', description: 'Audio ID from sunoData' },
-          type: { type: 'string', enum: ['separate_vocal', 'split_stem'], default: 'separate_vocal', description: 'separate_vocal=vocals+instrumental, split_stem=individual instruments' },
+          type: { type: 'string', enum: ['separate_vocal', 'split_stem', 'split_stem_advanced'], default: 'separate_vocal', description: 'split_stem_advanced = NEW finer multi-stem split (market API). separate_vocal=vocals+instrumental, split_stem=individual instruments' },
           filename: { type: 'string' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
@@ -1480,7 +1578,7 @@ const handleListTools = async () => ({
           wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
           max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (defaults: image 600, video 900, audio 300, speech 300). Ignored when wait=false.' },
           prompt: { type: 'string', description: 'Sound description (e.g. "ambient rain on a tin roof, soft thunder")' },
-          model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
+          model: { type: 'string', enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'], default: 'V5' },
           soundLoop: { type: 'boolean', default: false, description: 'Whether the sound should loop seamlessly' },
           soundTempo: { type: 'number', description: 'BPM for the sound' },
           soundKey: { type: 'string', description: 'Musical key (e.g. "C", "Am")' },
@@ -1519,7 +1617,7 @@ const handleListTools = async () => ({
           taskId: { type: 'string', description: 'Source task ID' },
           audioIds: { type: 'array', items: { type: 'string' }, description: 'Up to 2 audio IDs to mashup' },
           prompt: { type: 'string', description: 'Optional prompt for mashup direction' },
-          model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
+          model: { type: 'string', enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'], default: 'V5' },
           filename: { type: 'string' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
@@ -1652,16 +1750,16 @@ const handleListTools = async () => ({
           wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result. Recommended for long generations to avoid client-side watchdog timeouts.' },
           max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds (default: audio 300). Ignored when wait=false.' },
           uploadUrl: { type: 'string', description: 'URL of the audio file to extend' },
-          prompt: { type: 'string', description: 'Description of the extension content' },
-          continueAt: { type: 'number', description: 'Timestamp in seconds where to start the extension' },
-          model: { type: 'string', enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5'], default: 'V5' },
+          prompt: { type: 'string', description: 'LYRICS for the extended section (sung as written); omit and set instrumental=true for an instrumental extension.' },
+          continueAt: { type: 'number', description: 'REQUIRED in practice: second where the extension starts (> 0 and < the upload\'s length). kie fails every request without it.' },
+          model: { type: 'string', enum: ['V4', 'V4_5', 'V4_5PLUS', 'V4_5ALL', 'V5', 'V5_5', 'V6', 'V6_MINI', 'V6_WILD'], default: 'V5' },
           style: { type: 'string', description: 'Style tags for the extension' },
           title: { type: 'string' },
           instrumental: { type: 'boolean', default: false },
           filename: { type: 'string' },
           download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/. Must be absolute — the MCP server\'s working directory is not the caller\'s.' },
         },
-        required: ['uploadUrl'],
+        required: ['uploadUrl', 'continueAt'],
       },
     },
     {
@@ -2096,7 +2194,7 @@ const handleCallToolInner = async (request) => {
           if (!sunoData?.length) return { content: [{ type: 'text', text: `Suno task ${args.task_id} succeeded but has no tracks.` }] };
           const outName = sanitizeFilename(args.filename) || entry?.filename || `download-${args.task_id.slice(0, 8)}.mp3`;
           const files = await downloadSunoTracks(sunoData, outName, 'mp3', resolveOutputDir(args));
-          return { content: [{ type: 'text', text: `Downloaded ${files.length} track(s):\n${files.map((f) => `  → ${f.file}`).join('\n')}` }] };
+          return { content: [{ type: 'text', text: `Downloaded ${files.length} track(s):\n${files.map((f) => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
         }
         const state = normalizeTaskState(data);
         if (state !== 'success') {
@@ -2244,7 +2342,7 @@ const handleCallToolInner = async (request) => {
               `✅ Music generated (Suno ${model})!`,
               `Task ID: ${taskId}`,
               `Tracks: ${downloadedFiles.length}`,
-              ...downloadedFiles.map((f) => `  → ${f.file}${f.title ? ` — "${f.title}"` : ''}${f.duration ? ` (${f.duration}s)` : ''}`),
+              ...downloadedFiles.map((f) => `  → ${f.file}${f.title ? ` — "${f.title}"` : ''}${f.duration ? ` (${f.duration}s)` : ''}${f.id ? ` [audioId: ${f.id}]` : ''}`),
               ``,
               `Use download_result or copy directly from kie/assets/raw/`,
             ].join('\n'),
@@ -2277,7 +2375,7 @@ const handleCallToolInner = async (request) => {
         if (!sunoData.length) return { content: [{ type: 'text', text: `SFX task ${taskId} done but no results.` }] };
 
         const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ SFX generated (via Suno V5)!\nText: "${text}"\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ SFX generated (via Suno V5)!\nText: "${text}"\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       case 'generate_gemini_tts': {
@@ -2440,7 +2538,7 @@ const handleCallToolInner = async (request) => {
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Extend task ${taskId} completed but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Music extended!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Music extended!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       case 'cover_audio': {
@@ -2465,7 +2563,7 @@ const handleCallToolInner = async (request) => {
         const sunoData = pollResult.sunoData;
         if (!sunoData?.length) return { content: [{ type: 'text', text: `Cover task ${taskId} completed but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Audio cover created!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Audio cover created!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       case 'add_instrumental': {
@@ -2484,7 +2582,7 @@ const handleCallToolInner = async (request) => {
         if (args.wait === false) return submitOnly(taskId, 'suno/add-instrumental', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Instrumental added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Instrumental added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       case 'add_vocals': {
@@ -2503,13 +2601,16 @@ const handleCallToolInner = async (request) => {
         if (args.wait === false) return submitOnly(taskId, 'suno/add-vocals', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Vocals added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Vocals added!\nTask ID: ${taskId}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       case 'replace_section': {
         const { taskId: origTaskId, audioId, prompt, infillStartS, infillEndS, tags, title, negativeTags, fullLyrics, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `replace-${ts}.mp3`;
+        if (SUNO_MARKET && !fullLyrics) {
+          return { content: [{ type: 'text', text: 'replace_section needs fullLyrics: the COMPLETE song lyrics with the replaced section already edited in (required by kie\'s Suno API since Oct 2026). Section must be 10-480 s long.' }], isError: true };
+        }
         const body = { taskId: origTaskId, audioId, prompt, infillStartS, infillEndS };
         if (tags) body.tags = tags;
         if (title) body.title = title;
@@ -2522,7 +2623,7 @@ const handleCallToolInner = async (request) => {
         if (args.wait === false) return submitOnly(taskId, 'suno/replace-section', outFilename);
         const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
         const files = await downloadSunoTracks(pollResult.sunoData || [], outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Section replaced!\nTask ID: ${taskId}\nRange: ${infillStartS}s-${infillEndS}s\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Section replaced!\nTask ID: ${taskId}\nRange: ${infillStartS}s-${infillEndS}s\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       case 'generate_lyrics': {
@@ -2532,7 +2633,11 @@ const handleCallToolInner = async (request) => {
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         trackTask({ taskId, model: 'suno/lyrics', prompt: prompt.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
-        const pollResult = await pollSunoTask(taskId, pollBudgetMs('audio', args));
+        // Legacy lyrics tasks live on /api/v1/lyrics/record-info (NOT /generate/record-info,
+        // which never sees them — the old tool polled the wrong record and timed out).
+        const pollResult = sunoMarketTasks.has(taskId)
+          ? await pollSunoTask(taskId, pollBudgetMs('audio', args))
+          : await pollLegacyLyrics(taskId, pollBudgetMs('audio', args));
         const lyrics = pollResult.sunoData?.[0]?.text || pollResult.text || JSON.stringify(pollResult);
         return { content: [{ type: 'text', text: `✅ Lyrics generated!\nTask ID: ${taskId}\n\n${lyrics}` }] };
       }
@@ -2629,7 +2734,7 @@ const handleCallToolInner = async (request) => {
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Sounds task ${taskId} done but no results.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Sound generated!\nTask ID: ${taskId}${soundLoop ? ' (loopable)' : ''}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Sound generated!\nTask ID: ${taskId}${soundLoop ? ' (loopable)' : ''}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       // ── New Suno Tools (April-May 2026) ──
@@ -2641,6 +2746,10 @@ const handleCallToolInner = async (request) => {
         if (vocalEnd !== undefined) body.vocalEnd = vocalEnd;
         if (style) body.style = style;
         const result = await sunoCreate('/api/v1/generate/generate-persona', body);
+        // Market mode answers synchronously: data = { name, description, persona_id }
+        if (result.data?.persona_id) {
+          return { content: [{ type: 'text', text: `✅ Persona created!\nPersona ID: ${result.data.persona_id}\nName: ${result.data.name || personaName}\n\nUse this Persona ID in future generate_music calls (persona_id) to keep the same voice/style.` }] };
+        }
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         trackTask({ taskId: newTaskId, model: 'suno/persona', prompt: personaName, status: 'polling', createdAt: new Date().toISOString() });
@@ -2666,7 +2775,7 @@ const handleCallToolInner = async (request) => {
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Mashup task ${newTaskId} done but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Mashup created!\nTask ID: ${newTaskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Mashup created!\nTask ID: ${newTaskId}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       // ── Suno Voice API — custom voice cloning (EXPERIMENTAL, #20) ──
@@ -2715,14 +2824,32 @@ const handleCallToolInner = async (request) => {
 
       case 'boost_style': {
         const { content } = args;
+        if (SUNO_MARKET) {
+          const created = await sunoCreate('/api/v1/style/generate', { content });
+          const tid = created.data?.taskId;
+          if (!tid) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(created, null, 2)}` }], isError: true };
+          const rec = await pollSunoMarket(tid, pollBudgetMs('audio', args));
+          let boosted = '';
+          try { boosted = JSON.parse(rec.resultJson || '{}').resultUrls?.[0] || ''; } catch { /* fall through */ }
+          return { content: [{ type: 'text', text: `✅ Boosted style:\n${boosted || rec.resultJson}\nCost: ${formatCost('suno/boost-style', rec)}` }] };
+        }
         const result = await kieRequest('POST', '/api/v1/style/generate', { content });
         return { content: [{ type: 'text', text: `✅ Boosted style:\n${JSON.stringify(result.data || result, null, 2)}` }] };
       }
 
       case 'get_timestamped_lyrics': {
         const { taskId, audioId } = args;
-        const result = await kieRequest('POST', '/api/v1/generate/get-timestamped-lyrics', { taskId, audioId });
-        return { content: [{ type: 'text', text: `✅ Timestamped lyrics:\n${JSON.stringify(result.data || result, null, 2)}` }] };
+        // Market mode answers synchronously: data.data.alignedWords
+        const result = SUNO_MARKET
+          ? await kieRequest('POST', '/api/v1/jobs/createTask', { model: SUNO_MARKET_MODELS['/api/v1/generate/get-timestamped-lyrics'], input: { task_id: taskId, audio_id: audioId } })
+          : await kieRequest('POST', '/api/v1/generate/get-timestamped-lyrics', { taskId, audioId });
+        // Keep the word timings; summarize the (hundreds-long) waveform array.
+        const tl = result.data?.data || result.data || result;
+        const words = tl?.alignedWords;
+        const summary = Array.isArray(words)
+          ? { alignedWords: words.map((w) => ({ word: w.word, startS: w.startS, endS: w.endS })), waveformPoints: tl.waveformData?.length ?? 0 }
+          : tl;
+        return { content: [{ type: 'text', text: `✅ Timestamped lyrics (${Array.isArray(words) ? `${words.length} words` : 'raw'}):\n${JSON.stringify(summary, null, 2)}${Array.isArray(words) && !words.length ? '\n(No aligned words: Suno returned none for this track; custom-lyrics tracks align best.)' : ''}` }] };
       }
 
       case 'generate_cover_art': {
@@ -2776,13 +2903,16 @@ const handleCallToolInner = async (request) => {
         const { uploadUrl, prompt, continueAt, model, style, title, instrumental, filename } = args;
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const outFilename = sanitizeFilename(filename) || `upload-extend-${ts}.mp3`;
-        const body = { uploadUrl };
+        // kie documents continue_at as optional, but every call without it fails
+        // upstream ("Audio generation failed", refunded) — verified 2026-10-05.
+        if (typeof continueAt !== 'number' || continueAt <= 0) {
+          return { content: [{ type: 'text', text: 'upload_extend_audio needs continueAt: the second (> 0, < the upload\'s length) where the extension should start. kie fails every request without it.' }], isError: true };
+        }
+        const body = { uploadUrl, continueAt, instrumental: !!instrumental }; // legacy endpoint rejects a null instrumental
         if (prompt) body.prompt = prompt;
-        if (continueAt !== undefined) body.continueAt = continueAt;
         if (model) body.model = model;
         if (style) body.style = style;
         if (title) body.title = title;
-        if (instrumental !== undefined) body.instrumental = instrumental;
         const result = await sunoCreate('/api/v1/generate/upload-extend', body);
         const newTaskId = result.data?.taskId || result.taskId;
         if (!newTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
@@ -2792,7 +2922,7 @@ const handleCallToolInner = async (request) => {
         const sunoData = pollResult.sunoData || [];
         if (!sunoData.length) return { content: [{ type: 'text', text: `Extend task ${newTaskId} done but no tracks.` }] };
         const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
-        return { content: [{ type: 'text', text: `✅ Audio extended!\nTask ID: ${newTaskId}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+        return { content: [{ type: 'text', text: `✅ Audio extended!\nTask ID: ${newTaskId}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
       case 'speech_to_text': {
@@ -3387,6 +3517,9 @@ if (httpFlag) {
 // server. Importing this module is side-effect-free except for creating the
 // (gitignored) RAW_DIR.
 export {
+  camelToSnake,
+  sunoMarketInput,
+  normalizeSunoMarketRecord,
   checkHttpRequest,
   isPrivateIp,
   isPrivateUrl,
