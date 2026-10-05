@@ -831,6 +831,46 @@ export const MODEL_REGISTRY = {
       return { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, quality: opts.quality || 'basic', size: opts.size || 'auto', output_format: opts.output_format || 'png' };
     },
   },
+  // ── Seedream 5.0 Flash (Oct 2026) — cheapest 5.0 tier: 3.24 cr flat at 1K/1.5K/2K ──
+  'seedream/5-flash-text-to-image': {
+    name: 'Seedream 5.0 Flash',
+    description: 'NEW (Oct 2026) — fast, cheap Seedream 5.0 tier: 3.24 cr flat at 1K, 1.5K OR 2K (Pro is 7/14). 8 aspect ratios incl. 21:9. Layer decomposition via seedream_layer_decompose tier="flash".',
+    capabilities: ['photorealistic', 'illustration', 'design', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'seedream/5-flash-text-to-image',
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'],
+    maxPromptChars: 5000,
+    options: {
+      size: { type: 'string', enum: ['1K', '1.5K', '2K'], default: '1K', description: 'Same price at every size — 2K costs no more' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      nsfw_checker: { type: 'boolean' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || '1:1', size: opts.size || '1K', output_format: opts.output_format || 'png' };
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
+  'seedream/5-flash-image-to-image': {
+    name: 'Seedream 5.0 Flash (img2img)',
+    description: 'NEW (Oct 2026) — Seedream 5.0 Flash editing/restyling with up to 10 reference images. 3.24 cr flat at 1K/1.5K/2K.',
+    capabilities: ['editing', 'style-transfer', 'multi-reference', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'seedream/5-flash-image-to-image',
+    requiresImage: true,
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'],
+    maxPromptChars: 5000,
+    options: {
+      size: { type: 'string', enum: ['1K', '1.5K', '2K'], default: '1K' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      nsfw_checker: { type: 'boolean' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_urls: (imageUrls || []).slice(0, 10), aspect_ratio: aspectRatio || '1:1', size: opts.size || '1K', output_format: opts.output_format || 'png' };
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
   'seedream/5-lite-text-to-image': {
     name: 'Seedream 5.0 Lite',
     description: 'Seedream 5.0 Lite with 2K/4K quality tiers. Great for 3D renders and game art.',
