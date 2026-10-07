@@ -693,7 +693,7 @@ const ELEVENLABS_FALLBACK = {
 // Closest working substitute to suggest when a model's provider is down.
 function upstreamFallback(model = '') {
   if (/^elevenlabs\/text-to-(speech|dialogue)/.test(model)) return 'generate_gemini_tts (Google voices; also does 2-speaker dialogue)';
-  if (model === 'google/nano-banana-edit' || model === 'google/nano-banana') return 'nano-banana-2 (pass the reference in image_urls)';
+  if (model === 'google/nano-banana-edit' || model === 'google/nano-banana') return 'nano-banana-2-1 (4 cr; pass the reference in image_urls)';
   return null;
 }
 
@@ -1094,7 +1094,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.5.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.6.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1102,7 +1102,7 @@ const handleListTools = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning, 8cr). Cheap fast all-rounder→nano-banana-2-1 (4cr, ~13s, NEW Oct 2026; NB2 doubled to 8cr). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {

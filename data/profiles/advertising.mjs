@@ -22,7 +22,7 @@ export default {
 
   routing: [
     { deliverable: 'social post', tiers: {
-        volume: { model: 'nano-banana-2', note: 'production default — 4 cr, 4K, 14 refs for brand-kit conditioning; Lite only when latency/volume dominates' },
+        volume: { model: 'nano-banana-2', note: 'production default — 8 cr (since Oct 2026), 4K, 14 refs for brand-kit conditioning; nano-banana-2-1 (4 cr, ~13s, 10 refs) when the kit fits in 10 refs or volume dominates' },
         with_text: { model: 'gpt-image/2-text-to-image', note: 'headline baked in — best text rendering (~95%+ accuracy)' },
         alt_text: { model: 'ideogram/v3-text-to-image', note: 'stylized display lettering / poster hierarchy' },
     }},

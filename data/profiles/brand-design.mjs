@@ -36,7 +36,7 @@ export default {
         accuracy: { model: 'gpt-image/2-text-to-image', note: 'when every glyph must be right' },
     }},
     { deliverable: 'brand pattern', tiers: {
-        default: { model: 'nano-banana-2', note: 'production-proven, 4 cr; "seamless tileable pattern" + 50% offset check' },
+        default: { model: 'nano-banana-2', note: 'production-proven, 8 cr (nano-banana-2-1 at 4 cr for exploration); "seamless tileable pattern" + 50% offset check' },
         alt: { model: 'seedream/4.5-text-to-image', note: 'proven alternative' },
         experimental: { model: 'seedream/5-pro-text-to-image', note: 'unbenchmarked (days old); layered deliverables via layer-decompose' },
     }},

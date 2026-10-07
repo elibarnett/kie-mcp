@@ -27,13 +27,13 @@ export default {
 
   routing: [
     { deliverable: 'exterior render', tiers: {
-        draft: { model: 'nano-banana-2', note: 'production default — same 4 cr as Lite, 4K-capable, up to 14 reference images; use Lite only when latency matters, z-image (3 cr) is the true floor' },
+        draft: { model: 'nano-banana-2-1', note: 'production default — 4 cr like Lite but 2K/4K-capable, ~13s, up to 10 reference images; nano-banana-2 (8 cr since Oct 2026) only when you need 11-14 refs, z-image (3 cr) is the true floor' },
         value: { model: 'seedream/5-pro-text-to-image', note: 'design-brief register; layer-decompose gives sky/building/foreground layers. Days-old on kie — treat as experimental' },
         final: { model: 'nano-banana-pro', note: 'best material fidelity BUT has documented quality-degradation windows — verify the hero before delivery' },
         final_alt: { model: 'flux-2/pro-text-to-image', note: 'pure-photorealism alternative final; cheaper and no degradation reports' },
     }},
     { deliverable: 'interior render', tiers: {
-        draft: { model: 'nano-banana-2', note: '' },
+        draft: { model: 'nano-banana-2-1', note: '4 cr, ~13s' },
         final: { model: 'nano-banana-pro', note: 'furniture scale + window views; verify (degradation windows)' },
         from_reference: { model: 'gpt-image/2-image-to-image', note: 'multi-ref killer feature: room photo + furniture product shots composited with correct lighting (up to 16 refs)' },
         surgical: { model: 'flux-kontext-pro', note: 'single-element pixel-faithful swaps on existing photos' },
@@ -54,7 +54,7 @@ export default {
     }},
     { deliverable: 'site plan', tiers: {
         labeled: { model: 'gpt-image/2-text-to-image', note: 'plans need legible labels — text tier required' },
-        unlabeled: { model: 'nano-banana-2', note: '4 cr; NB-Pro not justified here' },
+        unlabeled: { model: 'nano-banana-2', note: '8 cr (nano-banana-2-1 at 4 cr for drafts); NB-Pro not justified here' },
     }},
     { deliverable: 'concept sketch', tiers: {
         default: { model: 'qwen3/text-to-image', note: '"loose charcoal/ink architectural sketch"; prompt_extend off' },

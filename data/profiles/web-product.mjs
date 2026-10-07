@@ -23,7 +23,7 @@ export default {
     { deliverable: 'empty state', tiers: {
         default: { model: 'seedream/5-lite-text-to-image', note: 'flat/minimal register, cheap iteration' },
         value: { model: 'flux-2/flex-text-to-image', note: 'clean vector-ish shapes (traces well for SVG handoff)' },
-        final: { model: 'nano-banana-2', note: 'reasoning-capable at 4 cr — try before 24 cr NB-Pro; give it the UI state and let it invent the metaphor' },
+        final: { model: 'nano-banana-2', note: 'reasoning-capable at 8 cr — try before 24 cr NB-Pro; give it the UI state and let it invent the metaphor' },
         family_addition: { model: 'seedream/5-lite-image-to-image', note: 'anchor on 1-2 approved states as references' },
         iterate: { tool: 'grok_segment_map', note: 'cheapest revision loop — but only on grok-generated art; generate on grok-2.0 when region iteration is expected' },
     }},

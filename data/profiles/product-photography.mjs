@@ -30,7 +30,7 @@ export default {
     { deliverable: 'lifestyle scene', tiers: {
         premium: { model: 'gpt-image/2-image-to-image', note: '#1 Arena editor; reasons across up to 16 refs — product cutout + scene refs + brand kit composited with correct lighting' },
         default: { model: 'nano-banana-pro', note: 'multi-image composition; cap iterative edits at 2-3 rounds (quality degrades after), verify output' },
-        draft: { model: 'nano-banana-2', note: 'scene concept exploration, 4 cr' },
+        draft: { model: 'nano-banana-2-1', note: 'scene concept exploration, 4 cr, ~13s' },
         edit_scene: { tool: 'grok_image_edit', note: 'whole-image: move the shot to a new setting' },
     }},
     { deliverable: 'listing set (multi-angle)', tiers: {

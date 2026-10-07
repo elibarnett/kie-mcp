@@ -30,7 +30,7 @@ export default {
         final: { model: 'seedream/4.5-text-to-image', note: 'proven game-art tier; "character turnaround sheet, front/side/back" in one canvas' },
     }},
     { deliverable: 'environment concept', tiers: {
-        draft: { model: 'nano-banana-2', note: '' },
+        draft: { model: 'nano-banana-2-1', note: '4 cr, ~13s' },
         value: { model: 'seedream/5-lite-text-to-image', note: 'painterly environments' },
         final: { model: 'flux-2/pro-text-to-image', note: 'tops 2026 benchmarks for atmospheric depth/scale, cheaper than NB-Pro' },
         final_alt: { model: 'nano-banana-pro', note: 'lore-consistent multi-object scenes — verify output (documented degradation windows)' },

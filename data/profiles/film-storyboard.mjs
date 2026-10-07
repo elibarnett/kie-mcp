@@ -29,7 +29,7 @@ export default {
     }},
     { deliverable: 'single shot concept', tiers: {
         draft: { model: 'nano-banana-2-lite', note: '' },
-        mid: { model: 'nano-banana-2', note: '4 cr, refs, 21:9 — the workhorse' },
+        mid: { model: 'nano-banana-2', note: '8 cr (since Oct 2026), 14 refs, 21:9 — the workhorse; nano-banana-2-1 (4 cr, 10 refs) when the cast fits' },
         final: { model: 'nano-banana-pro', note: 'staging/lighting reasoning; verify output (degradation windows)' },
     }},
     { deliverable: 'character-costume lookdev', tiers: {
