@@ -482,3 +482,14 @@ test('Suno market migration — request translation and result adapter (Oct 2026
   assert.equal(normalizeSunoMarketRecord({ resultJson: JSON.stringify({ resultObject: { lyricsData: [{ text: '[Verse] hi' }] } }) }).sunoData[0].text, '[Verse] hi');
   assert.deepEqual(normalizeSunoMarketRecord({ resultJson: JSON.stringify({ resultUrls: ['https://c/1.png'] }) }).images, ['https://c/1.png']);
 });
+
+test('Nano Banana 2.1 entry and NB2 repricing (Oct 2026)', async () => {
+  const { MODEL_REGISTRY, PRICING } = await import('../server.mjs');
+  const nb21 = MODEL_REGISTRY['nano-banana-2-1'];
+  assert.equal(nb21.apiModel, 'nano-banana-2-1');
+  assert.deepEqual(nb21.buildInput('p', '1:8', Array(12).fill('u'), { resolution: '2K' }),
+    { prompt: 'p', aspect_ratio: '1:8', resolution: '2K', output_format: 'jpg', image_input: Array(10).fill('u') });
+  assert.equal(PRICING['nano-banana-2-1'], 4);
+  assert.equal(PRICING['nano-banana-2'], 8, 'kie doubled NB2 in Oct 2026');
+  assert.ok(MODEL_REGISTRY['nano-banana-2'].aspectRatios.includes('8:1'));
+});

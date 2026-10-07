@@ -27,7 +27,7 @@ Just ask Claude things like:
 
 ### Image (60+)
 - **OpenAI**: GPT Image 2.5 Flare / Sunburst (NEW — 1K-4K, transparent background), GPT Image 2, GPT-4o Image, GPT Image 1.5
-- **Google**: Nano Banana 2 / 2 Lite (NEW) / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
+- **Google**: Nano Banana 2.1 (NEW, 4 cr), Nano Banana 2 / 2 Lite / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
 - **Black Forest Labs**: Flux Kontext Pro/Max, Flux 2 Pro/Flex
 - **ByteDance**: Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
 - **Alibaba**: Wan 2.7 Image / Image Pro

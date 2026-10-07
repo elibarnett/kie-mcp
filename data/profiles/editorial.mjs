@@ -23,7 +23,7 @@ export default {
 
   routing: [
     { deliverable: 'article hero', tiers: {
-        default: { model: 'nano-banana-2', note: 'the workhorse: 4 cr, 4K, top-3 Arena, 14 refs for register-matching' },
+        default: { model: 'nano-banana-2', note: 'the workhorse: 8 cr (since Oct 2026), 4K, top-3 Arena, 14 refs for register-matching; nano-banana-2-1 (4 cr) for sketches' },
         revision_ready: { model: 'grok-imagine-image-2-0/text-to-image', note: 'generate the FINAL here (4 cr) when revision rounds are expected (they always are): free segment map + 4 cr region edits beat 7-24 cr regens. The chain only works on grok-generated art.' },
         concept_heavy: { model: 'nano-banana-pro', note: 'genuinely complex metaphors; verify output — documented degradation windows' },
         design_register: { model: 'seedream/5-pro-text-to-image', note: 'design-brief-style alternative (days old, unproven)' },

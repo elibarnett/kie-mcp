@@ -2,6 +2,18 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.6.0] — 2026-10-07
+
+### Added
+
+- **Nano Banana 2.1** (`nano-banana-2-1`), new on kie: 4 / 6 / 9 cr at 1K / 2K / 4K, up to 10 reference images, 15 aspect ratios including 1:4, 4:1, 1:8 and 8:1. Live 2026-10-07: 1K 4.0 cr in about 13–17 s, 2K 6.0 cr; reference editing and 1:8 work. In a same-prompt comparison with NB2 both rendered the sign text correctly; NB2 had richer scene detail, 2.1 a cleaner composition.
+- Nano Banana 2 gains the 1:4, 4:1, 1:8 and 8:1 aspect ratios its docs list.
+
+### Changed
+
+- **Nano Banana 2 repriced 4 → 8 cr** (12 at 2K, 18 at 4K). kie doubled it when 2.1 launched; the live 1K charge was 8.0, and it took about 40–60 s against 2.1's 13 s. The model guide, registry comparisons and pricing table are updated.
+- **Profiles:** the explicit draft tiers (architecture exterior and interior, game-assets environment concept, product-photography concept) now route to `nano-banana-2-1`. Production and consistency tiers stay on `nano-banana-2`, which allows 14 refs to 2.1's 10, with corrected 8 cr notes that mention 2.1 as the budget option.
+
 ## [5.5.0] — 2026-10-05
 
 **Suno now runs on kie's new market API.** In October 2026 kie moved the whole Suno API onto its generic task endpoint (`/api/v1/jobs/createTask` with `ai-music-api/*` models and snake_case inputs). The old endpoints still work (their docs say `deprecated: false`, with no shutdown date), so this is a planned migration with an instant way back: set `KIE_SUNO_API=legacy`.

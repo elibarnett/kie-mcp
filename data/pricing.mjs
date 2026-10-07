@@ -35,7 +35,8 @@ export const PRICING = {
   'google/imagen4-ultra': 12, // kie raised 10→12 (drift watch 2026-09-22)
   'google/nano-banana': 4,
   'google/nano-banana-edit': 4,
-  'nano-banana-2': 4,
+  'nano-banana-2': 8,                  // kie doubled it Oct 2026: 8 / 12 / 18 cr at 1K / 2K / 4K (live 1K charge 8.0, 2026-10-07; was 4)
+  'nano-banana-2-1': 4,                // Nano Banana 2.1 (Oct 2026): 4 / 6 / 9 cr at 1K / 2K / 4K (live 1K 4.0, 2K 6.0)
   'nano-banana-2-lite': 4,             // empirical 2026-07-02: one 1K gen consumed exactly 4.00 credits (kie's site advertises 3 — the balance delta says otherwise)
   'nano-banana-pro': 24,
   'omnihuman-1-5/subject-detection': 0, // FREE — empirical 2026-07-02: creditsConsumed=0 on a live run
@@ -257,6 +258,7 @@ export const PRICING_ESTIMATED = new Set([
   'happyhorse/video-edit',
   'gemini-omni/video',
   'gemini-omni/flash-1-1',
+  'nano-banana-2', 'nano-banana-2-1',  // resolution-tiered; table prices 1K
   'gpt-image-2-5/flare-text-to-image', 'gpt-image-2-5/flare-image-to-image',  // resolution-tiered 6/10/16
   'gpt-image-2-5/sunburst-text-to-image', 'gpt-image-2-5/sunburst-image-to-image',
   'qwen2-1/text-to-image', 'qwen2-1/image-to-image',  // 2K doubles
