@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.6.1] — 2026-10-08
+
+### Security
+
+- **Dependencies:** `@modelcontextprotocol/sdk` floor raised to `^1.32.1` and the lockfile refreshed, which pulls `proxy-addr` 2.0.8. This clears two advisories published 2026-10-07/08: [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (high, SDK ≤ 1.30.1, the OAuth **client** could send credentials to an authorization server the MCP server picks) and [GHSA-jqcg-44mw-7w3h](https://github.com/advisories/GHSA-jqcg-44mw-7w3h) (critical, `proxy-addr` IP spoofing via IPv4-mapped IPv6 trust subnets). **kie-mcp doesn't use either code path:** it's an MCP server, not an OAuth client, and its HTTP mode runs on Node's `http` without Express. Scanners flagged them anyway. `npm audit`: 0.
+
 ## [5.6.0] — 2026-10-07
 
 ### Added

@@ -1094,7 +1094,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.6.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.6.1' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
