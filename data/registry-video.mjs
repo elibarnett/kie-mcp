@@ -295,21 +295,100 @@ export const VIDEO_MODEL_REGISTRY = {
     type: 'market',
     apiModel: 'bytedance/seedance-2-5',
     maxPromptChars: 20000,
-    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'],
     options: {
       duration: { type: 'number', min: 4, max: 30, default: 5, description: 'Duration in seconds (4-30 — probed live; 30s single takes are the headline feature)' },
-      resolution: { type: 'string', enum: ['480p', '720p'], default: '720p', description: 'kie exposes 480p/720p only (probed 2026-07-27; 1080p/2k/4k rejected)' },
-      generate_audio: { type: 'boolean', default: false, description: 'Co-generate audio (increases cost)' },
-      first_frame_url: { type: 'string', description: 'Optional first frame image URL' },
-      reference_image_urls: { type: 'array', description: 'Reference images for style/character' },
+      resolution: { type: 'string', enum: ['480p', '720p', '1080p'], default: '720p', description: 'Per second without video input: 480p 28, 720p 63, 1080p 158 cr (with video input: 17 / 38 / 95). 1080p added by kie Oct 2026' },
+      draft: { type: 'boolean', default: false, description: 'NEW — cheap 480p preview (28 cr/s). Approve it, then upgrade THAT take to 1080p with model bytedance/seedance-2-5-draft (model_options.draft_task_id = this task id) instead of re-rolling at full price' },
+      generate_audio: { type: 'boolean', default: true, description: 'Co-generate audio. kie\'s default is ON — set false for silent clips' },
+      web_search: { type: 'boolean', description: 'Let the model search the web for references' },
+      first_frame_url: { type: 'string', description: 'Optional first frame image URL (else image_urls[0])' },
+      last_frame_url: { type: 'string', description: 'Optional last frame image URL' },
+      reference_image_urls: { type: 'array', description: 'Up to 30 reference images (else image_urls[1..])' },
+      reference_video_urls: { type: 'array', description: 'Up to 10 reference videos (billed at the lower with-video rate on input+output duration)' },
+      reference_audio_urls: { type: 'array', description: 'Up to 10 reference audio clips' },
+      return_last_frame: { type: 'boolean', description: 'Also return the final frame as an image (for chaining shots)' },
+      output_format: { type: 'string', enum: ['mp4', 'mov'], default: 'mp4' },
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
-      const input = { prompt, aspect_ratio: aspectRatio, duration: opts.duration || 5, resolution: opts.resolution || '720p' };
-      if (opts.generate_audio) input.generate_audio = true;
+      if (opts.draft && opts.resolution && opts.resolution !== '480p') {
+        throw new Error('bytedance/seedance-2-5: draft mode is 480p only — drop resolution (or set 480p), then upgrade the approved draft with bytedance/seedance-2-5-draft');
+      }
+      const input = { prompt, aspect_ratio: aspectRatio, duration: opts.duration || 5, resolution: opts.draft ? '480p' : (opts.resolution || '720p') };
       if (opts.first_frame_url) input.first_frame_url = opts.first_frame_url;
       else if (imageUrls?.[0]) input.first_frame_url = imageUrls[0];
-      if (opts.reference_image_urls) input.reference_image_urls = opts.reference_image_urls;
-      else if (imageUrls?.length > 1) input.reference_image_urls = imageUrls.slice(1);
+      if (opts.reference_image_urls) input.reference_image_urls = opts.reference_image_urls.slice(0, 30);
+      else if (imageUrls?.length > 1) input.reference_image_urls = imageUrls.slice(1, 31);
+      for (const k of ['generate_audio', 'web_search', 'draft', 'last_frame_url', 'return_last_frame', 'output_format']) {
+        if (opts[k] !== undefined) input[k] = opts[k];
+      }
+      if (opts.reference_video_urls) input.reference_video_urls = opts.reference_video_urls.slice(0, 10);
+      if (opts.reference_audio_urls) input.reference_audio_urls = opts.reference_audio_urls.slice(0, 10);
+      return input;
+    },
+  },
+  'bytedance/seedance-2-5-draft': {
+    name: 'Seedance 2.5 Draft → 1080p upgrade',
+    description: 'NEW (Oct 2026) — upgrades an APPROVED Seedance 2.5 draft (generated with model_options.draft=true at 480p) to final 1080p, keeping that exact take. Pass model_options.draft_task_id; prompt is ignored (send any text). Billed at the standard 1080p rate × the draft\'s duration (158 cr/s without video input, 95 with).',
+    capabilities: ['upscale', 'cinematic', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'bytedance/seedance-2-5-draft',
+    aspectRatios: [],
+    options: {
+      draft_task_id: { type: 'string', description: 'REQUIRED — task id of the Seedance 2.5 draft (draft=true) generation to upgrade' },
+      output_format: { type: 'string', enum: ['mp4', 'mov'], default: 'mp4' },
+      return_last_frame: { type: 'boolean', default: false },
+    },
+    buildInput(_prompt, _ar, _imgs, opts) {
+      if (!opts.draft_task_id) throw new Error('bytedance/seedance-2-5-draft needs model_options.draft_task_id (the task id of a Seedance 2.5 generation made with draft=true)');
+      // output_format is REQUIRED in practice (omitting it → 500 "This field is required",
+      // though the docs list only draft_task_id + resolution) — verified 2026-10-12.
+      const input = { draft_task_id: opts.draft_task_id, resolution: '1080p', output_format: opts.output_format || 'mp4' };
+      if (opts.return_last_frame !== undefined) input.return_last_frame = opts.return_last_frame;
+      return input;
+    },
+  },
+
+  // ── Vidu Q4 (Oct 2026) — 3-16s, 540p→4K, native audio; R2V takes 15 image + 3 audio refs ──
+  'vidu-q4/image-to-video': {
+    name: 'Vidu Q4 (image-to-video)',
+    description: 'NEW (Oct 2026) — Vidu Q4 animates one image: 3-16s, 540p / 720p / 1080p / 2K / 4K, native audio on by default. Per second: 7.2 / 15.2 / 19.2 / 30.4 / 62.4 cr — one of the few 4K I2V options and very cheap at 540p.',
+    capabilities: ['image-to-video', 'audio', '4k', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'vidu-q4/image-to-video',
+    requiresImage: true,
+    aspectRatios: [],
+    maxPromptChars: 20000,
+    options: {
+      duration: { type: 'number', min: 3, max: 16, default: 5, description: 'Seconds (3-16)' },
+      resolution: { type: 'string', enum: ['540p', '720p', '1080p', '2k', '4k'], default: '720p', description: '7.2 / 15.2 / 19.2 / 30.4 / 62.4 cr per second' },
+      audio: { type: 'boolean', default: true, description: 'Native audio (on by default)' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { prompt, image_url: imageUrls[0], duration: opts.duration ?? 5, resolution: opts.resolution || '720p' };
+      if (opts.audio !== undefined) input.audio = opts.audio;
+      return input;
+    },
+  },
+  'vidu-q4/reference-to-video': {
+    name: 'Vidu Q4 (reference-to-video)',
+    description: 'NEW (Oct 2026) — Vidu Q4 from 1-15 reference images (characters, props, scenes) plus up to 3 reference audio clips: 3-16s, 540p→4K, native audio. Same per-second prices as Vidu Q4 I2V. ⚠️ At launch (2026-10-12) every request failed upstream with "Internal Error" — including kie\'s own docs example; nothing is charged. Retry later or use vidu-q4/image-to-video.',
+    capabilities: ['multi-reference', 'character', 'audio', '4k', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'vidu-q4/reference-to-video',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+    maxPromptChars: 20000,
+    options: {
+      duration: { type: 'number', min: 3, max: 16, default: 5, description: 'Seconds (3-16)' },
+      resolution: { type: 'string', enum: ['540p', '720p', '1080p', '2k', '4k'], default: '720p', description: '7.2 / 15.2 / 19.2 / 30.4 / 62.4 cr per second' },
+      audio: { type: 'boolean', default: true },
+      reference_audio_urls: { type: 'array', description: 'Up to 3 reference audio clips (voice, music, sfx)' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, reference_image_urls: imageUrls.slice(0, 15), aspect_ratio: aspectRatio || '16:9', duration: opts.duration ?? 5, resolution: opts.resolution || '720p' };
+      if (opts.audio !== undefined) input.audio = opts.audio;
+      if (opts.reference_audio_urls?.length) input.reference_audio_urls = opts.reference_audio_urls.slice(0, 3);
       return input;
     },
   },

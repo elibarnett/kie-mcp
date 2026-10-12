@@ -164,6 +164,9 @@ export const PRICING = {
   'grok-imagine-video-1-5-preview': 3,
   // ── Seedance 2.5 (July 2026) — kie pricing UNPUBLISHED at launch; 25 cr/s placeholder
   //    matching Seedance 2.0. Runtime [actual] creditsConsumed is ground truth. ──
+  'bytedance/seedance-2-5-draft': 158, // Oct 2026 — 1080p upgrade of a draft: standard 1080p rate (158/s no video input, 95 with) × the draft's duration
+  'vidu-q4/image-to-video': 15.2,      // Vidu Q4 (Oct 2026) — published per second: 540p 7.2, 720p 15.2 (default), 1080p 19.2, 2K 30.4, 4K 62.4
+  'vidu-q4/reference-to-video': 15.2,  // same tiers
   'bytedance/seedance-2-5': 63,  // kie published 2026-08: 480p 28 (17 w/video-input), 720p 63 (38 w/video); entry default 720p. 480p rate empirically confirmed: 4s cost exactly 112 cr
   // ── PixVerse V6 (added July 2026) — kie published per-second tiers; table = 720p no-audio default.
   //    T2V/I2V/transition/extend: 360p 4.0/5.6, 540p 5.6/7.2, 720p 7.2/9.6, 1080p 14.4/18.4 (no-audio/audio).
@@ -239,7 +242,8 @@ export const PRICING_ESTIMATED = new Set([
   'bytedance/v1-lite-image-to-video',  // same tiers and default
   'wan/flash-image-to-video',   // #69: measured 6-8 cr/s (varies — possibly by input size); kie publishes no rate
   'wan/flash-video-to-video',   // #69: assumed same as flash I2V
-  'bytedance/seedance-2-5',
+  'bytedance/seedance-2-5', 'bytedance/seedance-2-5-draft',
+  'vidu-q4/image-to-video', 'vidu-q4/reference-to-video',
   'pixverse-v6/text-to-video',
   'pixverse-v6/image-to-video',
   'pixverse-v6/transition',

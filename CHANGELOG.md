@@ -2,6 +2,25 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.7.0] — 2026-10-12
+
+### Added
+
+- **Vidu Q4**, a new video family on kie:
+  - `vidu-q4/image-to-video`: one image, 3–16 s, 540p/720p/1080p/2K/4K, native audio on by default. Per second: 7.2 / 15.2 / 19.2 / 30.4 / 62.4 cr, so it's one of the cheapest audio-capable I2V options at 540p and one of the few at 4K.
+  - `vidu-q4/reference-to-video`: 1–15 reference images plus up to 3 reference audio clips, 5 aspect ratios, same prices. **At launch every request fails upstream** ("Internal Error", 0 cr), including kie's own docs example, so the entry carries a warning. It needs no code change when kie fixes it.
+- **Seedance 2.5 draft pipeline:**
+  - `bytedance/seedance-2-5` gains `draft: true`, a 480p preview at 28 cr/s.
+  - The new `bytedance/seedance-2-5-draft` upgrades the approved take to 1080p (pass `model_options.draft_task_id`), billed at the standard 1080p rate (158 cr/s without video input) × the draft's duration. Iterate cheaply, then pay for 1080p only on the keeper. kie requires `output_format` on the upgrade even though its docs list only `draft_task_id` + `resolution`; the entry always sends it.
+- **Live 2026-10-12:** Vidu Q4 I2V 3 s @540p = 21.6 cr; Seedance 2.5 draft 4 s = 112 cr, and its 1080p upgrade = 632 cr (158 × 4), which returned the 1080p video.
+
+### Changed
+
+- **Seedance 2.5 catches up with kie's schema:**
+  - `1080p` (kie exposed only 480p/720p when we probed in July) and `adaptive` aspect ratio.
+  - `last_frame_url`, up to 30 reference images, `reference_video_urls` (10), `reference_audio_urls` (10), `web_search`, `return_last_frame`, `output_format`.
+  - **`generate_audio` now documents kie's real default (on)**, and an explicit `false` is now sent. Before, our schema claimed audio defaulted to off but only ever sent `true`, so kie's on-by-default applied silently.
+
 ## [5.6.1] — 2026-10-08
 
 ### Security

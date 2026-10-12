@@ -493,3 +493,19 @@ test('Nano Banana 2.1 entry and NB2 repricing (Oct 2026)', async () => {
   assert.equal(PRICING['nano-banana-2'], 8, 'kie doubled NB2 in Oct 2026');
   assert.ok(MODEL_REGISTRY['nano-banana-2'].aspectRatios.includes('8:1'));
 });
+
+test('Vidu Q4 + Seedance 2.5 draft pipeline entries (Oct 2026)', async () => {
+  const { VIDEO_MODEL_REGISTRY: V, PRICING } = await import('../server.mjs');
+  assert.deepEqual(V['vidu-q4/image-to-video'].buildInput('p', undefined, ['i'], { duration: 3, resolution: '540p' }),
+    { prompt: 'p', image_url: 'i', duration: 3, resolution: '540p' });
+  const r2v = V['vidu-q4/reference-to-video'].buildInput('p', '9:16', Array(20).fill('u'), { reference_audio_urls: ['a', 'b', 'c', 'd'] });
+  assert.equal(r2v.reference_image_urls.length, 15);
+  assert.equal(r2v.reference_audio_urls.length, 3);
+  const sd = V['bytedance/seedance-2-5'];
+  assert.equal(sd.buildInput('p', '16:9', [], { draft: true }).resolution, '480p', 'draft forces 480p');
+  assert.throws(() => sd.buildInput('p', '16:9', [], { draft: true, resolution: '1080p' }), /480p only/);
+  assert.equal(sd.buildInput('p', '16:9', [], { resolution: '1080p', generate_audio: false }).generate_audio, false, 'explicit audio off is sent (kie default is on)');
+  assert.throws(() => V['bytedance/seedance-2-5-draft'].buildInput('x', undefined, [], {}), /draft_task_id/);
+  assert.deepEqual(V['bytedance/seedance-2-5-draft'].buildInput('x', undefined, [], { draft_task_id: 't' }), { draft_task_id: 't', resolution: '1080p', output_format: 'mp4' }, 'output_format is required in practice');
+  assert.equal(PRICING['vidu-q4/image-to-video'], 15.2);
+});
