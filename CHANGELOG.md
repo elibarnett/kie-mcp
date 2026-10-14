@@ -2,6 +2,22 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.8.0] — 2026-10-14
+
+### Added
+
+- **Spending guard.** Every paid tool (33 of them) takes `estimate_only` and `max_credits`, and `KIE_MAX_CREDITS_PER_CALL` sets a default cap.
+  - The estimate uses published rates, including resolution/size tiers (Nano Banana 2/2.1, GPT Image 2.5, Qwen, Seedream 5 Pro, Vidu Q4, Seedance 2.5 including draft mode, MiniMax H3, Grok video, Wan 3.0), and multiplies by duration for video.
+  - Layer splits and TTS are marked as estimates.
+  - `estimate_only` submits nothing, and an over-cap call is refused before submission. Both were verified live: the balance was unchanged.
+- **`spend_report` tool.** It totals spend from the task history over N days, by model or by day, using kie's **actual** `creditsConsumed`, which is now recorded when each task finishes (poll or `check_task`). Missing charges are looked up from kie, including market-API Suno tasks; Suno's short task names map to their prices; failed tasks are listed separately. Live: every task in a 30-day window resolved to actual charges.
+- **`npm run live-check`** (`scripts/live-check.mjs`), the maintenance routine in one command, about 2 minutes:
+  - docs-index diff against a cached copy;
+  - the drift watch with live slug probes;
+  - real watch-list probes for models down upstream (ElevenLabs);
+  - an `npm audit` summary.
+  It writes `live-check-report.md`.
+
 ## [5.7.1] — 2026-10-14
 
 ### Changed

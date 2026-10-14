@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 import { realpathSync } from 'fs';
 
 import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './data/voices.mjs';
-import { PRICING, PRICING_ESTIMATED, PROMPT_CAPS } from './data/pricing.mjs';
+import { PRICING, PRICING_ESTIMATED, PROMPT_CAPS, PRICE_TIERS } from './data/pricing.mjs';
 import { PROFILES, inferProfile } from './data/profiles/index.mjs';
 import { MODEL_REGISTRY } from './data/registry-image.mjs';
 import { VIDEO_MODEL_REGISTRY } from './data/registry-video.mjs';
@@ -242,6 +242,87 @@ function normalizeBase64(input) {
 // registry) takes precedence over this table. Only documented values here —
 // no guesses.
 
+// ── Spending guard (v5.8.0): estimate_only / max_credits / KIE_MAX_CREDITS_PER_CALL ──
+// Best-effort pre-submit estimate for a tool call, in credits. Returns
+// { credits, basis, uncertain } or null when the call is free/unpriced.
+const GEMINI_TTS_KEYS = { pro: 'google/gemini-2-5-pro-tts', 'flash-3.8': 'google/gemini-3-8-flash-tts', 'flash-lite': 'google/gemini-3-8-flash-lite-tts' };
+function tierPrice(key, opts = {}) {
+  const t = PRICE_TIERS[key];
+  const v = t && opts[t.opt];
+  if (t && v !== undefined && t.prices[v] !== undefined) return { price: t.prices[v], tier: `${t.opt}=${v}` };
+  return { price: PRICING[key], tier: t ? 'default tier' : null };
+}
+function estimateCallCredits(name, args = {}) {
+  const opts = args.model_options || {};
+  const fmt = (n) => Math.round(n * 100) / 100;
+  if (name === 'generate_image') {
+    const id = args.model || 'gpt4o';
+    const def = MODEL_REGISTRY[id];
+    const key = PRICING[id] !== undefined ? id : def?.apiModel;
+    const { price, tier } = tierPrice(id, opts);
+    const p = price ?? PRICING[key];
+    if (typeof p !== 'number') return null;
+    return { credits: fmt(p), basis: `${id}${tier ? ` (${tier})` : ''}: ${p} cr per image`, uncertain: PRICING_ESTIMATED.has(id) || PRICING_ESTIMATED.has(key) };
+  }
+  if (name === 'generate_video') {
+    const id = args.model || 'veo-3/text-to-video';
+    const def = VIDEO_MODEL_REGISTRY[id];
+    const res = id === 'bytedance/seedance-2-5' && opts.draft ? { ...opts, resolution: '480p' } : opts;
+    const { price, tier } = tierPrice(id, res);
+    const p = price ?? PRICING[def?.apiModel];
+    if (typeof p !== 'number') return null;
+    if (id === 'bytedance/seedance-2-5-draft') return { credits: fmt(p * 5), basis: `${p} cr/s × the draft's duration (assumed 5s; billed on the real length)`, uncertain: true };
+    const dur = Number(opts.duration ?? def?.options?.duration?.default ?? 5) || 5;
+    return { credits: fmt(p * dur), basis: `${id}${tier ? ` (${tier})` : ''}: ${p} cr/s × ${dur}s`, uncertain: PRICING_ESTIMATED.has(id) };
+  }
+  if (name === 'seedream_layer_decompose') {
+    const flash = args.tier === 'flash';
+    const per = flash ? 3.24 : (args.size === '2K' ? 14 : 7);
+    const layers = args.prompt ? 3 : 12;
+    return { credits: fmt(per * layers), basis: `${per} cr per output layer × ~${layers} layers (${args.prompt ? 'typical for a named split' : 'a prompt-less split can return ~12'}) — the real layer count decides`, uncertain: true };
+  }
+  if (name === 'generate_gemini_tts') {
+    const key = GEMINI_TTS_KEYS[args.model] || 'google/gemini-3-1-flash-tts';
+    const text = args.text || (args.dialogue_turns || []).map((t) => t.text || '').join(' ');
+    const minutes = Math.max(String(text).trim().split(/\s+/).filter(Boolean).length / 150, 0.1);
+    return { credits: fmt(PRICING[key] * minutes), basis: `${key}: ~${PRICING[key]} cr/min × ~${fmt(minutes)} min of speech (token-billed upstream)`, uncertain: true };
+  }
+  if (name === 'separate_vocals' && args.type && args.type !== 'separate_vocal') {
+    return { credits: 50, basis: `separate_vocals type=${args.type}: 50 cr (multi-stem)`, uncertain: args.type === 'split_stem_advanced' };
+  }
+  const key = AUDIO_TOOLS_REGISTRY[name]?.pricingKey;
+  const p = key && PRICING[key];
+  if (typeof p !== 'number' || p === 0) return null;
+  if (['veo_extend', 'runway_extend'].includes(name)) {
+    const dur = Number(args.duration) || 8;
+    return { credits: fmt(p * dur), basis: `${key}: ${p} cr/s × ~${dur}s`, uncertain: true };
+  }
+  return { credits: fmt(p), basis: `${key}: ${p} cr per call`, uncertain: PRICING_ESTIMATED.has(key) };
+}
+const DEFAULT_MAX_CREDITS = Number(process.env.KIE_MAX_CREDITS_PER_CALL) || null;
+// Tools that spend credits get the guard params injected into their schema.
+const GUARDED_TOOLS = new Set(['generate_image', 'generate_video', 'seedream_layer_decompose', 'generate_gemini_tts',
+  ...Object.entries(AUDIO_TOOLS_REGISTRY).filter(([, v]) => (PRICING[v.pricingKey] ?? 0) > 0).map(([k]) => k)]);
+const GUARD_PROPS = {
+  estimate_only: { type: 'boolean', description: 'Return the estimated credit cost WITHOUT submitting anything. Use before expensive runs (video, 4K, 1080p upgrades, layer splits).' },
+  max_credits: { type: 'number', description: 'Refuse to submit if the estimated cost exceeds this many credits (overrides KIE_MAX_CREDITS_PER_CALL). Estimates come from published rates; kie bills the actual amount.' },
+};
+// Returns a tool result to send INSTEAD of running the call, or null to proceed.
+function spendGuard(name, args = {}) {
+  if (!GUARDED_TOOLS.has(name)) return null;
+  const cap = typeof args.max_credits === 'number' ? args.max_credits : DEFAULT_MAX_CREDITS;
+  if (!args.estimate_only && !cap) return null;
+  const est = estimateCallCredits(name, args);
+  const line = est ? `~${est.credits} credits (~$${(est.credits * 0.005).toFixed(2)}) — ${est.basis}${est.uncertain ? ' [estimate]' : ''}` : 'no published price for this call — cost unknown';
+  if (args.estimate_only) {
+    return { content: [{ type: 'text', text: `💰 Estimated cost for ${name}: ${line}\nNothing was submitted. Re-run without estimate_only to generate.` }] };
+  }
+  if (est && est.credits > cap) {
+    return { content: [{ type: 'text', text: `🛑 Not submitted: estimated ${est.credits} credits exceeds max_credits=${cap}.\n${line}\nLower the resolution/duration, pick a cheaper model, or raise max_credits.` }], isError: true };
+  }
+  return null;
+}
+
 function getCostEstimate(modelId, durationSec) {
   const perUnit = PRICING[modelId];
   if (perUnit === 0) return 'free (0 credits)';
@@ -376,6 +457,61 @@ function trackTask(entry) {
   taskHistory.push(entry);
   appendTaskLog(entry);
   return entry;
+}
+
+// Task-history model names → PRICING keys (Suno tools log short op names).
+const SPEND_PRICE_ALIASES = {
+  'suno/lyrics': 'suno/generate-lyrics', 'suno/wav': 'suno/convert-to-wav', 'suno/sounds': 'suno/generate-sounds',
+  'suno/vocal-removal': 'suno/separate-vocals', 'suno/cover': 'suno/cover-audio', 'suno/mp4': 'suno/create-music-video',
+  'suno/extend': 'suno/extend-music', 'suno/midi': 'suno/generate-midi', 'suno/mashup': 'suno/generate-mashup',
+  'suno/persona': 'suno/generate-persona', 'gemini-omni/voice': 'gemini-omni/voice-create',
+};
+function spendPriceKey(model = '') {
+  if (SPEND_PRICE_ALIASES[model]) return SPEND_PRICE_ALIASES[model];
+  if (/^suno-V/.test(model)) return 'suno-music'; // generate_music logs `suno-${version}`
+  return model;
+}
+
+// Pure: total spend over a window of task-history entries. Actual credits when
+// recorded; otherwise a PRICING estimate (flagged). Failed/timed-out tasks are
+// counted separately (kie normally refunds failures). Unit-tested.
+function summarizeSpend(entries, { days = 7, groupBy = 'model', now = Date.now() } = {}) {
+  const since = now - days * 86400000;
+  const groups = new Map();
+  const totals = { actual: 0, estimated: 0, tasks: 0, unpriced: 0, failed: 0 };
+  for (const e of entries) {
+    const t = Date.parse(e.createdAt || '');
+    if (!Number.isFinite(t) || t < since) continue;
+    if (['failed', 'timeout'].includes(e.status) && typeof e.credits !== 'number') { totals.failed++; continue; }
+    const key = groupBy === 'day' ? (e.createdAt || '').slice(0, 10) : (e.model || 'unknown');
+    const g = groups.get(key) || { key, tasks: 0, actual: 0, estimated: 0, unpriced: 0 };
+    g.tasks++; totals.tasks++;
+    if (typeof e.credits === 'number') { g.actual += e.credits; totals.actual += e.credits; }
+    else if (typeof PRICING[spendPriceKey(e.model)] === 'number') { const p = PRICING[spendPriceKey(e.model)]; g.estimated += p; totals.estimated += p; }
+    else { g.unpriced++; totals.unpriced++; }
+    groups.set(key, g);
+  }
+  const rows = [...groups.values()].sort(groupBy === 'day'
+    ? (a, b) => b.key.localeCompare(a.key)               // newest day first
+    : (a, b) => (b.actual + b.estimated) - (a.actual + a.estimated)); // biggest spender first
+  return { rows, totals, days, groupBy };
+}
+
+// Store kie's actual creditsConsumed on the task's history entry once known
+// (poll success or check_task). Persisted, so spend_report survives restarts.
+function recordTaskCredits(taskId, rec) {
+  const credits = rec?.creditsConsumed;
+  if (typeof credits !== 'number' || !taskId) return;
+  for (let i = taskHistory.length - 1; i >= 0; i--) {
+    const e = taskHistory[i];
+    if (e.taskId !== taskId) continue;
+    if (e.credits !== credits) {
+      e.credits = credits;
+      e.completedAt = e.completedAt || new Date().toISOString();
+      appendTaskLog(e);
+    }
+    return;
+  }
 }
 
 // Load persisted history into memory at startup, and compact the file if it has
@@ -593,7 +729,13 @@ function normalizeSunoMarketRecord(rec) {
   if (Array.isArray(rj.resultUrls)) out.images = rj.resultUrls; // cover-generate returns its images here
   return out;
 }
-async function pollSunoMarket(taskId, maxWaitMs) {
+// Records the actual credits on the task-history entry (feeds spend_report).
+async function pollSunoMarket(taskId, ...rest) {
+  const rec = await pollSunoMarketInner(taskId, ...rest);
+  recordTaskCredits(taskId, rec);
+  return rec;
+}
+async function pollSunoMarketInner(taskId, maxWaitMs) {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
     const poll = await pollOnce('GET', `/api/v1/jobs/recordInfo?taskId=${taskId}`);
@@ -735,7 +877,13 @@ function submitOnly(taskId, label, filename) {
   ].filter(Boolean).join('\n') }] };
 }
 
-async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
+// Records the actual credits on the task-history entry (feeds spend_report).
+async function pollTask(taskId, ...rest) {
+  const rec = await pollTaskInner(taskId, ...rest);
+  recordTaskCredits(taskId, rec);
+  return rec;
+}
+async function pollTaskInner(taskId, maxWaitMs = 600000, modelId = null) {
   const dedicatedEndpoint = modelId && getPollEndpoint(modelId);
   const start = Date.now();
 
@@ -878,7 +1026,13 @@ async function pollLegacyLyrics(taskId, maxWaitMs = 300000) {
   throw taskError(`Lyrics task ${taskId} timed out after ${maxWaitMs / 1000}s of polling`, taskId, true);
 }
 
-async function pollSunoTask(taskId, maxWaitMs = 300000) {
+// Records the actual credits on the task-history entry (feeds spend_report).
+async function pollSunoTask(taskId, ...rest) {
+  const rec = await pollSunoTaskInner(taskId, ...rest);
+  recordTaskCredits(taskId, rec);
+  return rec;
+}
+async function pollSunoTaskInner(taskId, maxWaitMs = 300000) {
   if (sunoMarketTasks.has(taskId)) return normalizeSunoMarketRecord(await pollSunoMarket(taskId, maxWaitMs));
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
@@ -1094,11 +1248,18 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.7.1' };
+const SERVER_INFO = { name: 'kie-art', version: '5.8.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
-const handleListTools = async () => ({
+const handleListTools = async () => withGuardProps(await handleListToolsBase());
+function withGuardProps(res) {
+  for (const t of res.tools) {
+    if (GUARDED_TOOLS.has(t.name) && t.inputSchema?.properties) Object.assign(t.inputSchema.properties, GUARD_PROPS);
+  }
+  return res;
+}
+const handleListToolsBase = async () => ({
   tools: [
     {
       name: 'generate_image',
@@ -1169,6 +1330,18 @@ const handleListTools = async () => ({
       name: 'check_credits',
       description: 'Check remaining kie.ai account credits',
       inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'spend_report',
+      description: 'Where did the credits go? Totals kie.ai spend from this server\'s task history (kie/assets/task-history.jsonl under the project root) over the last N days, grouped by model or day. Uses the ACTUAL credits kie charged when known, looks up missing ones from kie (refresh), and falls back to published prices (marked "est."). Failed tasks are listed separately (kie normally refunds them).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', default: 7, description: 'Look-back window in days' },
+          group_by: { type: 'string', enum: ['model', 'day'], default: 'model' },
+          refresh: { type: 'boolean', default: true, description: 'Look up actual charges from kie for tasks that lack them (up to 40 per call)' },
+        },
+      },
     },
     {
       name: 'download_result',
@@ -1920,6 +2093,9 @@ const handleCallTool = (request) => downloadNotes.run([], async () => {
 const handleCallToolInner = async (request) => {
   const { name, arguments: args } = request.params;
 
+  const guarded = spendGuard(name, args);
+  if (guarded) return guarded;
+
   if (ELEVENLABS_TOOLS.has(name) && ELEVENLABS_PAUSED && process.env.KIE_ELEVENLABS_ENABLED !== '1') {
     return { content: [{ type: 'text', text: `⏸ ${name} is paused: ${ELEVENLABS_PAUSED}\n${ELEVENLABS_FALLBACK[name]}\n(Set KIE_ELEVENLABS_ENABLED=1 to try ElevenLabs anyway.)` }], isError: true };
   }
@@ -2147,6 +2323,7 @@ const handleCallToolInner = async (request) => {
       case 'check_task': {
         const { source, data } = await fetchTaskRecord(args.task_id);
         const state = normalizeTaskState(data);
+        if (state === 'success') recordTaskCredits(args.task_id, data);
         return {
           content: [{
             type: 'text',
@@ -2181,6 +2358,41 @@ const handleCallToolInner = async (request) => {
       case 'check_credits': {
         const result = await kieRequest('GET', '/api/v1/chat/credit');
         return { content: [{ type: 'text', text: `Account credits: ${JSON.stringify(result.data ?? result)}` }] };
+      }
+
+      case 'spend_report': {
+        const days = Number(args.days) > 0 ? Number(args.days) : 7;
+        const groupBy = args.group_by === 'day' ? 'day' : 'model';
+        const since = Date.now() - days * 86400000;
+        let refreshed = 0;
+        if (args.refresh !== false) {
+          const missing = taskHistory.filter((e) => typeof e.credits !== 'number' && !['failed', 'timeout'].includes(e.status)
+            && Date.parse(e.createdAt || '') >= since && e.taskId).slice(-40);
+          for (const e of missing) {
+            try {
+              let { data } = await fetchTaskRecord(e.taskId);
+              // Market-API Suno tasks are also visible on the legacy record endpoint
+              // (found first) but only the market record carries creditsConsumed.
+              if (typeof data?.creditsConsumed !== 'number') data = (await kieRequest('GET', `/api/v1/jobs/recordInfo?taskId=${e.taskId}`)).data;
+              if (typeof data?.creditsConsumed === 'number') { recordTaskCredits(e.taskId, data); refreshed++; }
+            } catch { /* expired or legacy record — keep the estimate */ }
+          }
+        }
+        const { rows, totals } = summarizeSpend(taskHistory, { days, groupBy });
+        if (!rows.length && !totals.failed) return { content: [{ type: 'text', text: `No tasks in the last ${days} day(s) in ${TASK_LOG_PATH}.` }] };
+        const f = (n) => (Math.round(n * 100) / 100).toString();
+        const lines = rows.map((r) => `  ${r.key.padEnd(groupBy === 'day' ? 10 : 42)} ${String(r.tasks).padStart(4)} task(s)  ${f(r.actual + r.estimated).padStart(8)} cr${r.estimated ? ` (${f(r.estimated)} est.)` : ''}${r.unpriced ? ` +${r.unpriced} unpriced` : ''}`);
+        let balance = '';
+        try { const b = await kieRequest('GET', '/api/v1/chat/credit'); balance = `\nCurrent balance: ${b.data ?? '?'} credits`; } catch { /* optional */ }
+        const total = totals.actual + totals.estimated;
+        return { content: [{ type: 'text', text: [
+          `💳 Spend, last ${days} day(s), by ${groupBy}: ${f(total)} credits (~$${(total * 0.005).toFixed(2)})`,
+          `   actual ${f(totals.actual)} cr · estimated ${f(totals.estimated)} cr · ${totals.tasks} task(s)${totals.unpriced ? ` · ${totals.unpriced} unpriced` : ''}${totals.failed ? ` · ${totals.failed} failed/timed-out (usually refunded, not counted)` : ''}${refreshed ? ` · looked up ${refreshed} charge(s) from kie` : ''}`,
+          ``,
+          ...lines,
+          balance,
+          `\nScope: tasks run by this MCP server from ${PROJECT_ROOT} — not other tools/projects on the same kie account.`,
+        ].join('\n') }] };
       }
 
       case 'download_result': {
@@ -3517,6 +3729,9 @@ if (httpFlag) {
 // server. Importing this module is side-effect-free except for creating the
 // (gitignored) RAW_DIR.
 export {
+  summarizeSpend,
+  estimateCallCredits,
+  spendGuard,
   camelToSnake,
   sunoMarketInput,
   normalizeSunoMarketRecord,

@@ -1,10 +1,10 @@
 {
   "name": "kie-mcp",
   "mcpName": "io.github.elibarnett/kie-mcp",
-  "version": "5.7.1",
+  "version": "5.8.0",
   "private": false,
   "type": "module",
-  "description": "MCP server for kie.ai — 60+ image models, 85+ video models, 20+ audio tools with deep model intelligence",
+  "description": "MCP server for kie.ai \u2014 60+ image models, 85+ video models, 20+ audio tools with deep model intelligence",
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
@@ -12,7 +12,8 @@
     "start:http:port": "node server.mjs --http --port=3100",
     "check": "node --check server.mjs",
     "test": "node --test test/*.test.mjs",
-    "smoke": "node test/smoke.mjs"
+    "smoke": "node test/smoke.mjs",
+    "live-check": "node scripts/live-check.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1"

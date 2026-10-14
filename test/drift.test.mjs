@@ -54,3 +54,13 @@ test('drift — thousands separators and token-metered pricing (2026-10-05)', ()
   assert.equal(isTokenPriced('Seedream 5.0 Flash: 3.24 credits per image'), false);
   assert.ok(priceMatches(3.24, '1K and 2K images are priced the same: 3.24 credits per image ($0.0162).'));
 });
+
+test('live-check — docs index diff ignores /cn/ mirrors', async () => {
+  const { diffDocsIndex } = await import('../scripts/live-check.mjs');
+  const prev = '- [A](https://docs.kie.ai/market/a/x.md)\n- [Old](https://docs.kie.ai/market/old.md)\n- [CN](https://docs.kie.ai/cn/market/a/x.md)';
+  const next = '- [A](https://docs.kie.ai/market/a/x.md)\n- [Vidu Q4](https://docs.kie.ai/market/vidu-q4/image-to-video.md)\n- [CN2](https://docs.kie.ai/cn/market/new.md)';
+  const d = diffDocsIndex(prev, next);
+  assert.deepEqual(d.added, [{ page: 'market/vidu-q4/image-to-video.md', title: 'Vidu Q4' }]);
+  assert.deepEqual(d.removed, [{ page: 'market/old.md', title: 'Old' }]);
+  assert.equal(d.count, 2);
+});
