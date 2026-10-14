@@ -21,3 +21,7 @@ src/assets/raw/*
 
 # drift-watch local output
 drift-report.md
+
+# npm run live-check output + docs-index cache
+live-check-report.md
+.live-check/

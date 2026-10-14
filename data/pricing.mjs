@@ -230,6 +230,35 @@ export const PRICING = {
   'runway/extend': 6,                  // per second
 };
 
+// Resolution/size-tiered prices (credits per image, or per second for video),
+// keyed by registry id. `opt` names the model_options field that picks the tier;
+// a missing value falls back to the flat PRICING entry. Used by the
+// estimate_only / max_credits guard (estimateCallCredits in server.mjs).
+export const PRICE_TIERS = {
+  'nano-banana-2': { opt: 'resolution', prices: { '1K': 8, '2K': 12, '4K': 18 } },
+  'nano-banana-2-1': { opt: 'resolution', prices: { '1K': 4, '2K': 6, '4K': 9 } },
+  'gpt-image-2-5/flare-text-to-image': { opt: 'resolution', prices: { '1K': 6, '2K': 10, '4K': 16 } },
+  'gpt-image-2-5/flare-image-to-image': { opt: 'resolution', prices: { '1K': 6, '2K': 10, '4K': 16 } },
+  'gpt-image-2-5/sunburst-text-to-image': { opt: 'resolution', prices: { '1K': 6, '2K': 10, '4K': 16 } },
+  'gpt-image-2-5/sunburst-image-to-image': { opt: 'resolution', prices: { '1K': 6, '2K': 10, '4K': 16 } },
+  'qwen2-1/text-to-image': { opt: 'resolution', prices: { '1K': 4, '2K': 8 } },
+  'qwen2-1/image-to-image': { opt: 'resolution', prices: { '1K': 4, '2K': 8 } },
+  'qwen3/pro-text-to-image': { opt: 'resolution', prices: { '1K': 6.4, '2K': 12 } },
+  'qwen3/pro-image-to-image': { opt: 'resolution', prices: { '1K': 6.4, '2K': 12 } },
+  'seedream/5-pro-text-to-image': { opt: 'size', prices: { '1K': 7, '1.5K': 7, '2K': 14 } },
+  'seedream/5-pro-image-to-image': { opt: 'size', prices: { '1K': 7, '1.5K': 7, '2K': 14 } },
+  // video — credits per second
+  'vidu-q4/image-to-video': { opt: 'resolution', prices: { '540p': 7.2, '720p': 15.2, '1080p': 19.2, '2k': 30.4, '4k': 62.4 } },
+  'vidu-q4/reference-to-video': { opt: 'resolution', prices: { '540p': 7.2, '720p': 15.2, '1080p': 19.2, '2k': 30.4, '4k': 62.4 } },
+  'bytedance/seedance-2-5': { opt: 'resolution', prices: { '480p': 28, '720p': 63, '1080p': 158 } },
+  'minimax-h3/text-to-video': { opt: 'resolution', prices: { '768P': 8, '2K': 13 } },
+  'minimax-h3/image-to-video': { opt: 'resolution', prices: { '768P': 8, '2K': 13 } },
+  'minimax-h3/reference-to-video': { opt: 'resolution', prices: { '768P': 8, '2K': 13 } },
+  'grok-imagine/text-to-video': { opt: 'resolution', prices: { '480p': 2.4, '720p': 4.5, '1080p': 8 } },
+  'grok-imagine/image-to-video': { opt: 'resolution', prices: { '480p': 2.4, '720p': 4.5, '1080p': 8 } },
+  'wan/3-0-video': { opt: 'resolution', prices: { '480P': 8, '720P': 16, '1080P': 32 } },
+};
+
 export const PRICING_ESTIMATED = new Set([
   'minimax-h3/text-to-video', 'minimax-h3/image-to-video', 'minimax-h3/reference-to-video',  // resolution-tiered + per-image surcharges
   'qwen3/pro-text-to-image', 'qwen3/pro-image-to-image',  // 2K tier doubles

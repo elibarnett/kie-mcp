@@ -137,6 +137,7 @@ To reach it remotely, put it behind a tunnel (ngrok / Cloudflare Tunnel) or a re
 | `KIE_MCP_PORT` | no | Port for HTTP mode (default: 3100) |
 | `KIE_SUNO_API` | no | `legacy` sends Suno tools to kie's old Suno endpoints. Default since 5.5.0 is kie's new market API (`ai-music-api/*`), which reports the actual credits charged. MIDI, mashup and voice cloning always use the old endpoints |
 | `KIE_ELEVENLABS_ENABLED` | no | `1` re-enables the ElevenLabs tools (paused since 5.4.0 while kie's ElevenLabs integration fails) |
+| `KIE_MAX_CREDITS_PER_CALL` | no | Default spending cap per tool call, in credits. Calls whose estimate exceeds it are refused before submission; a per-call `max_credits` overrides it |
 | `KIE_MCP_AUTH_TOKEN` | HTTP mode | Bearer token HTTP clients must send (`Authorization: Bearer …`). The server refuses to start in HTTP mode without it |
 | `KIE_MCP_HOST` | no | HTTP bind address (default `127.0.0.1`). Set `0.0.0.0` only inside a container or behind a firewall |
 | `KIE_MCP_ALLOWED_HOSTS` | no | Comma-separated extra `Host` header names to accept (e.g. your tunnel hostname). On loopback, localhost names are always accepted; other hosts are rejected to block DNS rebinding |
@@ -159,11 +160,25 @@ add_instrumental, add_vocals, replace_section,
 convert_to_wav, separate_vocals, boost_style,
 get_timestamped_lyrics, audio_isolation, speech_to_text,
 profile_brief,
-list_models, check_task, list_tasks, check_credits,
+list_models, check_task, list_tasks, check_credits, spend_report,
 download_result, list_raw_assets, upload_file,
 grok_segment_map, grok_image_edit, seedream_layer_decompose,
 veo_extend, veo_upscale_1080p, veo_upscale_4k, runway_extend
 ```
+
+## Cost control
+
+kie bills per call, and a few calls are expensive (1080p/4K video, layer splits, 1080p draft upgrades). Every paid tool takes two optional parameters:
+
+- **`estimate_only: true`** returns the estimated credits from published rates, including resolution/size tiers and video duration, **without submitting anything**.
+- **`max_credits: N`** refuses to submit when the estimate exceeds `N`. Set `KIE_MAX_CREDITS_PER_CALL` to apply a default cap to every call.
+
+```text
+generate_video { model: "bytedance/seedance-2-5", model_options: { resolution: "1080p", duration: 10 }, estimate_only: true }
+→ 💰 ~1580 credits (~$7.90) — 158 cr/s × 10s. Nothing was submitted.
+```
+
+**`spend_report`** shows where the credits went. It totals the server's task history over the last N days, by model or by day, using the **actual** amounts kie charged (it looks up any missing ones), and lists failed tasks separately.
 
 ## Smart model recommendations
 
@@ -214,6 +229,21 @@ npm run smoke   # live end-to-end over MCP stdio — needs KIE_API_KEY
 ```
 
 `server.mjs` guards its side effects behind a main-module check, so it can be imported by tests (`test/unit.test.mjs`) to exercise the pure helpers without starting a server. `test/harness.mjs` is a reusable stdio JSON-RPC client for driving the real server in smoke/integration checks. CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the syntax check + unit tests on Node 20 and 22 for every push and PR.
+
+### Live check (run this weekly)
+
+```bash
+npm run live-check   # KIE_API_KEY from env, else ~/.claude.json kie-art
+```
+
+Runs the whole maintenance routine in about 2 minutes and writes `live-check-report.md`:
+
+1. **Docs-index diff:** docs.kie.ai pages added or removed since the last run. This is the most reliable new-model signal.
+2. **Drift watch with live slug probes:** price drift, paused/removed models, catalog changes.
+3. **Watch list:** real calls to models that were failing upstream (e.g. ElevenLabs), so you know when to re-enable them. Failures cost 0 credits.
+4. **`npm audit`** summary.
+
+Run it from your own machine. GitHub-hosted runners can't fetch kie.ai pages, so the scheduled workflow below only reports that it's blind.
 
 ### Drift watch
 

@@ -509,3 +509,51 @@ test('Vidu Q4 + Seedance 2.5 draft pipeline entries (Oct 2026)', async () => {
   assert.deepEqual(V['bytedance/seedance-2-5-draft'].buildInput('x', undefined, [], { draft_task_id: 't' }), { draft_task_id: 't', resolution: '1080p', output_format: 'mp4' }, 'output_format is required in practice');
   assert.equal(PRICING['vidu-q4/image-to-video'], 15.2);
 });
+
+test('spending guard — tiered estimates, estimate_only, max_credits (v5.8.0)', async () => {
+  const { estimateCallCredits, spendGuard } = await import('../server.mjs');
+  assert.equal(estimateCallCredits('generate_image', { model: 'nano-banana-2', model_options: { resolution: '4K' } }).credits, 18);
+  assert.equal(estimateCallCredits('generate_image', { model: 'nano-banana-2-1' }).credits, 4, 'flat default tier');
+  assert.equal(estimateCallCredits('generate_video', { model: 'vidu-q4/image-to-video', model_options: { resolution: '1080p', duration: 5 } }).credits, 96);
+  assert.equal(estimateCallCredits('generate_video', { model: 'bytedance/seedance-2-5', model_options: { draft: true, duration: 4 } }).credits, 112, 'draft forces the 480p rate');
+  assert.equal(estimateCallCredits('generate_video', { model: 'bytedance/seedance-2-5', model_options: { resolution: '1080p', duration: 4 } }).credits, 632);
+  const layers = estimateCallCredits('seedream_layer_decompose', { tier: 'flash', image_url: 'u' });
+  assert.equal(layers.uncertain, true);
+  assert.equal(layers.credits, 38.88, 'prompt-less flash split assumes ~12 layers');
+  assert.equal(estimateCallCredits('generate_music', { prompt: 'x' }).credits, 12);
+  assert.equal(estimateCallCredits('separate_vocals', { type: 'split_stem' }).credits, 50);
+  assert.equal(estimateCallCredits('grok_segment_map', {}), null, 'free tool → no estimate');
+
+  const est = spendGuard('generate_video', { model: 'bytedance/seedance-2-5', model_options: { resolution: '1080p', duration: 4 }, estimate_only: true });
+  assert.match(est.content[0].text, /632 credits/);
+  assert.match(est.content[0].text, /Nothing was submitted/);
+  const refused = spendGuard('generate_video', { model: 'bytedance/seedance-2-5', model_options: { resolution: '1080p', duration: 4 }, max_credits: 200 });
+  assert.equal(refused.isError, true);
+  assert.match(refused.content[0].text, /exceeds max_credits=200/);
+  assert.equal(spendGuard('generate_image', { model: 'nano-banana-2-1', max_credits: 10 }), null, 'under the cap → proceed');
+  assert.equal(spendGuard('generate_image', { model: 'nano-banana-2-1' }), null, 'no guard params → proceed');
+  assert.equal(spendGuard('list_models', { estimate_only: true }), null, 'non-paid tools are never guarded');
+});
+
+test('summarizeSpend — actual vs estimated vs failed, windows, grouping (v5.8.0)', async () => {
+  const { summarizeSpend } = await import('../server.mjs');
+  const now = Date.parse('2026-10-14T12:00:00Z');
+  const entries = [
+    { taskId: 'a', model: 'nano-banana-2', createdAt: '2026-10-14T10:00:00Z', status: 'downloaded', credits: 8 },
+    { taskId: 'b', model: 'nano-banana-2', createdAt: '2026-10-13T10:00:00Z', status: 'downloaded' },          // no actual → PRICING est. (8)
+    { taskId: 'c', model: 'vidu-q4/reference-to-video', createdAt: '2026-10-14T09:00:00Z', status: 'success', credits: 21.6 },
+    { taskId: 'd', model: 'nano-banana-2', createdAt: '2026-10-14T08:00:00Z', status: 'failed' },             // refunded → not counted
+    { taskId: 'e', model: 'nano-banana-2', createdAt: '2026-09-01T08:00:00Z', status: 'downloaded', credits: 4 }, // outside 7-day window
+    { taskId: 'f', model: 'some/unknown-model', createdAt: '2026-10-14T07:00:00Z', status: 'downloaded' },
+    { taskId: 'g', model: 'suno/lyrics', createdAt: '2026-10-14T06:00:00Z', status: 'success' },  // alias → suno/generate-lyrics (0.4)
+    { taskId: 'h', model: 'suno-V5', createdAt: '2026-10-14T05:00:00Z', status: 'downloaded' },   // alias → suno-music (12)
+  ];
+  const s = summarizeSpend(entries, { days: 7, now });
+  assert.equal(s.totals.actual, 29.6);
+  assert.equal(s.totals.estimated, 20.4, 'NB2 8 + suno lyrics 0.4 + suno music 12 via aliases');
+  assert.equal(s.totals.failed, 1);
+  assert.equal(s.totals.unpriced, 1);
+  assert.equal(s.rows[0].key, 'vidu-q4/reference-to-video', 'sorted by spend');
+  const byDay = summarizeSpend(entries, { days: 7, now, groupBy: 'day' });
+  assert.deepEqual(byDay.rows.map((r) => r.key).sort(), ['2026-10-13', '2026-10-14']);
+});
