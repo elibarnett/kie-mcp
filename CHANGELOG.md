@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.7.1] — 2026-10-14
+
+### Changed
+
+- **Vidu Q4 reference-to-video works now.** kie fixed the launch failure, and a 3 s @540p run on 2026-10-14 succeeded for 21.6 cr. It's slow (about 20 minutes for that clip), longer than the default 15-minute video wait, so the entry now advises `wait: false` + `check_task` / `download_result` instead of warning that it's broken.
+
 ## [5.7.0] — 2026-10-12
 
 ### Added
