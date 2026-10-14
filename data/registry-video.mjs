@@ -372,7 +372,7 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'vidu-q4/reference-to-video': {
     name: 'Vidu Q4 (reference-to-video)',
-    description: 'NEW (Oct 2026) — Vidu Q4 from 1-15 reference images (characters, props, scenes) plus up to 3 reference audio clips: 3-16s, 540p→4K, native audio. Same per-second prices as Vidu Q4 I2V. ⚠️ At launch (2026-10-12) every request failed upstream with "Internal Error" — including kie\'s own docs example; nothing is charged. Retry later or use vidu-q4/image-to-video.',
+    description: 'NEW (Oct 2026) — Vidu Q4 from 1-15 reference images (characters, props, scenes) plus up to 3 reference audio clips: 3-16s, 540p→4K, native audio. Same per-second prices as Vidu Q4 I2V. SLOW: a 3s 540p clip took ~20 min on 2026-10-14 (vs ~1-2 min for I2V), so call with wait=false and collect with check_task / download_result. Reference image URLs must be publicly fetchable.',
     capabilities: ['multi-reference', 'character', 'audio', '4k', 'latest', 'new'],
     type: 'market',
     apiModel: 'vidu-q4/reference-to-video',
