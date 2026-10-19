@@ -299,6 +299,49 @@ export const MODEL_REGISTRY = {
     },
   },
 
+  // Flux 3 Klein (Oct 2026, #121)
+  'flux-3/klein-text-to-image': {
+    name: 'FLUX 3 Klein',
+    description: 'NEW (Oct 2026) — Black Forest Labs FLUX 3 Klein, the cheapest image model on kie: 1.6 / 2.5 / 6.5 cr at 1K / 2K / 4K, 9 aspect ratios incl. 21:9 / 9:21. enhance_prompt (on by default) has kie rewrite the prompt into a fuller description.',
+    capabilities: ['photorealistic', 'illustration', 'budget', 'latest', 'new'],
+    type: 'market',
+    aspectRatios: ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16', '21:9', '9:21'],
+    maxPromptChars: 5000,
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '1.6 / 2.5 / 6.5 cr' },
+      output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+      enhance_prompt: { type: 'boolean', default: true, description: 'kie rewrites the prompt before generating; false keeps it literal' },
+      seed: { type: 'number' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || '1:1', resolution: opts.resolution || '1K', output_format: opts.output_format || 'png' };
+      if (opts.enhance_prompt !== undefined) input.enhance_prompt = opts.enhance_prompt;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+  'flux-3/klein-edit-image': {
+    name: 'FLUX 3 Klein Edit',
+    description: 'NEW (Oct 2026) — FLUX 3 Klein instruction editing with up to 10 reference images (refs are free). 1.6 / 2.5 / 6.5 cr at 1K / 2K / 4K; aspect_ratio auto matches the first image.',
+    capabilities: ['editing', 'style-transfer', 'multi-reference', 'budget', 'latest', 'new'],
+    type: 'market',
+    aspectRatios: ['auto', '1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16', '21:9', '9:21'],
+    maxPromptChars: 5000,
+    requiresImage: true,
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '1.6 / 2.5 / 6.5 cr' },
+      output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+      enhance_prompt: { type: 'boolean', default: true, description: 'kie rewrites the instruction before editing (intent preserved); false keeps it literal' },
+      seed: { type: 'number' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, image_urls: imageUrls.slice(0, 10), aspect_ratio: aspectRatio || 'auto', resolution: opts.resolution || '1K', output_format: opts.output_format || 'png' };
+      if (opts.enhance_prompt !== undefined) input.enhance_prompt = opts.enhance_prompt;
+      if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+
   // Seedream (ByteDance)
   'bytedance/seedream': {
     name: 'Seedream 3.0',
