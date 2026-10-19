@@ -25,6 +25,8 @@ export const PRICING = {
   'flux-2/pro-image-to-image': 5,
   'flux-2/flex-text-to-image': 4,
   'flux-2/flex-image-to-image': 4,
+  'flux-3/klein-text-to-image': 1.6,  // FLUX 3 Klein (Oct 2026): 1.6 / 2.5 / 6.5 cr per image at 1K / 2K / 4K (docs + kie.ai/flux-3; live 1K 1.6, 2026-10-19)
+  'flux-3/klein-edit-image': 1.6,    // same tiers; up to 10 refs free (live 1K 1.6, 2026-10-19)
   'bytedance/seedream': 3.5,
   'bytedance/seedream-v4-text-to-image': 5,   // empirical 2026-09-24: a square T2I charged exactly 5.0 (table said 3.5)
   'bytedance/seedream-v4-edit': 3.5,
@@ -237,6 +239,8 @@ export const PRICING = {
 export const PRICE_TIERS = {
   'nano-banana-2': { opt: 'resolution', prices: { '1K': 8, '2K': 12, '4K': 18 } },
   'nano-banana-2-1': { opt: 'resolution', prices: { '1K': 4, '2K': 6, '4K': 9 } },
+  'flux-3/klein-text-to-image': { opt: 'resolution', prices: { '1K': 1.6, '2K': 2.5, '4K': 6.5 } },
+  'flux-3/klein-edit-image': { opt: 'resolution', prices: { '1K': 1.6, '2K': 2.5, '4K': 6.5 } },
   'gpt-image-2-5/flare-text-to-image': { opt: 'resolution', prices: { '1K': 6, '2K': 10, '4K': 16 } },
   'gpt-image-2-5/flare-image-to-image': { opt: 'resolution', prices: { '1K': 6, '2K': 10, '4K': 16 } },
   'gpt-image-2-5/sunburst-text-to-image': { opt: 'resolution', prices: { '1K': 6, '2K': 10, '4K': 16 } },
@@ -292,6 +296,7 @@ export const PRICING_ESTIMATED = new Set([
   'gemini-omni/video',
   'gemini-omni/flash-1-1',
   'nano-banana-2', 'nano-banana-2-1',  // resolution-tiered; table prices 1K
+  'flux-3/klein-text-to-image', 'flux-3/klein-edit-image',  // resolution-tiered 1.6/2.5/6.5
   'gpt-image-2-5/flare-text-to-image', 'gpt-image-2-5/flare-image-to-image',  // resolution-tiered 6/10/16
   'gpt-image-2-5/sunburst-text-to-image', 'gpt-image-2-5/sunburst-image-to-image',
   'qwen2-1/text-to-image', 'qwen2-1/image-to-image',  // 2K doubles

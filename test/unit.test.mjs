@@ -557,3 +557,16 @@ test('summarizeSpend — actual vs estimated vs failed, windows, grouping (v5.8.
   const byDay = summarizeSpend(entries, { days: 7, now, groupBy: 'day' });
   assert.deepEqual(byDay.rows.map((r) => r.key).sort(), ['2026-10-13', '2026-10-14']);
 });
+
+test('FLUX 3 Klein entries and tiered pricing (Oct 2026, #121)', async () => {
+  const { MODEL_REGISTRY, PRICING, estimateCallCredits } = await import('../server.mjs');
+  const t2i = MODEL_REGISTRY['flux-3/klein-text-to-image'];
+  assert.deepEqual(t2i.buildInput('p', '21:9', [], { resolution: '2K', enhance_prompt: false }),
+    { prompt: 'p', aspect_ratio: '21:9', resolution: '2K', output_format: 'png', enhance_prompt: false });
+  const edit = MODEL_REGISTRY['flux-3/klein-edit-image'];
+  assert.ok(edit.requiresImage);
+  assert.deepEqual(edit.buildInput('p', undefined, Array(12).fill('u'), { seed: 7 }),
+    { prompt: 'p', image_urls: Array(10).fill('u'), aspect_ratio: 'auto', resolution: '1K', output_format: 'png', seed: 7 });
+  assert.equal(PRICING['flux-3/klein-text-to-image'], 1.6);
+  assert.equal(estimateCallCredits('generate_image', { model: 'flux-3/klein-edit-image', model_options: { resolution: '4K' } }).credits, 6.5);
+});

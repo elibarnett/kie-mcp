@@ -2,6 +2,16 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.9.0] — 2026-10-19
+
+### Added
+
+- **FLUX 3 Klein** (#121), found by the weekly live-check. Both endpoints were added:
+  - `flux-3/klein-text-to-image`: 9 aspect ratios including 21:9 and 9:21.
+  - `flux-3/klein-edit-image`: up to 10 reference images, which cost nothing extra; aspect ratio `auto` matches the first image.
+  - Both take `resolution` (1K/2K/4K), `output_format` (png/jpeg/webp), `enhance_prompt` (on by default; kie rewrites the prompt) and `seed`.
+  - Price: 1.6 / 2.5 / 6.5 cr per image at 1K / 2K / 4K. Live on 2026-10-19, a 1K run on each endpoint charged exactly 1.6 cr and took about 25 s. This is now the cheapest image model in the registry, and the spending guard estimates each tier.
+
 ## [5.8.0] — 2026-10-14
 
 ### Added
