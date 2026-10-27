@@ -248,9 +248,13 @@ function normalizeBase64(input) {
 const GEMINI_TTS_KEYS = { pro: 'google/gemini-2-5-pro-tts', 'flash-3.8': 'google/gemini-3-8-flash-tts', 'flash-lite': 'google/gemini-3-8-flash-lite-tts' };
 function tierPrice(key, opts = {}) {
   const t = PRICE_TIERS[key];
-  const v = t && opts[t.opt];
-  if (t && v !== undefined && t.prices[v] !== undefined) return { price: t.prices[v], tier: `${t.opt}=${v}` };
-  return { price: PRICING[key], tier: t ? 'default tier' : null };
+  if (!t) return { price: PRICING[key], tier: null };
+  const v = opts[t.opt] ?? Object.keys(t.prices).find((k) => t.prices[k] === PRICING[key]);
+  // Variant tables: audio on (PixVerse) or video input (Kling 4.0) change the rate.
+  if (t.audio && opts[t.audio.opt] && t.audio.prices[v] !== undefined) return { price: t.audio.prices[v], tier: `${t.opt}=${v}, audio on` };
+  if (t.videoInput && opts[t.videoInput.opt]?.length && t.videoInput.prices[v] !== undefined) return { price: t.videoInput.prices[v], tier: `${t.opt}=${v}, with video input`, videoInput: true };
+  if (v !== undefined && t.prices[v] !== undefined) return { price: t.prices[v], tier: `${t.opt}=${v}` };
+  return { price: PRICING[key], tier: 'default tier' };
 }
 function estimateCallCredits(name, args = {}) {
   const opts = args.model_options || {};
@@ -268,9 +272,17 @@ function estimateCallCredits(name, args = {}) {
     const id = args.model || 'veo-3/text-to-video';
     const def = VIDEO_MODEL_REGISTRY[id];
     const res = id === 'bytedance/seedance-2-5' && opts.draft ? { ...opts, resolution: '480p' } : opts;
-    const { price, tier } = tierPrice(id, res);
+    const { price, tier, videoInput } = tierPrice(id, res);
     const p = price ?? PRICING[def?.apiModel];
     if (typeof p !== 'number') return null;
+    if (def?.billedOnAudio) {
+      const secs = Number(opts.audio_duration) || 15;
+      return { credits: fmt(p * secs), basis: `${id}: ${p} cr/s × ${opts.audio_duration ? `${secs}s of audio` : 'the audio length (assumed 15s — pass model_options.audio_duration for a real estimate)'}`, uncertain: !opts.audio_duration };
+    }
+    if (videoInput) {
+      const dur = Number(opts.duration ?? def?.options?.duration?.default ?? 5) || 5;
+      return { credits: fmt(p * dur * 2), basis: `${id} (${tier}): ${p} cr/s × (output ${dur}s + input video, assumed ≈ output)`, uncertain: true };
+    }
     if (id === 'bytedance/seedance-2-5-draft') return { credits: fmt(p * 5), basis: `${p} cr/s × the draft's duration (assumed 5s; billed on the real length)`, uncertain: true };
     const dur = Number(opts.duration ?? def?.options?.duration?.default ?? 5) || 5;
     return { credits: fmt(p * dur), basis: `${id}${tier ? ` (${tier})` : ''}: ${p} cr/s × ${dur}s`, uncertain: PRICING_ESTIMATED.has(id) };
@@ -1248,7 +1260,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.9.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.10.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1363,7 +1375,7 @@ const handleListToolsBase = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p, NEW; transformation=restyle existing video). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-1-5 (premium, NEW), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Higher-quality PixVerse without templates→pixverse-v6-max T2V/I2V (NEW, 8.8cr/s @720p). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p; transformation=restyle existing video). Long consistent-character clips (3-30s) with named @subjects, voices and reference videos→kling-4/reference-to-video (NEW, 28.5cr/s @720p); first→keyframes→last animation→kling-4/keyframe-to-video (NEW). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-2-0 (NEW Oct 2026: 14cr/s, up to 5-min audio, half of 1.5's price), omnihuman-1-5 (multi-person masks, 1080p), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {

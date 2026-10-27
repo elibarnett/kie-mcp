@@ -41,14 +41,14 @@ Just ask Claude things like:
 ### Video (85+)
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
-- **ByteDance Seedance**: 2.5 (NEW — 30s single takes, live Aug 2026) / 2.0 / 2.0 Fast / 2.0 Mini / 1.5 Pro
-- **Kuaishou Kling**: 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
+- **ByteDance Seedance**: 2.5 (30s single takes, 1080p, draft→1080p upgrade) / 2.0 / 2.0 Fast / 2.0 Mini (1.5 Pro retired upstream Oct 2026)
+- **Kuaishou Kling**: 4.0 (NEW — reference-to-video with named @subjects/voices/video refs, keyframe-to-video, 3-30s), 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
 - **Alibaba Wan**: 3.0 + 3.0 Prime (NEW — unified prompt-or-media, audio), 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
 - **Google Gemini Omni**: Video + 1.1 Flash (NEW — first→last-frame mode, 360p-4K; image/voice/video/character references)
 - **MiniMax Hailuo**: H3 (NEW — 2K + native stereo audio, image+video+audio references, first→last-frame I2V), 2.3 Pro/Standard, 02 Pro/Standard
 - **xAI Grok Imagine**: Video 1.5 preview (NEW — I2V with native audio, cheapest audio video), T2V, I2V, Upscale, Extend
-- **Avatar / lip-sync**: OmniHuman 1.5 (NEW — audio-driven full-body avatar + free subject-detection + human-identification utilities), Volcengine Video Lip-Sync (NEW — re-dub existing footage), Kling AI Avatar, Infinitalk
-- **PixVerse V6** (NEW): T2V, I2V (viral templates), Transition (first→last morph), Fusion R2V (@ref_name), Extend — budget all-rounder with native audio
+- **Avatar / lip-sync**: OmniHuman 2.0 (NEW — 14 cr/s, up to 5-minute audio), OmniHuman 1.5 (NEW — audio-driven full-body avatar + free subject-detection + human-identification utilities), Volcengine Video Lip-Sync (NEW — re-dub existing footage), Kling AI Avatar, Infinitalk
+- **PixVerse V6 / V6 Max** (V6 Max NEW: higher-quality T2V/I2V): T2V, I2V (viral templates), Transition (first→last morph), Fusion R2V (@ref_name), Extend — budget all-rounder with native audio
 - **Runway**: Aleph, Aleph Edit, Extend
 - **Others**: ByteDance V1 Pro/Lite, Topaz upscale
 

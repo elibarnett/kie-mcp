@@ -64,3 +64,9 @@ test('live-check — docs index diff ignores /cn/ mirrors', async () => {
   assert.deepEqual(d.removed, [{ page: 'market/old.md', title: 'Old' }]);
   assert.equal(d.count, 2);
 });
+
+test('classifyProbe — 410 / retired counts as gone (Seedance 1.5 Pro, Oct 2026)', () => {
+  assert.equal(classifyProbe({ code: 410, msg: 'Seedance 1.5 Pro has been retired upstream and is no longer available on Kie.ai.' }), 'gone');
+  assert.equal(classifyProbe({ code: 200, msg: 'This model is no longer available' }), 'gone');
+  assert.equal(classifyProbe({ code: 500, msg: 'This field is required' }), 'healthy');
+});

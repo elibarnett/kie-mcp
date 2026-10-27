@@ -2,6 +2,39 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.10.0] — 2026-10-27
+
+Closes #123, #124, #125, #126, #127, all filed by the weekly live check.
+
+### Added
+
+- **Kling 4.0** (#123):
+  - **`kling-4/reference-to-video`**: 3–30 s, 720p/1080p, native audio. Prompts @-mention up to 10 reference images (`@image_1…`), up to 5 reference videos (`@video_1…`), up to 7 named **elements** (`@Hero`: 2–4 views or a 3–8 s video, optional bound voice) and up to 3 standalone **voices**. The builder validates names (unique, not reserved like `image_N` / `first_frame`), image-vs-video subjects and the 5-video total before submitting.
+  - **`kling-4/keyframe-to-video`**: first frame, up to 8 middle keyframes and a last frame; `image_urls` map to [first, …middle, last].
+  - Pricing: 28.5 / 42.5 cr/s (720p/1080p); with video input 17 / 25.5 cr/s on input + output duration. That isn't inverted, as the issue suspected: it's the same billing model as Seedance 2.5.
+- **PixVerse V6 Max** (#124): `pixverse-v6-max/text-to-video` and `/image-to-video` (one image), 1–15 s, 360p–1080p, optional audio. Per second (no audio | audio): 360p 4.8|7.2, 540p 7.2|8.8, 720p 8.8|12, 1080p 17.6|22.4. No template or multi-clip modes.
+- **OmniHuman 2.0** (#125): `omnihuman-2-0`, one image + 4–300 s of audio → 720p lip-synced performance, **14 cr/s** (OmniHuman 1.5: 27 cr/s, ≤ 60 s). **The watermark is off by default**: kie's default is on, so the entry sends `enable_watermark: false` unless asked.
+- **Spending guard:** tiers for all of the above, plus audio-aware tiers for PixVerse V6 / V6 Max and a with-video-input rate for Kling 4.0. Audio-driven models (OmniHuman 1.5 / 2.0) estimate from `model_options.audio_duration` and otherwise flag the estimate as assuming 15 s.
+
+- **Live 2026-10-27, all through the MCP tools:**
+  - Kling 4.0 R2V, 3 s @720p with a named `@Hero` element from 2 views plus a scene image: **85.5 cr**.
+  - Kling 4.0 keyframe, first→last, 3 s: **85.5 cr**.
+  - PixVerse V6 Max T2V and I2V, 360p 1 s: **4.8 cr** each.
+  - OmniHuman 2.0 driven by an 8 s Gemini TTS clip uploaded via `upload_file`: **112 cr** (14 × 8), 8.0 s output, no watermark.
+
+### Removed
+
+- **Seedance 1.5 Pro** (#126): kie now answers `410 — "retired upstream and is no longer available"`. Both entries and their pricing are removed; use Seedance 2.x.
+
+### Fixed
+
+- **Drift watch counted retired models as healthy.** A `410`, or a message about being "retired / no longer available / deprecated", is now `gone`. That's why Seedance 1.5's retirement only surfaced through the docs diff.
+- **`live-check` double-counted vulnerabilities**, adding npm's `total` field to the per-severity counts.
+
+### Security
+
+- `npm audit fix` (#127): body-parser, zod, fast-uri, hono and ip-address advisories, all transitive. `npm audit`: 0.
+
 ## [5.9.0] — 2026-10-19
 
 ### Added

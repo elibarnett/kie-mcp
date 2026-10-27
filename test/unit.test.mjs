@@ -570,3 +570,34 @@ test('FLUX 3 Klein entries and tiered pricing (Oct 2026, #121)', async () => {
   assert.equal(PRICING['flux-3/klein-text-to-image'], 1.6);
   assert.equal(estimateCallCredits('generate_image', { model: 'flux-3/klein-edit-image', model_options: { resolution: '4K' } }).credits, 6.5);
 });
+
+test('v5.10.0 — Kling 4.0, PixVerse V6 Max, OmniHuman 2.0 entries + estimates', async () => {
+  const { VIDEO_MODEL_REGISTRY: V, estimateCallCredits } = await import('../server.mjs');
+  const r2v = V['kling-4/reference-to-video'];
+  const el = { name: 'Hero', image_urls: ['a', 'b'] };
+  const i = r2v.buildInput('@Hero waves to @Narrator', undefined, ['x'], { elements: [el], voices: [{ name: 'Narrator', audio_url: 'v' }], duration: 10 });
+  assert.deepEqual([i.aspect_ratio, i.duration, i.image_urls, i.elements.length, i.voices.length], ['auto', 10, ['x'], 1, 1]);
+  assert.throws(() => r2v.buildInput('p', 'auto', [], { elements: [{ name: 'image_1', image_urls: ['a', 'b'] }] }), /invalid element\/voice name/);
+  assert.throws(() => r2v.buildInput('p', 'auto', [], { elements: [el], voices: [{ name: 'hero', audio_url: 'v' }] }), /duplicate name/);
+  assert.throws(() => r2v.buildInput('p', 'auto', [], { elements: [{ name: 'X', image_urls: ['a'] }] }), /2-4 image_urls/);
+  assert.throws(() => r2v.buildInput('p', 'auto', [], { elements: [{ name: 'X', image_urls: ['a', 'b'], video_url: 'v' }] }), /EITHER/);
+  assert.throws(() => r2v.buildInput('p', 'auto', [], { video_urls: ['1', '2', '3', '4', '5'], elements: [{ name: 'V', video_url: 'v' }] }), /total ≤ 5/);
+
+  const kf = V['kling-4/keyframe-to-video'].buildInput('p', '16:9', ['f', 'k1', 'k2', 'l'], {});
+  assert.deepEqual([kf.first_frame_url, kf.keyframe_urls, kf.last_frame_url], ['f', ['k1', 'k2'], 'l'], 'image_urls → first, middle, last');
+  assert.deepEqual(V['kling-4/keyframe-to-video'].buildInput('p', 'auto', ['only'], {}).last_frame_url, undefined, 'single image = first frame only');
+
+  assert.deepEqual(V['pixverse-v6-max/image-to-video'].buildInput('p', undefined, ['a', 'b'], { quality: '360p', duration: 1 }), { prompt: 'p', image_urls: ['a'], quality: '360p', duration: 1 });
+  const oh = V['omnihuman-2-0'].buildInput('wave', undefined, ['img'], { audio_url: 'a.mp3' });
+  assert.equal(oh.enable_watermark, false, 'watermark off unless asked (kie default is on)');
+  assert.throws(() => V['omnihuman-2-0'].buildInput('p', undefined, ['img'], {}), /audio_url/);
+
+  const est = (model, model_options) => estimateCallCredits('generate_video', { model, model_options });
+  assert.equal(est('kling-4/reference-to-video', { resolution: '1080p', duration: 10 }).credits, 425);
+  assert.equal(est('kling-4/reference-to-video', { video_urls: ['v'], duration: 5 }).credits, 170, 'with video input: 17 cr/s × (out + in)');
+  assert.equal(est('pixverse-v6-max/text-to-video', { quality: '1080p', generate_audio_switch: true, duration: 5 }).credits, 112);
+  assert.equal(est('pixverse-v6-max/text-to-video', { duration: 5 }).credits, 44, '720p no-audio default');
+  assert.equal(est('omnihuman-2-0', { audio_duration: 60 }).credits, 840);
+  assert.equal(est('omnihuman-2-0', {}).uncertain, true, 'unknown audio length → flagged');
+  assert.equal(V['seedance/text-to-video'], undefined, 'Seedance 1.5 Pro retired upstream (410) — removed');
+});
