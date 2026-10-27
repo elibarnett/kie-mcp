@@ -89,8 +89,6 @@ export const PRICING = {
   'runway/aleph-edit': 6,
   'seedance-2/text-to-video': 25,     // 720p with video input, per second
   'seedance-2-fast/text-to-video': 20,// 720p with video input, per second
-  'seedance/text-to-video': 8,
-  'seedance/image-to-video': 8,
   'wan/text-to-video': 4,
   'wan/image-to-video': 4,
   'wan/flash-image-to-video': 6,   // measured 2026-08-05 (#69): 6× exactly 30 cr per 5s take at defaults; a second run averaged 8 cr/s — see PRICING_ESTIMATED
@@ -180,6 +178,11 @@ export const PRICING = {
   'pixverse-v6/reference-to-video': 8.1,
   // ── OmniHuman 1.5 — kie published: 27 cr/s (billed on output = audio length) ──
   'omnihuman-1-5': 27,
+  'omnihuman-2-0': 14,                 // Oct 2026 — published: 14 cr/s, billed on output (= audio) duration, 720p
+  'kling-4/reference-to-video': 28.5,  // Kling 4.0 (Oct 2026) — 720p 28.5 / 1080p 42.5 cr/s; with video input 17 / 25.5 cr/s × (input + output)
+  'kling-4/keyframe-to-video': 28.5,   // 720p 28.5 / 1080p 42.5 cr/s on output duration
+  'pixverse-v6-max/text-to-video': 8.8,   // PixVerse V6 Max (Oct 2026) — 720p no-audio default; see PRICE_TIERS
+  'pixverse-v6-max/image-to-video': 8.8,
   // ── Volcengine lip-sync — kie published: 8 cr/s of generated video (follows audio duration) ──
   'volcengine/video-to-video-lip-sync': 8,
   // ── Gemini Omni (Google, May 2026) ──
@@ -261,6 +264,12 @@ export const PRICE_TIERS = {
   'grok-imagine/text-to-video': { opt: 'resolution', prices: { '480p': 2.4, '720p': 4.5, '1080p': 8 } },
   'grok-imagine/image-to-video': { opt: 'resolution', prices: { '480p': 2.4, '720p': 4.5, '1080p': 8 } },
   'wan/3-0-video': { opt: 'resolution', prices: { '480P': 8, '720P': 16, '1080P': 32 } },
+  'kling-4/reference-to-video': { opt: 'resolution', prices: { '720p': 28.5, '1080p': 42.5 }, videoInput: { opt: 'video_urls', prices: { '720p': 17, '1080p': 25.5 } } },
+  'kling-4/keyframe-to-video': { opt: 'resolution', prices: { '720p': 28.5, '1080p': 42.5 } },
+  'pixverse-v6-max/text-to-video': { opt: 'quality', prices: { '360p': 4.8, '540p': 7.2, '720p': 8.8, '1080p': 17.6 }, audio: { opt: 'generate_audio_switch', prices: { '360p': 7.2, '540p': 8.8, '720p': 12, '1080p': 22.4 } } },
+  'pixverse-v6-max/image-to-video': { opt: 'quality', prices: { '360p': 4.8, '540p': 7.2, '720p': 8.8, '1080p': 17.6 }, audio: { opt: 'generate_audio_switch', prices: { '360p': 7.2, '540p': 8.8, '720p': 12, '1080p': 22.4 } } },
+  'pixverse-v6/text-to-video': { opt: 'quality', prices: { '360p': 4, '540p': 5.6, '720p': 7.2, '1080p': 14.4 }, audio: { opt: 'generate_audio_switch', prices: { '360p': 5.6, '540p': 7.2, '720p': 9.6, '1080p': 18.4 } } },
+  'pixverse-v6/image-to-video': { opt: 'quality', prices: { '360p': 4, '540p': 5.6, '720p': 7.2, '1080p': 14.4 }, audio: { opt: 'generate_audio_switch', prices: { '360p': 5.6, '540p': 7.2, '720p': 9.6, '1080p': 18.4 } } },
 };
 
 export const PRICING_ESTIMATED = new Set([
@@ -277,6 +286,7 @@ export const PRICING_ESTIMATED = new Set([
   'wan/flash-video-to-video',   // #69: assumed same as flash I2V
   'bytedance/seedance-2-5', 'bytedance/seedance-2-5-draft',
   'vidu-q4/image-to-video', 'vidu-q4/reference-to-video',
+  'kling-4/reference-to-video', 'kling-4/keyframe-to-video', 'pixverse-v6-max/text-to-video', 'pixverse-v6-max/image-to-video', 'omnihuman-2-0',
   'pixverse-v6/text-to-video',
   'pixverse-v6/image-to-video',
   'pixverse-v6/transition',

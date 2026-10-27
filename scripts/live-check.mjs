@@ -99,8 +99,10 @@ function auditSection() {
   const r = spawnSync('npm', ['audit', '--json'], { cwd: ROOT, encoding: 'utf8' });
   try {
     const v = JSON.parse(r.stdout).metadata?.vulnerabilities || {};
-    const total = Object.values(v).reduce((a, b) => a + b, 0);
-    return `### 🔒 Dependencies\n${total ? `⚠️ ${total} vulnerabilities (${Object.entries(v).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')}) — run \`npm audit\`` : '✅ npm audit: 0 vulnerabilities'}`;
+    // metadata.vulnerabilities carries per-severity counts AND a `total` — don't add it twice.
+    const total = v.total ?? Object.entries(v).filter(([k]) => k !== 'total').reduce((a, [, n]) => a + n, 0);
+    const bySeverity = Object.entries(v).filter(([k, n]) => k !== 'total' && n).map(([k, n]) => `${n} ${k}`).join(', ');
+    return `### 🔒 Dependencies\n${total ? `⚠️ ${total} vulnerabilities (${bySeverity}) — run \`npm audit\`` : '✅ npm audit: 0 vulnerabilities'}`;
   } catch {
     return '### 🔒 Dependencies\nnpm audit unavailable.';
   }
