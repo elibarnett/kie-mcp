@@ -2,6 +2,36 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.11.0] — 2026-11-05
+
+Closes #130.
+
+### Added
+
+- **GPT Image 2.6** (`gpt-image-2-6/{flare,sunburst,economy}-{text-to-image,image-to-image}`):
+  - **Flare** (fast) and **Sunburst** (premium): 1K/2K/4K, 16 aspect ratios (adds 5:4, 2:1, 3:1, 9:21…), transparent background, PNG/JPEG/WebP, up to 16 references. **Token-billed** (5,400 cr per 1M output tokens). Live 2026-11-05 at 2:3: 1K **6.14**, 2K **8.23**, 4K **17.53** cr; a 1K edit with one reference **10.06**. The spending guard uses those numbers, flagged as estimates.
+  - **Economy**: the same model through kie's economy channel, **5 cr flat** at 1K (live: 5.0), 8 aspect ratios, and an animated **GIF** mode (`frame_count`, `frame_duration_ms`). ⚠️ At launch GIF output and Economy image-to-image both failed upstream ("Internal Error", 0 cr); the descriptions say so.
+- **Kling 4.0 Flash** (`kling-4-flash/reference-to-video`, `kling-4-flash/image-to-video`): the cheaper 4.0 tier, 720p, 3–20 s, **17 cr/s** (11.3 with video input) vs 28.5. Same @-mentioned elements as Kling 4.0, but no standalone voices (bind audio to a character with `voice_url`). kie's "keyframe-to-video" Flash endpoint takes one start frame, so it's exposed as image-to-video. The element/voice validation is now one shared helper, which also enforces each tier's duration range.
+- **NVIDIA Nemotron 3.5 Transcribe** is the new default backend of **`speech_to_text`**, so the tool works again after being paused with ElevenLabs. **0.3 cr per minute**, ≤ 60 min / 200 MB, audio or video, 32 languages. `timestamps: true` saves a JSON file with word timings and speaker labels; `target_language` translates to/from English. `provider: "elevenlabs"` keeps the old backend (still paused).
+- **live-check: "Docs models not in the MCP"**, a stateless list of every docs model slug the registry never mentions. The docs-index diff alone can be "used up" by any run that moves its baseline without filing anything. That's how these 9 endpoints went unreported between Nov 2 and Nov 5.
+
+- **Live 2026-11-05, through the MCP tools:**
+  - GPT Image 2.6 Flare 1K **6.14** cr, Economy **5** cr.
+  - Kling 4.0 Flash R2V with a named `@Hero` element, 3 s: **51** cr. Flash I2V 3 s: **51** cr.
+  - `speech_to_text` (Nemotron) on a 4.3 s two-voice clip: exact transcript (**0.03** cr); with `timestamps` it split the two speakers (`<spk:0>` / `<spk:1>`) and saved 13 word timings; `target_language: "es"` translated correctly. `provider: "elevenlabs"` still pauses as expected.
+
+### Fixed
+
+- **`generate_gemini_tts`** now explains kie's speaker-id rule ("Speaker 1", "Speaker 2") instead of passing through a bare 422 when given names like "Ana".
+
+### Security
+
+- `npm audit fix` (#130): `@hono/node-server` serveStatic double decode (moderate, transitive via the MCP SDK; not used by kie-mcp). `npm audit`: 0.
+
+### Unchanged
+
+- ElevenLabs is still broken upstream, with a new symptom: tasks are accepted but never finish (10+ min). The TTS, dialogue and isolation tools stay paused.
+
 ## [5.10.0] — 2026-10-27
 
 Closes #123, #124, #125, #126, #127, all filed by the weekly live check.

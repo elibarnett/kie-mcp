@@ -299,6 +299,10 @@ function estimateCallCredits(name, args = {}) {
     const minutes = Math.max(String(text).trim().split(/\s+/).filter(Boolean).length / 150, 0.1);
     return { credits: fmt(PRICING[key] * minutes), basis: `${key}: ~${PRICING[key]} cr/min × ~${fmt(minutes)} min of speech (token-billed upstream)`, uncertain: true };
   }
+  if (name === 'speech_to_text' && args.provider !== 'elevenlabs') {
+    const min = Number(args.audio_minutes) || 60;
+    return { credits: fmt(PRICING['nvidia/nemotron-3-5-transcribe'] * min), basis: `Nemotron 3.5: 0.3 cr per minute × ${args.audio_minutes ? `${min} min` : 'up to 60 min (the maximum; pass audio_minutes for a real estimate)'}`, uncertain: !args.audio_minutes };
+  }
   if (name === 'separate_vocals' && args.type && args.type !== 'separate_vocal') {
     return { credits: 50, basis: `separate_vocals type=${args.type}: 50 cr (multi-stem)`, uncertain: args.type === 'split_stem_advanced' };
   }
@@ -841,7 +845,7 @@ const ELEVENLABS_FALLBACK = {
   generate_tts: 'Use generate_gemini_tts instead (30 voices, style direction; model "flash-3.8" ≈1.9 cr/min, "flash-lite" ≈1.3 cr/min).',
   generate_dialogue: 'Use generate_gemini_tts with speakers + dialogue_turns instead (up to 2 speakers).',
   audio_isolation: 'No kie alternative right now — clean the audio locally (e.g. ffmpeg afftdn/arnndn, or Demucs/UVR).',
-  speech_to_text: 'No kie alternative right now — transcribe locally (e.g. whisper.cpp / openai-whisper).',
+  speech_to_text: 'Omit provider (or use provider="nemotron") — NVIDIA Nemotron 3.5 Transcribe, 0.3 cr/min.',
 };
 
 // Closest working substitute to suggest when a model's provider is down.
@@ -1260,7 +1264,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.10.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.11.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1275,7 +1279,7 @@ const handleListToolsBase = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning, 8cr). Cheap fast all-rounder→nano-banana-2-1 (4cr, ~13s, NEW Oct 2026; NB2 doubled to 8cr). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→flux-3/klein-text-to-image (1.6cr @1K, 4K up to 6.5cr, NEW) or flux-3/klein-edit-image (1.6cr, 10 free refs); z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning, 8cr). Cheap fast all-rounder→nano-banana-2-1 (4cr, ~13s, NEW Oct 2026; NB2 doubled to 8cr). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-6/flare-* (NEW Nov 2026, ~6cr @1K, 16 ratios incl. 3:1) / sunburst-* (premium) / economy-* (5cr flat @1K, can return animated GIF); previous gen gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→flux-3/klein-text-to-image (1.6cr @1K, 4K up to 6.5cr, NEW) or flux-3/klein-edit-image (1.6cr, 10 free refs); z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1375,7 +1379,7 @@ const handleListToolsBase = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Higher-quality PixVerse without templates→pixverse-v6-max T2V/I2V (NEW, 8.8cr/s @720p). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p; transformation=restyle existing video). Long consistent-character clips (3-30s) with named @subjects, voices and reference videos→kling-4/reference-to-video (NEW, 28.5cr/s @720p); first→keyframes→last animation→kling-4/keyframe-to-video (NEW). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-2-0 (NEW Oct 2026: 14cr/s, up to 5-min audio, half of 1.5's price), omnihuman-1-5 (multi-person masks, 1080p), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Higher-quality PixVerse without templates→pixverse-v6-max T2V/I2V (NEW, 8.8cr/s @720p). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p; transformation=restyle existing video). Long consistent-character clips (3-30s) with named @subjects, voices and reference videos→kling-4/reference-to-video (NEW, 28.5cr/s @720p); first→keyframes→last animation→kling-4/keyframe-to-video (NEW). Same at 720p for 40% less→kling-4-flash/reference-to-video (17cr/s, 3-20s, NEW Nov 2026); kling-4-flash/image-to-video from a first frame. Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-2-0 (NEW Oct 2026: 14cr/s, up to 5-min audio, half of 1.5's price), omnihuman-1-5 (multi-person masks, 1080p), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1949,14 +1953,18 @@ const handleListToolsBase = async () => ({
     },
     {
       name: 'speech_to_text',
-      description: 'Transcribe audio to text using ElevenLabs Scribe v1. Supports diarization and audio event tagging. Returns transcription text.',
+      description: 'Transcribe (or translate) audio or video speech to text. Default provider: NVIDIA Nemotron 3.5 Transcribe (NEW Nov 2026) — 0.3 credits per MINUTE of audio, up to 60 min / 200 MB, MP3/WAV/M4A/FLAC/OGG/WEBM/MP4/MOV, spoken language auto-detected, 32 languages. timestamps=true adds word timings + speaker labels (saved as a JSON file); target_language translates (to/from English). provider="elevenlabs" uses ElevenLabs Scribe (paused while it fails upstream).',
       inputSchema: {
         type: 'object',
         properties: {
-          audio_url: { type: 'string', description: 'Audio URL to transcribe' },
-          language_code: { type: 'string', description: 'Language code (e.g. "en", "es"). Auto-detected if omitted.' },
-          tag_audio_events: { type: 'boolean', default: false, description: 'Tag non-speech audio events (laughter, music, etc.)' },
-          diarize: { type: 'boolean', default: false, description: 'Identify different speakers' },
+          audio_url: { type: 'string', description: 'Public URL of the audio (or a video with sound). Upload local files with upload_file first.' },
+          provider: { type: 'string', enum: ['nemotron', 'elevenlabs'], default: 'nemotron' },
+          timestamps: { type: 'boolean', default: false, description: 'Nemotron: word-level timings + speaker labels (diarization). Cannot be combined with target_language' },
+          target_language: { type: 'string', enum: ['en', 'zh', 'ja', 'ko', 'fr', 'de', 'es', 'pt', 'it', 'ru', 'nl', 'pl', 'cs', 'sk', 'hi', 'bg', 'hr', 'da', 'et', 'fi', 'hu', 'lv', 'lt', 'ro', 'sl', 'sv', 'th', 'uk', 'ar', 'el', 'he', 'mt'], description: 'Nemotron: translate instead of transcribe. Non-English speech → "en", or English speech → another language' },
+          language_code: { type: 'string', description: 'ElevenLabs only: language code (auto-detected if omitted)' },
+          tag_audio_events: { type: 'boolean', default: false, description: 'ElevenLabs only: tag laughter, music, etc.' },
+          diarize: { type: 'boolean', default: false, description: 'ElevenLabs only: identify speakers (Nemotron does this with timestamps=true)' },
+          download_dir: { type: 'string', description: 'Absolute directory for the timestamps JSON (defaults to kie/assets/raw/)' },
         },
         required: ['audio_url'],
       },
@@ -2108,7 +2116,8 @@ const handleCallToolInner = async (request) => {
   const guarded = spendGuard(name, args);
   if (guarded) return guarded;
 
-  if (ELEVENLABS_TOOLS.has(name) && ELEVENLABS_PAUSED && process.env.KIE_ELEVENLABS_ENABLED !== '1') {
+  const usesElevenLabs = name === 'speech_to_text' ? args?.provider === 'elevenlabs' : ELEVENLABS_TOOLS.has(name);
+  if (usesElevenLabs && ELEVENLABS_PAUSED && process.env.KIE_ELEVENLABS_ENABLED !== '1') {
     return { content: [{ type: 'text', text: `⏸ ${name} is paused: ${ELEVENLABS_PAUSED}\n${ELEVENLABS_FALLBACK[name]}\n(Set KIE_ELEVENLABS_ENABLED=1 to try ElevenLabs anyway.)` }], isError: true };
   }
 
@@ -2620,6 +2629,9 @@ const handleCallToolInner = async (request) => {
           spk = spk?.length ? spk : [{ speaker_id: 'Speaker 1', voice_name: voice_name || 'Zephyr' }];
           turns = [{ speaker_id: spk[0].speaker_id || 'Speaker 1', text }];
         }
+        // kie requires speaker ids literally of the form "Speaker N" (a 422 otherwise).
+        const badId = [...(spk || []), ...(turns || [])].map((x) => x?.speaker_id).find((id) => id !== undefined && !/^Speaker \d+$/.test(id));
+        if (badId) return { content: [{ type: 'text', text: `speaker_id "${badId}" is not allowed — kie requires "Speaker 1", "Speaker 2". Put character names in the speaker's audio_profile or the text instead.` }], isError: true };
         if (spk.length > 2) return { content: [{ type: 'text', text: 'Gemini TTS supports at most 2 speakers per request (upstream hard limit).' }], isError: true };
         const input = { speakers: spk, dialogue_turns: turns };
         if (scene) input.scene = scene;
@@ -3150,7 +3162,35 @@ const handleCallToolInner = async (request) => {
       }
 
       case 'speech_to_text': {
-        const { audio_url, language_code, tag_audio_events, diarize } = args;
+        const { audio_url, language_code, tag_audio_events, diarize, provider = 'nemotron', timestamps, target_language } = args;
+        if (provider !== 'elevenlabs') {
+          // NVIDIA Nemotron 3.5 Transcribe (Nov 2026): 0.005 cr per second of audio.
+          if (timestamps && target_language) return { content: [{ type: 'text', text: 'timestamps and target_language cannot be combined (kie: timestamps are for transcription only).' }], isError: true };
+          const nInput = { audio_url };
+          if (timestamps) nInput.timestamps = true;
+          if (target_language) nInput.target_language = target_language;
+          const created = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'nvidia/nemotron-3-5-transcribe', input: nInput });
+          const nTaskId = created.data?.taskId;
+          if (!nTaskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(created, null, 2)}` }], isError: true };
+          trackTask({ taskId: nTaskId, model: 'nvidia/nemotron-3-5-transcribe', prompt: audio_url.slice(0, 80), status: 'polling', createdAt: new Date().toISOString() });
+          if (args.wait === false) return submitOnly(nTaskId, 'nvidia/nemotron-3-5-transcribe', '');
+          const rec = await pollTask(nTaskId, pollBudgetMs('speech', args));
+          let ro = {};
+          try { ro = (typeof rec.resultJson === 'string' ? JSON.parse(rec.resultJson) : rec.resultJson)?.resultObject || {}; } catch { /* raw below */ }
+          const lines = [`✅ ${target_language ? `Translation (→ ${target_language})` : 'Transcription'} complete — Nemotron 3.5`, `Task ID: ${nTaskId}`];
+          if (ro.duration) lines.push(`Audio: ${ro.duration}s · Cost: ${formatCost('nvidia/nemotron-3-5-transcribe', rec)}`);
+          if (timestamps && ro.url) {
+            try {
+              const full = await (await fetch(ro.url)).json();
+              const p = join(resolveOutputDir(args), `transcript-${nTaskId.slice(0, 8)}.json`);
+              writeFileSync(p, JSON.stringify(full, null, 2));
+              lines.push(`Word timings + speakers saved to: ${p} (${full.words?.length ?? 0} words, ${new Set((full.words || []).map((w) => w.speaker)).size} speaker(s))`);
+              if (full.text_with_speakers) lines.push('', full.text_with_speakers);
+            } catch (e) { lines.push(`Full result (word timings, ~14 days): ${ro.url}`); }
+          } else if (ro.url) lines.push(`Full result JSON (expires ~14 days): ${ro.url}`);
+          if (!(timestamps && ro.url)) lines.push('', ro.text ?? (typeof rec.resultJson === 'string' ? rec.resultJson : JSON.stringify(rec.resultJson)));
+          return { content: [{ type: 'text', text: lines.join('\n') }] };
+        }
         const input = { audio_url };
         if (language_code) input.language_code = language_code;
         if (tag_audio_events !== undefined) input.tag_audio_events = tag_audio_events;

@@ -70,3 +70,17 @@ test('classifyProbe — 410 / retired counts as gone (Seedance 1.5 Pro, Oct 2026
   assert.equal(classifyProbe({ code: 200, msg: 'This model is no longer available' }), 'gone');
   assert.equal(classifyProbe({ code: 500, msg: 'This field is required' }), 'healthy');
 });
+
+test('live-check — stateless unsupported-model finder', async () => {
+  const { findUnsupportedModels } = await import('../scripts/live-check.mjs');
+  const pages = [
+    { page: 'market/gpt/gpt-image-2-6-flare-text-to-image.md', title: 'GPT Image 2.6 Flare', model: 'gpt-image-2-6/flare-text-to-image' },
+    { page: 'market/google/nanobanana-2-1.md', title: 'Nano Banana 2.1', model: 'nano-banana-2-1' },
+    { page: 'market/claude/claude-opus-5-5.md', title: 'Claude', model: 'claude-opus-5-5' },
+    { page: 'market/gemini/gemini-4-argon.md', title: 'Gemini 4', model: 'gemini-4-argon' },
+    { page: 'market/foo/bar.md', title: 'No model field', model: undefined },
+    { page: 'market/deepseek-v4-1-flash.md', title: 'DeepSeek V4.1 Flash', model: 'deepseek-v4-1-flash' },
+  ];
+  const src = "  'nano-banana-2-1': { apiModel: 'nano-banana-2-1' }";
+  assert.deepEqual(findUnsupportedModels(pages, src).map((p) => p.model), ['gpt-image-2-6/flare-text-to-image'], 'chat pages and covered models are skipped');
+});
