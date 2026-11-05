@@ -11,6 +11,14 @@ export const PRICING = {
   'gpt-image/1.5-image-to-image': 6,
   'gpt-image/2-text-to-image': 8,     // latest flagship, premium pricing
   'gpt-image/2-image-to-image': 8,
+  // GPT Image 2.6 (Nov 2026) — Flare/Sunburst token-billed (5,400 cr / 1M output tokens); live 2:3 charges
+  // 2026-11-05: 1K 6.14, 2K 8.23, 4K 17.53; a 1K edit with one ref 10.06. Economy: 5 cr flat (1K only).
+  'gpt-image-2-6/flare-text-to-image': 6.2,
+  'gpt-image-2-6/flare-image-to-image': 10.1,
+  'gpt-image-2-6/sunburst-text-to-image': 6.2,
+  'gpt-image-2-6/sunburst-image-to-image': 10.1,
+  'gpt-image-2-6/economy-text-to-image': 5,
+  'gpt-image-2-6/economy-image-to-image': 5,
   'gpt-image-2-5/flare-text-to-image': 6,        // GPT Image 2.5 (Sept 2026) — kie published 6/10/16 cr @1K/2K/4K; 1K empirically 6.0 on all 4 endpoints (2026-09-22)
   'gpt-image-2-5/flare-image-to-image': 6,
   'gpt-image-2-5/sunburst-text-to-image': 6,
@@ -181,6 +189,8 @@ export const PRICING = {
   'omnihuman-2-0': 14,                 // Oct 2026 — published: 14 cr/s, billed on output (= audio) duration, 720p
   'kling-4/reference-to-video': 28.5,  // Kling 4.0 (Oct 2026) — 720p 28.5 / 1080p 42.5 cr/s; with video input 17 / 25.5 cr/s × (input + output)
   'kling-4/keyframe-to-video': 28.5,   // 720p 28.5 / 1080p 42.5 cr/s on output duration
+  'kling-4-flash/reference-to-video': 17, // Kling 4.0 Flash (Nov 2026) — 720p only: 17 cr/s, 11.3 with video input (× input + output)
+  'kling-4-flash/image-to-video': 17,
   'pixverse-v6-max/text-to-video': 8.8,   // PixVerse V6 Max (Oct 2026) — 720p no-audio default; see PRICE_TIERS
   'pixverse-v6-max/image-to-video': 8.8,
   // ── Volcengine lip-sync — kie published: 8 cr/s of generated video (follows audio duration) ──
@@ -226,7 +236,8 @@ export const PRICING = {
   'elevenlabs/text-to-speech-multilingual-v2': 12, // per 1000 chars, ceil-rounded (empirical 2026-06-11: 33/150 chars→12, 1500→24)
   'elevenlabs/text-to-dialogue-v3': 14, // per 1000 chars, linear no rounding (empirical 2026-06-11: 67 chars→0.98, 1330→18.62)
   'elevenlabs/audio-isolation': 3,     // flat
-  'elevenlabs/speech-to-text': 3,      // flat
+  'elevenlabs/speech-to-text': 3,
+  'nvidia/nemotron-3-5-transcribe': 0.3, // PER MINUTE of audio (0.005 cr/s, published Nov 2026) — speech_to_text default      // flat
   // ── Utility ──
   'upload-file': 0,                    // free
   'veo/extend': 31.25,                 // per second, assumed same as veo quality
@@ -266,6 +277,11 @@ export const PRICE_TIERS = {
   'wan/3-0-video': { opt: 'resolution', prices: { '480P': 8, '720P': 16, '1080P': 32 } },
   'kling-4/reference-to-video': { opt: 'resolution', prices: { '720p': 28.5, '1080p': 42.5 }, videoInput: { opt: 'video_urls', prices: { '720p': 17, '1080p': 25.5 } } },
   'kling-4/keyframe-to-video': { opt: 'resolution', prices: { '720p': 28.5, '1080p': 42.5 } },
+  'kling-4-flash/reference-to-video': { opt: 'resolution', prices: { '720p': 17 }, videoInput: { opt: 'video_urls', prices: { '720p': 11.3 } } },
+  'gpt-image-2-6/flare-text-to-image': { opt: 'resolution', prices: { '1K': 6.2, '2K': 8.3, '4K': 17.6 } },
+  'gpt-image-2-6/sunburst-text-to-image': { opt: 'resolution', prices: { '1K': 6.2, '2K': 8.3, '4K': 17.6 } },
+  'gpt-image-2-6/flare-image-to-image': { opt: 'resolution', prices: { '1K': 10.1, '2K': 12.2, '4K': 21.5 } },
+  'gpt-image-2-6/sunburst-image-to-image': { opt: 'resolution', prices: { '1K': 10.1, '2K': 12.2, '4K': 21.5 } },
   'pixverse-v6-max/text-to-video': { opt: 'quality', prices: { '360p': 4.8, '540p': 7.2, '720p': 8.8, '1080p': 17.6 }, audio: { opt: 'generate_audio_switch', prices: { '360p': 7.2, '540p': 8.8, '720p': 12, '1080p': 22.4 } } },
   'pixverse-v6-max/image-to-video': { opt: 'quality', prices: { '360p': 4.8, '540p': 7.2, '720p': 8.8, '1080p': 17.6 }, audio: { opt: 'generate_audio_switch', prices: { '360p': 7.2, '540p': 8.8, '720p': 12, '1080p': 22.4 } } },
   'pixverse-v6/text-to-video': { opt: 'quality', prices: { '360p': 4, '540p': 5.6, '720p': 7.2, '1080p': 14.4 }, audio: { opt: 'generate_audio_switch', prices: { '360p': 5.6, '540p': 7.2, '720p': 9.6, '1080p': 18.4 } } },
@@ -286,7 +302,9 @@ export const PRICING_ESTIMATED = new Set([
   'wan/flash-video-to-video',   // #69: assumed same as flash I2V
   'bytedance/seedance-2-5', 'bytedance/seedance-2-5-draft',
   'vidu-q4/image-to-video', 'vidu-q4/reference-to-video',
-  'kling-4/reference-to-video', 'kling-4/keyframe-to-video', 'pixverse-v6-max/text-to-video', 'pixverse-v6-max/image-to-video', 'omnihuman-2-0',
+  'kling-4/reference-to-video', 'kling-4/keyframe-to-video', 'kling-4-flash/reference-to-video', 'kling-4-flash/image-to-video',
+  'gpt-image-2-6/flare-text-to-image', 'gpt-image-2-6/flare-image-to-image', 'gpt-image-2-6/sunburst-text-to-image', 'gpt-image-2-6/sunburst-image-to-image',  // token-billed
+  'nvidia/nemotron-3-5-transcribe', 'pixverse-v6-max/text-to-video', 'pixverse-v6-max/image-to-video', 'omnihuman-2-0',
   'pixverse-v6/text-to-video',
   'pixverse-v6/image-to-video',
   'pixverse-v6/transition',

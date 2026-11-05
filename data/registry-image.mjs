@@ -103,6 +103,134 @@ export const MODEL_REGISTRY = {
     },
   },
 
+  // GPT Image 2.6 (Nov 2026) — Flare (fast) / Sunburst (premium) are token-billed; Economy is 5 cr flat @1K and can output GIF.
+  'gpt-image-2-6/flare-text-to-image': {
+    name: 'GPT Image 2.6 Flare',
+    description: 'NEW (Nov 2026) — OpenAI GPT Image 2.6 Flare: fast default tier. 1K/2K/4K, 16 aspect ratios incl. 2:1, 3:1, 9:21, transparent background, PNG/JPEG/WebP. TOKEN-billed (5,400 cr per 1M output tokens): live ~6.1 cr @1K, ~8.2 @2K, ~17.5 @4K.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'transparent-background', '4k', 'latest', 'new', 'concept-art', 'game-art', 'fast'],
+    type: 'market',
+    apiModel: 'gpt-image-2-6/flare-text-to-image',
+    maxPromptChars: 20000,
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '21:9', '9:21', '3:1', '1:3'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '~6.1 / ~8.2 / ~17.5 cr (token-billed)' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto' },
+      output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto', resolution: opts.resolution || '1K' };
+      if (opts.background) input.background = opts.background;
+      if (opts.output_format) input.output_format = opts.output_format;
+      return input;
+    },
+  },
+  'gpt-image-2-6/flare-image-to-image': {
+    name: 'GPT Image 2.6 Flare (img2img)',
+    description: 'NEW (Nov 2026) — OpenAI GPT Image 2.6 Flare: fast default tier. Up to 16 reference images. 1K/2K/4K, 16 aspect ratios incl. 2:1, 3:1, 9:21, transparent background, PNG/JPEG/WebP. TOKEN-billed (5,400 cr per 1M output tokens): live ~6.1 cr @1K, ~8.2 @2K, ~17.5 @4K; reference images add input tokens (1K edit with one ref: 10.1 cr).',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'transparent-background', '4k', 'latest', 'new', 'editing', 'multi-reference', 'composition', 'fast'],
+    type: 'market',
+    apiModel: 'gpt-image-2-6/flare-image-to-image',
+    requiresImage: true,
+    maxPromptChars: 20000,
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '21:9', '9:21', '3:1', '1:3'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '~6.1 / ~8.2 / ~17.5 cr (token-billed)' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto' },
+      output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, input_urls: (imageUrls || []).slice(0, 16), aspect_ratio: aspectRatio || 'auto', resolution: opts.resolution || '1K' };
+      if (opts.background) input.background = opts.background;
+      if (opts.output_format) input.output_format = opts.output_format;
+      return input;
+    },
+  },
+  'gpt-image-2-6/sunburst-text-to-image': {
+    name: 'GPT Image 2.6 Sunburst',
+    description: 'NEW (Nov 2026) — OpenAI GPT Image 2.6 Sunburst: premium tier — tighter control, more polished output. 1K/2K/4K, 16 aspect ratios incl. 2:1, 3:1, 9:21, transparent background, PNG/JPEG/WebP. TOKEN-billed (5,400 cr per 1M output tokens): live ~6.1 cr @1K, ~8.2 @2K, ~17.5 @4K.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'transparent-background', '4k', 'latest', 'new', 'concept-art', 'game-art', 'premium'],
+    type: 'market',
+    apiModel: 'gpt-image-2-6/sunburst-text-to-image',
+    maxPromptChars: 20000,
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '21:9', '9:21', '3:1', '1:3'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '~6.1 / ~8.2 / ~17.5 cr (token-billed)' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto' },
+      output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto', resolution: opts.resolution || '1K' };
+      if (opts.background) input.background = opts.background;
+      if (opts.output_format) input.output_format = opts.output_format;
+      return input;
+    },
+  },
+  'gpt-image-2-6/sunburst-image-to-image': {
+    name: 'GPT Image 2.6 Sunburst (img2img)',
+    description: 'NEW (Nov 2026) — OpenAI GPT Image 2.6 Sunburst: premium tier — tighter control, more polished output. Up to 16 reference images. 1K/2K/4K, 16 aspect ratios incl. 2:1, 3:1, 9:21, transparent background, PNG/JPEG/WebP. TOKEN-billed (5,400 cr per 1M output tokens): live ~6.1 cr @1K, ~8.2 @2K, ~17.5 @4K; reference images add input tokens (1K edit with one ref: 10.1 cr).',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'reasoning', 'transparent-background', '4k', 'latest', 'new', 'editing', 'multi-reference', 'composition', 'premium'],
+    type: 'market',
+    apiModel: 'gpt-image-2-6/sunburst-image-to-image',
+    requiresImage: true,
+    maxPromptChars: 20000,
+    aspectRatios: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '21:9', '9:21', '3:1', '1:3'],
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', description: '~6.1 / ~8.2 / ~17.5 cr (token-billed)' },
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto' },
+      output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, input_urls: (imageUrls || []).slice(0, 16), aspect_ratio: aspectRatio || 'auto', resolution: opts.resolution || '1K' };
+      if (opts.background) input.background = opts.background;
+      if (opts.output_format) input.output_format = opts.output_format;
+      return input;
+    },
+  },
+  'gpt-image-2-6/economy-text-to-image': {
+    name: 'GPT Image 2.6 Economy',
+    description: 'NEW (Nov 2026) — the same GPT Image 2.6 model through kie\'s economy channel: 5 cr flat per 1K image (1K only), 8 aspect ratios, transparent background. Can also return an animated GIF (output_format="gif", frame_count 4-64, frame_duration_ms 20-2000) — ⚠️ GIF mode failed upstream at launch (0 cr).',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'transparent-background', 'budget', 'animation', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'gpt-image-2-6/economy-text-to-image',
+    maxPromptChars: 20000,
+    aspectRatios: ['auto', '1:1', '16:9', '9:16', '3:2', '2:3', '21:9', '4:3'],
+    options: {
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto' },
+      output_format: { type: 'string', enum: ['png', 'gif'], default: 'png', description: 'gif = animated (sprite-style) output' },
+      frame_count: { type: 'string', enum: ['auto', '4', '9', '16', '25', '36', '64'], description: 'GIF only' },
+      frame_duration_ms: { type: 'number', min: 20, max: 2000, description: 'GIF only — ms per frame (rounded to 10)' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      if ((opts.frame_count || opts.frame_duration_ms) && opts.output_format !== 'gif') throw new Error('gpt-image-2-6/economy: frame_count / frame_duration_ms need output_format="gif"');
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto' };
+      for (const k of ['background', 'output_format', 'frame_count', 'frame_duration_ms']) if (opts[k] !== undefined) input[k] = opts[k];
+      return input;
+    },
+  },
+  'gpt-image-2-6/economy-image-to-image': {
+    name: 'GPT Image 2.6 Economy (img2img)',
+    description: 'NEW (Nov 2026) — the same GPT Image 2.6 model through kie\'s economy channel: 5 cr flat per 1K image (1K only), 8 aspect ratios, transparent background. Can also return an animated GIF (output_format="gif", frame_count 4-64, frame_duration_ms 20-2000) — ⚠️ GIF mode failed upstream at launch (0 cr). ⚠️ At launch (2026-11-05) image-to-image failed upstream with "Internal Error" (0 cr) — retry later or use gpt-image-2-6/flare-image-to-image.',
+    capabilities: ['photorealistic', 'illustration', 'text-rendering', 'transparent-background', 'budget', 'animation', 'latest', 'new', 'editing', 'multi-reference'],
+    type: 'market',
+    apiModel: 'gpt-image-2-6/economy-image-to-image',
+    requiresImage: true,
+    maxPromptChars: 20000,
+    aspectRatios: ['auto', '1:1', '16:9', '9:16', '3:2', '2:3', '21:9', '4:3'],
+    options: {
+      background: { type: 'string', enum: ['auto', 'opaque', 'transparent'], default: 'auto' },
+      output_format: { type: 'string', enum: ['png', 'gif'], default: 'png', description: 'gif = animated (sprite-style) output' },
+      frame_count: { type: 'string', enum: ['auto', '4', '9', '16', '25', '36', '64'], description: 'GIF only' },
+      frame_duration_ms: { type: 'number', min: 20, max: 2000, description: 'GIF only — ms per frame (rounded to 10)' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      if ((opts.frame_count || opts.frame_duration_ms) && opts.output_format !== 'gif') throw new Error('gpt-image-2-6/economy: frame_count / frame_duration_ms need output_format="gif"');
+      const input = { prompt, aspect_ratio: aspectRatio || 'auto' };
+      if (imageUrls?.length) input.input_urls = imageUrls.slice(0, 16);
+      for (const k of ['background', 'output_format', 'frame_count', 'frame_duration_ms']) if (opts[k] !== undefined) input[k] = opts[k];
+      return input;
+    },
+  },
+
   // GPT Image 2.5 (Sept 2026) — Flare = fast default, Sunburst = premium. Priced 6/10/16 cr (1K/2K/4K) for both.
   'gpt-image-2-5/flare-text-to-image': {
     name: 'GPT Image 2.5 Flare',

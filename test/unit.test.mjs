@@ -601,3 +601,28 @@ test('v5.10.0 — Kling 4.0, PixVerse V6 Max, OmniHuman 2.0 entries + estimates'
   assert.equal(est('omnihuman-2-0', {}).uncertain, true, 'unknown audio length → flagged');
   assert.equal(V['seedance/text-to-video'], undefined, 'Seedance 1.5 Pro retired upstream (410) — removed');
 });
+
+test('v5.11.0 — GPT Image 2.6, Kling 4.0 Flash, Nemotron transcribe', async () => {
+  const { MODEL_REGISTRY: I, VIDEO_MODEL_REGISTRY: V, estimateCallCredits, spendGuard } = await import('../server.mjs');
+  assert.deepEqual(I['gpt-image-2-6/flare-image-to-image'].buildInput('p', '3:1', Array(20).fill('u'), { output_format: 'webp' }),
+    { prompt: 'p', input_urls: Array(16).fill('u'), aspect_ratio: '3:1', resolution: '1K', output_format: 'webp' });
+  const eco = I['gpt-image-2-6/economy-text-to-image'];
+  assert.deepEqual(eco.buildInput('p', undefined, [], { output_format: 'gif', frame_count: '9' }), { prompt: 'p', aspect_ratio: 'auto', output_format: 'gif', frame_count: '9' });
+  assert.throws(() => eco.buildInput('p', undefined, [], { frame_count: '9' }), /need output_format="gif"/);
+  assert.equal(estimateCallCredits('generate_image', { model: 'gpt-image-2-6/flare-text-to-image', model_options: { resolution: '4K' } }).credits, 17.6);
+  assert.equal(estimateCallCredits('generate_image', { model: 'gpt-image-2-6/economy-text-to-image' }).credits, 5);
+
+  const flash = V['kling-4-flash/reference-to-video'];
+  const fi = flash.buildInput('@Hero runs', undefined, ['x'], { elements: [{ name: 'Hero', image_urls: ['a', 'b'], type: 'image' }] });
+  assert.equal(fi.resolution, '720p');
+  assert.equal(fi.elements[0].type, 'image');
+  assert.throws(() => flash.buildInput('p', undefined, [], { voices: [{ name: 'N', audio_url: 'a' }] }), /standalone voices are not supported/);
+  assert.throws(() => flash.buildInput('p', undefined, [], { duration: 25 }), /3-20s/);
+  assert.throws(() => V['kling-4/reference-to-video'].buildInput('p', undefined, [], { duration: 31 }), /3-30s/);
+  assert.deepEqual(V['kling-4-flash/image-to-video'].buildInput('p', undefined, ['f'], { duration: 4 }), { prompt: 'p', first_frame_url: 'f', duration: 4, resolution: '720p', aspect_ratio: '16:9' });
+  assert.equal(estimateCallCredits('generate_video', { model: 'kling-4-flash/reference-to-video', model_options: { duration: 10 } }).credits, 170);
+
+  const stt = estimateCallCredits('speech_to_text', { audio_url: 'a', audio_minutes: 10 });
+  assert.equal(stt.credits, 3, 'Nemotron: 0.3 cr per minute');
+  assert.equal(spendGuard('speech_to_text', { audio_url: 'a', estimate_only: true }).content[0].text.includes('0.3 cr per minute'), true);
+});

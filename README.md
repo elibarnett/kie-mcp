@@ -26,7 +26,7 @@ Just ask Claude things like:
 ## Model coverage
 
 ### Image (60+)
-- **OpenAI**: GPT Image 2.5 Flare / Sunburst (NEW — 1K-4K, transparent background), GPT Image 2, GPT-4o Image, GPT Image 1.5
+- **OpenAI**: GPT Image 2.6 Flare / Sunburst / Economy (NEW Nov 2026; Economy 5 cr flat, animated GIF), GPT Image 2.5 Flare / Sunburst (NEW — 1K-4K, transparent background), GPT Image 2, GPT-4o Image, GPT Image 1.5
 - **Google**: Nano Banana 2.1 (NEW, 4 cr), Nano Banana 2 / 2 Lite / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
 - **Black Forest Labs**: FLUX 3 Klein T2I + Edit (NEW, 1.6 cr), Flux Kontext Pro/Max, Flux 2 Pro/Flex
 - **ByteDance**: Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
@@ -42,7 +42,7 @@ Just ask Claude things like:
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
 - **ByteDance Seedance**: 2.5 (30s single takes, 1080p, draft→1080p upgrade) / 2.0 / 2.0 Fast / 2.0 Mini (1.5 Pro retired upstream Oct 2026)
-- **Kuaishou Kling**: 4.0 (NEW — reference-to-video with named @subjects/voices/video refs, keyframe-to-video, 3-30s), 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
+- **Kuaishou Kling**: 4.0 Flash (NEW — 720p, 17 cr/s), 4.0 (NEW — reference-to-video with named @subjects/voices/video refs, keyframe-to-video, 3-30s), 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
 - **Alibaba Wan**: 3.0 + 3.0 Prime (NEW — unified prompt-or-media, audio), 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
 - **Google Gemini Omni**: Video + 1.1 Flash (NEW — first→last-frame mode, 360p-4K; image/voice/video/character references)
 - **MiniMax Hailuo**: H3 (NEW — 2K + native stereo audio, image+video+audio references, first→last-frame I2V), 2.3 Pro/Standard, 02 Pro/Standard
@@ -54,6 +54,7 @@ Just ask Claude things like:
 
 ### Audio (20+)
 - **Suno**: Music Gen, Extend, Cover, Add Instrumental/Vocals, Replace Section, Lyrics, Sounds, Sound Effects, MIDI, Music Video, Cover Art, Mashup, Persona, Timestamped Lyrics, Boost Style, Vocal Separation, WAV, Custom Voice cloning (experimental)
+- **NVIDIA Nemotron 3.5 Transcribe** (NEW): `speech_to_text` default — 0.3 cr per minute, ≤60 min, 32 languages, word timings + speaker labels, translation
 - **ElevenLabs**: TTS (Turbo 2.5 + Multilingual V2), Text-to-Dialogue V3, Audio Isolation, Speech-to-Text
 - **Google Gemini TTS** (NEW): style-directed speech, 30 voices, 2-speaker dialogue, inline tone tags — ~4.2 cr/min
 

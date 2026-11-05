@@ -2,6 +2,39 @@
 // server-scope references. Imported (and re-exported) by server.mjs.
 
 
+// Shared Kling 4.0 / 4.0 Flash reference-to-video input builder: validates the
+// @-mentionable elements/voices before submitting (kie rejects them opaquely).
+function kling4RefInput(prompt, aspectRatio, imageUrls, opts, { label = 'kling-4', allowVoices = true, maxDuration = 30 } = {}) {
+    if (opts.duration !== undefined && (opts.duration < 3 || opts.duration > maxDuration)) throw new Error(`${label}: duration must be 3-${maxDuration}s`);
+    const NAME = /^[一-龥A-Za-z0-9_]{1,20}$/;
+    const RESERVED = /^(image|video|keyframe|object|audio)_\d+$|^(first|last)_frame$/i;
+    const elements = opts.elements || [];
+    const voices = opts.voices || [];
+    if (elements.length > 7) throw new Error(`${label}: at most 7 elements`);
+    if (voices.length && !allowVoices) throw new Error(`${label}: standalone voices are not supported — bind audio to a character element with voice_url instead`);
+    if (voices.length > 3) throw new Error(`${label}: at most 3 voices`);
+    const seen = new Set();
+    for (const it of [...elements, ...voices]) {
+      if (!NAME.test(it?.name || '') || RESERVED.test(it.name)) throw new Error(`${label}: invalid element/voice name "${it?.name}" — 1-20 letters/digits/underscore, unique, not image_N / video_N / keyframe_N / first_frame / last_frame`);
+      const k = it.name.toLowerCase();
+      if (seen.has(k)) throw new Error(`${label}: duplicate name "${it.name}" across elements/voices`);
+      seen.add(k);
+    }
+    for (const el of elements) {
+      if (!!el.video_url === !!el.image_urls) throw new Error(`${label}: element "${el.name}" needs EITHER image_urls (2-4) OR video_url`);
+      if (el.image_urls && (el.image_urls.length < 2 || el.image_urls.length > 4)) throw new Error(`${label}: element "${el.name}" needs 2-4 image_urls`);
+    }
+    const videoUrls = opts.video_urls || [];
+    if (videoUrls.length + elements.filter((e) => e.video_url).length > 5) throw new Error(`${label}: reference videos + video subjects must total ≤ 5`);
+    const input = { prompt, duration: opts.duration ?? 5, resolution: opts.resolution || '720p', aspect_ratio: aspectRatio || 'auto' };
+    if (imageUrls?.length) input.image_urls = imageUrls.slice(0, 10);
+    if (videoUrls.length) input.video_urls = videoUrls;
+    if (opts.keep_original_sound !== undefined) input.keep_original_sound = opts.keep_original_sound;
+    if (elements.length) input.elements = elements;
+    if (voices.length) input.voices = voices;
+    return input;
+}
+
 export const VIDEO_MODEL_REGISTRY = {
   // ── Dedicated endpoint models ──
   'veo-3/text-to-video': {
@@ -1005,32 +1038,7 @@ export const VIDEO_MODEL_REGISTRY = {
       voices: { type: 'array', description: 'Standalone voices (≤3), each {name, audio_url}. Mention as @name' },
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
-      const NAME = /^[一-龥A-Za-z0-9_]{1,20}$/;
-      const RESERVED = /^(image|video|keyframe|object|audio)_\d+$|^(first|last)_frame$/i;
-      const elements = opts.elements || [];
-      const voices = opts.voices || [];
-      if (elements.length > 7) throw new Error('kling-4: at most 7 elements');
-      if (voices.length > 3) throw new Error('kling-4: at most 3 voices');
-      const seen = new Set();
-      for (const it of [...elements, ...voices]) {
-        if (!NAME.test(it?.name || '') || RESERVED.test(it.name)) throw new Error(`kling-4: invalid element/voice name "${it?.name}" — 1-20 letters/digits/underscore, unique, not image_N / video_N / keyframe_N / first_frame / last_frame`);
-        const k = it.name.toLowerCase();
-        if (seen.has(k)) throw new Error(`kling-4: duplicate name "${it.name}" across elements/voices`);
-        seen.add(k);
-      }
-      for (const el of elements) {
-        if (!!el.video_url === !!el.image_urls) throw new Error(`kling-4: element "${el.name}" needs EITHER image_urls (2-4) OR video_url`);
-        if (el.image_urls && (el.image_urls.length < 2 || el.image_urls.length > 4)) throw new Error(`kling-4: element "${el.name}" needs 2-4 image_urls`);
-      }
-      const videoUrls = opts.video_urls || [];
-      if (videoUrls.length + elements.filter((e) => e.video_url).length > 5) throw new Error('kling-4: reference videos + video subjects must total ≤ 5');
-      const input = { prompt, duration: opts.duration ?? 5, resolution: opts.resolution || '720p', aspect_ratio: aspectRatio || 'auto' };
-      if (imageUrls?.length) input.image_urls = imageUrls.slice(0, 10);
-      if (videoUrls.length) input.video_urls = videoUrls;
-      if (opts.keep_original_sound !== undefined) input.keep_original_sound = opts.keep_original_sound;
-      if (elements.length) input.elements = elements;
-      if (voices.length) input.voices = voices;
-      return input;
+      return kling4RefInput(prompt, aspectRatio, imageUrls, opts);
     },
   },
   'kling-4/keyframe-to-video': {
@@ -1061,6 +1069,43 @@ export const VIDEO_MODEL_REGISTRY = {
       if (middle.length) input.keyframe_urls = middle;
       if (last) input.last_frame_url = last;
       return input;
+    },
+  },
+  // ── Kling 4.0 Flash (Nov 2026) — cheaper/faster 4.0: 720p only, 3-20s, no standalone voices ──
+  'kling-4-flash/reference-to-video': {
+    name: 'Kling 4.0 Flash R2V',
+    description: 'NEW (Nov 2026) — Kling 4.0 Flash reference-to-video: the fast/cheap 4.0 tier — 720p, 3-20s, native audio, 17 cr/s (11.3 with video input, billed on input+output) vs 28.5 for Kling 4.0. Same @-mentions: @image_1… (image_urls ≤10), @video_1… (model_options.video_urls ≤5), named model_options.elements (≤7; bind audio with voice_url). No standalone voices.',
+    capabilities: ['character', 'multi-reference', 'audio', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'kling-4.0/flash-reference-to-video',
+    maxPromptChars: 8000,
+    aspectRatios: ['auto', '16:9', '9:16', '1:1', '21:9'],
+    options: {
+      duration: { type: 'number', min: 3, max: 20, default: 5, description: 'Seconds (3-20)' },
+      video_urls: { type: 'array', description: 'Reference videos (≤5), mentioned as @video_1…' },
+      keep_original_sound: { type: 'boolean', default: false },
+      elements: { type: 'array', description: 'Named subjects (≤7): {name, image_urls (2-4) OR video_url, type?: image|video, tag?, description?, voice_url?}. Mention as @name' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = kling4RefInput(prompt, aspectRatio, imageUrls, opts, { label: 'kling-4-flash', allowVoices: false, maxDuration: 20 });
+      input.resolution = '720p';
+      return input;
+    },
+  },
+  'kling-4-flash/image-to-video': {
+    name: 'Kling 4.0 Flash I2V (first frame)',
+    description: 'NEW (Nov 2026) — Kling 4.0 Flash from a first frame (kie calls it "keyframe-to-video" but it takes ONE start image; use kling-4/keyframe-to-video for middle/last frames). 720p, 3-20s, 17 cr/s. Mention the image as @first_frame.',
+    capabilities: ['image-to-video', 'audio', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'kling-4.0/flash-keyframe-to-video',
+    requiresImage: true,
+    maxPromptChars: 8000,
+    aspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+    options: {
+      duration: { type: 'number', min: 3, max: 20, default: 5, description: 'Seconds (3-20)' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return { prompt, first_frame_url: imageUrls[0], duration: opts.duration ?? 5, resolution: '720p', aspect_ratio: aspectRatio || '16:9' };
     },
   },
   'kling-3-omni/reference-to-video': {

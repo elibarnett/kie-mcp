@@ -12,7 +12,7 @@
 //
 //   npm run live-check            (KIE_API_KEY from env, else ~/.claude.json kie-art)
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,6 +48,37 @@ export function diffDocsIndex(prevText, nextText) {
     removed: [...a].filter(([u]) => !b.has(u)).map(([u, title]) => ({ page: short(u), title })),
     count: b.size,
   };
+}
+
+// Chat/LLM docs paths — out of scope for this media MCP.
+const CHAT_PATH = /\/market\/(claude|chat|codex|grok|deepseek|kimi|moonshot)[\/-]|\/market\/gemini\/gemini-\d|\/market\/common\//;
+
+// Pure: given [{ page, title, model }] scraped from docs and the MCP's source
+// text, return the media models the MCP doesn't reference anywhere. STATELESS —
+// unlike the docs-index diff, it can't be "used up" by an earlier run that moved
+// the baseline without acting (that's how GPT Image 2.6 / Kling 4.0 Flash /
+// Nemotron slipped past the weekly check in Nov 2026).
+export function findUnsupportedModels(pages, sourceText) {
+  return pages.filter((p) => p.model && !CHAT_PATH.test(`/${p.page}`) && !sourceText.includes(`'${p.model}'`));
+}
+
+async function unsupportedSection(llmsText) {
+  const urls = [...new Set([...String(llmsText).matchAll(/\[([^\]]+)\]\((https:\/\/docs\.kie\.ai\/market\/[^)]+\.md)\)/g)]
+    .filter((m) => !CHAT_PATH.test(m[2])).map((m) => `${m[2]}\t${m[1]}`))].map((x) => x.split('\t'));
+  const pages = [];
+  for (let i = 0; i < urls.length; i += 12) {
+    await Promise.all(urls.slice(i, i + 12).map(async ([url, title]) => {
+      const t = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
+      const model = t.match(/^\s+model: ([a-z0-9][a-z0-9._\/-]+)\s*$/m)?.[1];
+      pages.push({ page: url.replace('https://docs.kie.ai/', ''), title, model });
+    }));
+  }
+  const src = ['server.mjs', ...readdirSync(join(ROOT, 'data')).filter((f) => f.endsWith('.mjs')).map((f) => `data/${f}`)]
+    .map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
+  const missing = findUnsupportedModels(pages, src);
+  if (!missing.length) return `### 🧩 Docs models not in the MCP\nNone — all ${pages.filter((p) => p.model).length} media model pages are covered.`;
+  return [`### 🧩 Docs models not in the MCP (${missing.length})`, ...missing.map((p) => `- **${p.title}** — \`${p.model}\` (${p.page})`),
+    '_Stateless check: lists every docs model slug the registry never mentions, regardless of earlier runs._'].join('\n');
 }
 
 async function docsSection() {
@@ -110,8 +141,9 @@ function auditSection() {
 
 async function main() {
   const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-  const [docs, watch] = await Promise.all([docsSection(), watchSection()]);
-  const report = [`# 🩺 kie.ai live check — ${stamp} UTC`, docs, driftSection(), watch, auditSection()].join('\n\n');
+  const llms = await fetch('https://docs.kie.ai/llms.txt', { headers: { 'User-Agent': 'Mozilla/5.0' } }).then((r) => r.text()).catch(() => '');
+  const [docs, unsupported, watch] = await Promise.all([docsSection(), unsupportedSection(llms), watchSection()]);
+  const report = [`# 🩺 kie.ai live check — ${stamp} UTC`, unsupported, docs, driftSection(), watch, auditSection()].join('\n\n');
   writeFileSync(join(ROOT, 'live-check-report.md'), report + '\n');
   console.log(report);
 }
