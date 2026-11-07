@@ -33,6 +33,18 @@ export const WATCH_LIST = [
     input: { text: 'Live check.', voice: 'Rachel' },
     onRecovery: 'ElevenLabs works again — set ELEVENLABS_PAUSED = null in server.mjs (or KIE_ELEVENLABS_ENABLED=1) and release.',
   },
+  {
+    label: 'GPT Image 2.6 Economy — GIF output (failing since launch, 2026-11-05)',
+    model: 'gpt-image-2-6/economy-text-to-image',
+    input: { prompt: 'A cartoon cat waving its paw, simple looping animation', output_format: 'gif' },
+    onRecovery: 'Economy GIF mode works — remove the ⚠️ GIF note from the gpt-image-2-6/economy-* descriptions (data/registry-image.mjs) and release a patch.',
+  },
+  {
+    label: 'GPT Image 2.6 Economy — image-to-image (failing since launch, 2026-11-05)',
+    model: 'gpt-image-2-6/economy-image-to-image',
+    input: { prompt: 'The same image as a watercolor painting', input_urls: ['https://static.aiquickdraw.com/tools/example/vidu-q4-ref-1.png'] },
+    onRecovery: 'Economy image-to-image works — remove its ⚠️ launch-failure note in data/registry-image.mjs and release a patch.',
+  },
 ];
 
 // Pure: which docs pages appeared / disappeared between two llms.txt snapshots.
