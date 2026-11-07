@@ -1,7 +1,7 @@
 // Unit tests for the drift-watch pure parsers (issue #44).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractGroups, extractPricing, parseCredits, advertisedRates, priceMatches, classifyProbe, isTokenPriced } from '../scripts/drift-watch.mjs';
+import { extractGroups, extractPricing, parseCredits, advertisedRates, priceMatches, classifyProbe, isTokenPriced, catalogGroupKnown } from '../scripts/drift-watch.mjs';
 
 test('extractGroups — parses market groups from embedded JSON', () => {
   const html = 'x &quot;groupName&quot;:&quot;Nano Banana 2 Lite&quot;,&quot;count&quot;:1,&quot;path&quot;:&quot;nano-banana-2-lite&quot; y';
@@ -83,4 +83,13 @@ test('live-check — stateless unsupported-model finder', async () => {
   ];
   const src = "  'nano-banana-2-1': { apiModel: 'nano-banana-2-1' }";
   assert.deepEqual(findUnsupportedModels(pages, src).map((p) => p.model), ['gpt-image-2-6/flare-text-to-image'], 'chat pages and covered models are skipped');
+});
+
+test('catalogGroupKnown — tool-backed models and dotted versions (Nov 2026)', () => {
+  const slugs = ['nvidia/nemotron-3-5-transcribe', 'google/gemini-3-8-flash-tts', 'google/gemini-3-1-flash-tts', 'nano-banana-2-1'];
+  assert.equal(catalogGroupKnown('nemotron-3-5-transcribe', slugs), true);
+  assert.equal(catalogGroupKnown('gemini-3.8-flash-tts', slugs), true, 'dot in page path vs dash in slug');
+  assert.equal(catalogGroupKnown('gemini-3.1-flash-tts', slugs), true);
+  assert.equal(catalogGroupKnown('gemini-2.5-pro-preview-tts', [...slugs, 'google/gemini-2-5-pro-tts']), true, '-preview is ignored');
+  assert.equal(catalogGroupKnown('vidu-q5', slugs), false);
 });
