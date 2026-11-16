@@ -79,6 +79,14 @@ export const PRICING = {
   'seedream/5-flash-text-to-image': 3.24,        // Seedream 5.0 Flash (Oct 2026) — kie published: 3.24 cr flat at 1K/1.5K/2K
   'seedream/5-flash-image-to-image': 3.24,
   'seedream/5-flash-layer-decomposition': 3.24,  // PER OUTPUT LAYER incl. base, any size
+  // Seedream 5.5 (Nov 2026) — kie published: 3.6 cr @1K/1.5K, 6.3 @2K (the default size); every input image +1.44 cr.
+  'seedream/5-5-text-to-image': 6.3,
+  'seedream/5-5-image-to-image': 6.3,        // + 1.44 cr per input image (a 2K edit of one image = 7.74)
+  'seedream/5-5-layer-decomposition': 6.3,   // PER OUTPUT LAYER incl. base (3.6 @1K/1.5K; auto bills as 2K) + 1.44 input
+  // MiniMax H3 Image (Nov 2026) — kie published: billed by output pixels, 1.8 cr ≤ 4.5 MP (1K/2K), 5.5 cr ≤ 20 MP (4K).
+  'minimax-h3/text-to-image': 1.8,
+  'minimax-h3/image-edit': 1.8,              // + 0.5 cr per reference image, including the first
+  'kie/image-upscale': 1.5,                  // Kie Image Upscale (Nov 2026) — by OUTPUT pixels: 1.5 ≤ 4.19 MP, 4 ≤ 16.78 MP, 12 ≤ 67.11 MP
   'seedream/5-lite-text-to-image': 5,
   'seedream/5-lite-image-to-image': 5,
   'wan/2-7-image': 4.8,       // kie raised it (drift watch 2026-07-27; was 4)
@@ -124,19 +132,20 @@ export const PRICING = {
   'minimax-h3/reference-to-video': 8,  // same tiers; video refs billed at resolution rate
   'hailuo/2-3-image-to-video-pro': 8,
   'hailuo/2-3-image-to-video-standard': 4,
-  'kling/text-to-video': 10,
-  'kling/image-to-video': 10,
-  'kling/motion-control': 10,
+  'kling/text-to-video': 12.6,   // Kling 2.6 — kie published (drift 2026-11-16, #140): 63 cr / 5s without audio, 126 with (10s: 126 / 252). Was 10
+  'kling/image-to-video': 12.6,  // same; sound=true doubles it to 25.2 cr/s (see PRICE_TIERS)
+  'kling/motion-control': 12.6,  // Kling 2.6 MC — kie published 2026-11-16: 12.6 cr/s @720P (20.2 @1080P, not exposed here). Was 10
   'kling-3-omni/text-to-video': 14,      // O3, 720p no-audio default; audio 18, 1080p 18/23, 4K 67 (published, drift 2026-08-26)
   'kling-3-omni/image-to-video': 14,     // same tiers
   'kling-3-omni/reference-to-video': 14, // same tiers (+video-input 20/27)
   'kling-3-omni/transformation': 20,     // 720p default; 1080p 27, 4K 67 — video input required
   'kling-3/video': 12,
   'kling-3/motion-control': 12,
-  'kling/v2-1-standard': 5,           // 25 credits/5s
-  'kling/v2-1-master-text-to-video': 32,  // 160 credits/5s
-  'kling/v2-1-master-image-to-video': 32,
-  'kling/v2-1-pro': 10,               // 50 credits/5s
+  // Kling V2.1 — kie published (kie.ai/kling/v2-1, read 2026-11-16, #134): Standard 50.5 cr / 5s, Pro 88, Master 252 (10s = double).
+  'kling/v2-1-standard': 10.1,        // 50.5 credits/5s (was 5)
+  'kling/v2-1-master-text-to-video': 50.4,  // 252 credits/5s (was 32)
+  'kling/v2-1-master-image-to-video': 50.4,
+  'kling/v2-1-pro': 17.6,             // 88 credits/5s (was 10)
   'kling/v2-5-turbo-text-to-video': 8,
   'kling/v2-5-turbo-image-to-video': 8,
   'kling/ai-avatar-standard': 5,
@@ -151,6 +160,7 @@ export const PRICING = {
   'bytedance/v1-lite-text-to-video': 4.5,  // kie published tiers 2/4.5/10 cr/s (480/720/1080p); entry default 720p (drift 2026-08-10)
   'bytedance/v1-lite-image-to-video': 4.5, // same tiers, same 720p default (drift 2026-08-10)
   'topaz/video-upscale': 8,           // flat
+  'video/upscale': 3,                 // Kie Video Upscale (Nov 2026) — per second of INPUT video: 1080P 1.5, 2K 3 (default), 4K 6
   'infinitalk/from-audio': 4,
   // ── HappyHorse 1.0 (NEW April 2026) ──
   'happyhorse/text-to-video': 48,      // kie published (2026-07-12): 28 cr/s @720p, 48 @1080p (default). Was an 8 cr/s guess
@@ -175,6 +185,7 @@ export const PRICING = {
   'bytedance/seedance-2-5-draft': 158, // Oct 2026 — 1080p upgrade of a draft: standard 1080p rate (158/s no video input, 95 with) × the draft's duration
   'vidu-q4/image-to-video': 15.2,      // Vidu Q4 (Oct 2026) — published per second: 540p 7.2, 720p 15.2 (default), 1080p 19.2, 2K 30.4, 4K 62.4
   'vidu-q4/reference-to-video': 15.2,  // same tiers
+  'bytedance/seedance-2-5-flash': 41,  // Seedance 2.5 Flash (Nov 2026) — kie published (beta): 480p 18.5, 720p 41 cr/s; with reference video 11.5 / 25.5 × (input + output)
   'bytedance/seedance-2-5': 63,  // kie published 2026-08: 480p 28 (17 w/video-input), 720p 63 (38 w/video); entry default 720p. 480p rate empirically confirmed: 4s cost exactly 112 cr
   // ── PixVerse V6 (added July 2026) — kie published per-second tiers; table = 720p no-audio default.
   //    T2V/I2V/transition/extend: 360p 4.0/5.6, 540p 5.6/7.2, 720p 7.2/9.6, 1080p 14.4/18.4 (no-audio/audio).
@@ -198,6 +209,8 @@ export const PRICING = {
   // ── Gemini Omni (Google, May 2026) ──
   'gemini-omni/video': 13.125,            // kie published (2026-09-22): 720P/1080P 63/84/105/126 cr for 4/6/8/10s, 4K +84; video input flat 168 (4K 252). Table = 8s 720P default (105/8)
   'gemini-omni/flash-1-1': 13.125,         // Gemini Omni 1.1 Flash (Sept 2026) — unpublished; 2026-09-22: a 4s @360p submit held 63 cr (= Omni video's 4s price, so 360p looks NOT cheaper), but that run failed upstream (timeout) and was refunded — output + final charge unverified. Table = 8s default like Omni video
+  'gemini-omni/flash-1-2': 9,              // Gemini Omni 1.2 Flash (Nov 2026) — kie published per second: 360p 4, 720p 9 (default), 1080p 10, 4K 22; a video edit bills the input clip's length
+  'gemini-omni/flash-1-2-extend': 9,       // per ADDED second: 360p 4, 720p 9 (follows the source resolution; table assumes 720p)
   'gemini-omni/voice-create': 5,          // flat per voice
   'gemini-omni/character-create': 5,      // flat per character
 
@@ -214,6 +227,7 @@ export const PRICING = {
   'suno/generate-midi': 5,
   'suno/create-music-video': 2,  // live 2026-10-05: 2
   'suno/generate-sounds': 2.5,   // live 2026-10-05: 2.5
+  'suno/generate-speech': 12,    // Suno Speech (Nov 2026) — flat per request (kie published)
   'suno/generate-persona': 0,    // free (published)
   'suno/generate-mashup': 12,
   // ── Suno Voice API (custom voice cloning, #20) ──
@@ -265,7 +279,15 @@ export const PRICE_TIERS = {
   'qwen3/pro-image-to-image': { opt: 'resolution', prices: { '1K': 6.4, '2K': 12 } },
   'seedream/5-pro-text-to-image': { opt: 'size', prices: { '1K': 7, '1.5K': 7, '2K': 14 } },
   'seedream/5-pro-image-to-image': { opt: 'size', prices: { '1K': 7, '1.5K': 7, '2K': 14 } },
+  'seedream/5-5-text-to-image': { opt: 'size', prices: { '1K': 3.6, '1.5K': 3.6, '2K': 6.3 } },
+  'seedream/5-5-image-to-image': { opt: 'size', prices: { '1K': 3.6, '1.5K': 3.6, '2K': 6.3 }, perInputImage: 1.44 },
+  'minimax-h3/text-to-image': { opt: 'resolution', prices: { '2K': 1.8, '1K': 1.8, '4K': 5.5 } },
+  'minimax-h3/image-edit': { opt: 'resolution', prices: { '2K': 1.8, '1K': 1.8, '4K': 5.5 }, perInputImage: 0.5 },
   // video — credits per second
+  'kling/text-to-video': { opt: 'duration', prices: { '5': 12.6, '10': 12.6 }, audio: { opt: 'sound', prices: { '5': 25.2, '10': 25.2 } } },
+  'kling/image-to-video': { opt: 'duration', prices: { '5': 12.6, '10': 12.6 }, audio: { opt: 'sound', prices: { '5': 25.2, '10': 25.2 } } },
+  'bytedance/seedance-2-5-flash': { opt: 'resolution', prices: { '480p': 18.5, '720p': 41 }, videoInput: { opt: 'reference_video_urls', prices: { '480p': 11.5, '720p': 25.5 } } },
+  'gemini-omni/flash-1-2': { opt: 'resolution', prices: { '360p': 4, '720p': 9, '1080p': 10, '4k': 22 } },
   'vidu-q4/image-to-video': { opt: 'resolution', prices: { '540p': 7.2, '720p': 15.2, '1080p': 19.2, '2k': 30.4, '4k': 62.4 } },
   'vidu-q4/reference-to-video': { opt: 'resolution', prices: { '540p': 7.2, '720p': 15.2, '1080p': 19.2, '2k': 30.4, '4k': 62.4 } },
   'bytedance/seedance-2-5': { opt: 'resolution', prices: { '480p': 28, '720p': 63, '1080p': 158 } },
@@ -300,7 +322,11 @@ export const PRICING_ESTIMATED = new Set([
   'bytedance/v1-lite-image-to-video',  // same tiers and default
   'wan/flash-image-to-video',   // #69: measured 6-8 cr/s (varies — possibly by input size); kie publishes no rate
   'wan/flash-video-to-video',   // #69: assumed same as flash I2V
-  'bytedance/seedance-2-5', 'bytedance/seedance-2-5-draft',
+  'bytedance/seedance-2-5', 'bytedance/seedance-2-5-draft', 'bytedance/seedance-2-5-flash',  // Flash: published "beta" prices
+  'gemini-omni/flash-1-2', 'gemini-omni/flash-1-2-extend',  // published, not yet measured; extend follows the source resolution
+  'seedream/5-5-text-to-image', 'seedream/5-5-image-to-image', 'seedream/5-5-layer-decomposition',  // size-tiered + per-input billing
+  'minimax-h3/text-to-image', 'minimax-h3/image-edit', 'kie/image-upscale', 'video/upscale',  // pixel- / duration-billed, published not measured
+  'kling/v2-1-standard', 'kling/v2-1-pro', 'kling/v2-1-master-text-to-video', 'kling/v2-1-master-image-to-video',  // re-priced from kie's page 2026-11-16, not measured
   'vidu-q4/image-to-video', 'vidu-q4/reference-to-video',
   'kling-4/reference-to-video', 'kling-4/keyframe-to-video', 'kling-4-flash/reference-to-video', 'kling-4-flash/image-to-video',
   'gpt-image-2-6/flare-text-to-image', 'gpt-image-2-6/flare-image-to-image', 'gpt-image-2-6/sunburst-text-to-image', 'gpt-image-2-6/sunburst-image-to-image',  // token-billed

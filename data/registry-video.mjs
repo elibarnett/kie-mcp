@@ -382,6 +382,55 @@ export const VIDEO_MODEL_REGISTRY = {
     },
   },
 
+  // Seedance 2.5 Flash (Nov 2026) — the cheaper 2.5 tier: 480p/720p only, 10 image / 5 video / 5 audio refs.
+  'bytedance/seedance-2-5-flash': {
+    name: 'Seedance 2.5 Flash (ByteDance)',
+    description: 'NEW (Nov 2026) — the fast, cheaper Seedance 2.5 tier: 4-30s takes with co-generated audio at 480p / 720p (no 1080p, no draft mode). Three exclusive modes: text-to-video, first frame (+ optional last frame), or multimodal references (≤10 images, ≤5 videos, ≤5 audio clips — audio-only references are allowed). Per second: 480p 18.5 / 720p 41 cr (vs 28 / 63 for Seedance 2.5); with reference video 11.5 / 25.5 cr × (input + output seconds). kie marks these prices as beta.',
+    capabilities: ['cinematic', 'audio', 'character', 'multi-reference', 'first-last-frame', 'video-edit', 'long-form', 'fast', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'bytedance/seedance-2-5-flash',
+    maxPromptChars: 20480,
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'],
+    options: {
+      duration: { type: 'number', min: -1, max: 30, default: 5, description: 'Seconds, 4-30. -1 = let the model choose (required for omni_reference_task_type="edit", where the output matches the input video)' },
+      resolution: { type: 'string', enum: ['480p', '720p'], default: '720p', description: 'Per second without video input: 480p 18.5, 720p 41 cr (with reference video: 11.5 / 25.5 × input + output seconds)' },
+      generate_audio: { type: 'boolean', default: true, description: 'Co-generate audio. kie\'s default is ON — set false for silent clips' },
+      first_frame_url: { type: 'string', description: 'First frame image URL (else image_urls[0]). Exclusive with the reference_* lists; forces aspect_ratio "adaptive"' },
+      last_frame_url: { type: 'string', description: 'Last frame image URL — requires a first frame' },
+      reference_image_urls: { type: 'array', description: 'Up to 10 reference images (multimodal reference mode — NOT first/last frames)' },
+      reference_video_urls: { type: 'array', description: 'Up to 5 reference videos (mp4/mov, 2-30s each, ≤30s total; billed at the lower with-video rate on input + output seconds)' },
+      reference_audio_urls: { type: 'array', description: 'Up to 5 reference audio clips (wav/mp3, 2-30s each, ≤30s total)' },
+      omni_reference_task_type: { type: 'string', enum: ['auto', 'reference', 'edit', 'extend'], description: 'Only with reference_* inputs. edit / extend need reference_video_urls and run at aspect_ratio "adaptive" (edit also at duration -1) — both are set for you' },
+      return_last_frame: { type: 'boolean', description: 'Also return the final frame as an image (for chaining shots)' },
+      web_search: { type: 'boolean', description: 'Let the model search the web for references' },
+      output_format: { type: 'string', enum: ['mp4', 'mov'], default: 'mp4' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const id = 'bytedance/seedance-2-5-flash';
+      const refs = ['reference_image_urls', 'reference_video_urls', 'reference_audio_urls'].filter((k) => Array.isArray(opts[k]) && opts[k].length);
+      const first = opts.first_frame_url || (refs.length ? undefined : imageUrls?.[0]);
+      const last = opts.last_frame_url || (refs.length || opts.first_frame_url ? undefined : imageUrls?.[1]);
+      if (opts.first_frame_url && refs.length) throw new Error(`${id}: first/last frames and reference_* inputs are separate modes — use one or the other`);
+      if (opts.last_frame_url && !first) throw new Error(`${id}: last_frame_url requires a first frame (first_frame_url or image_urls[0])`);
+      const type = opts.omni_reference_task_type;
+      if (type && !refs.length) throw new Error(`${id}: omni_reference_task_type only applies with reference_image_urls / reference_video_urls / reference_audio_urls`);
+      if ((type === 'edit' || type === 'extend') && !opts.reference_video_urls?.length) throw new Error(`${id}: omni_reference_task_type="${type}" needs reference_video_urls`);
+      const dur = opts.duration ?? 5;
+      if (dur !== -1 && (dur < 4 || dur > 30)) throw new Error(`${id}: duration must be 4-30s (or -1 for automatic), got ${dur}`);
+      const adaptive = first || type === 'edit' || type === 'extend';
+      const input = { prompt, aspect_ratio: adaptive ? 'adaptive' : (aspectRatio || 'adaptive'), duration: type === 'edit' ? -1 : dur, resolution: opts.resolution || '720p' };
+      if (first) input.first_frame_url = first;
+      if (last) input.last_frame_url = last;
+      if (opts.reference_image_urls?.length) input.reference_image_urls = opts.reference_image_urls.slice(0, 10);
+      if (opts.reference_video_urls?.length) input.reference_video_urls = opts.reference_video_urls.slice(0, 5);
+      if (opts.reference_audio_urls?.length) input.reference_audio_urls = opts.reference_audio_urls.slice(0, 5);
+      for (const k of ['generate_audio', 'omni_reference_task_type', 'return_last_frame', 'web_search', 'output_format']) {
+        if (opts[k] !== undefined) input[k] = opts[k];
+      }
+      return input;
+    },
+  },
+
   // ── Vidu Q4 (Oct 2026) — 3-16s, 540p→4K, native audio; R2V takes 15 image + 3 audio refs ──
   'vidu-q4/image-to-video': {
     name: 'Vidu Q4 (image-to-video)',
@@ -842,10 +891,10 @@ export const VIDEO_MODEL_REGISTRY = {
   // ── Kling ──
   'kling/text-to-video': {
     name: 'Kling 2.6 T2V',
-    description: 'Kling 2.6 with native audio. Sweet spot: cheaper than 3.0 with most features minus multi-shot and 4K.',
+    description: 'Kling 2.6 with native audio. 12.6 cr/s silent, 25.2 cr/s with sound=true (kie re-priced Nov 2026; flat 63 / 126 cr per 5s). Most of 3.0\'s features minus multi-shot and 4K.',
     capabilities: ['cinematic', 'audio', 'lip-sync'],
     research: {
-      verdict: 'First Kling with native audio — still a strong workhorse at good price. Motion fluidity and physics excellent. Visual fidelity good but not Veo 3.1 level. At 10 cr/s, sweet spot: cheaper than 3.0 with most features minus multi-shot and 4K.',
+      verdict: 'First Kling with native audio — still a strong workhorse at good price. Motion fluidity and physics excellent. Visual fidelity good but not Veo 3.1 level. At 12.6 cr/s without audio (25.2 with), still a touch cheaper than 3.0 silent with most features minus multi-shot and 4K.',
       bestFor: ['social media with synchronized audio', 'text-to-video with native sound', 'high-volume production at 1080p', 'human movement and action scenes'],
       weaknesses: ['no multi-shot', 'max 1080p', 'occasional artifacts in complex scenes', 'background boiling', 'interior shots prone to melting walls'],
       promptTechniques: ['4-part formula: Subject + Action + Context + Style', 'describe dialogue or sound context for better audio matching'],
@@ -860,7 +909,7 @@ export const VIDEO_MODEL_REGISTRY = {
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
       duration: { type: 'string', enum: ['5', '10'], default: '5', description: 'Duration in seconds' },
-      sound: { type: 'boolean', default: false, description: 'Generate audio' },
+      sound: { type: 'boolean', default: false, description: 'Generate audio — doubles the price (25.2 vs 12.6 cr/s)' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
       return { prompt, aspect_ratio: aspectRatio, duration: String(opts.duration || '5'), sound: opts.sound || false };
@@ -868,7 +917,7 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'kling/image-to-video': {
     name: 'Kling 2.6 I2V',
-    description: 'Kling 2.6 I2V with native audio — strongest image fidelity. Best for product animation and character I2V with sound.',
+    description: 'Kling 2.6 I2V with native audio — strongest image fidelity. Best for product animation and character I2V with sound. 12.6 cr/s silent, 25.2 cr/s with sound=true (kie re-priced Nov 2026).',
     capabilities: ['cinematic', 'audio', 'image-to-video'],
     research: {
       verdict: 'I2V counterpart to 2.6 T2V. Kling has historically excelled at I2V — reference images translate faithfully. Native audio means you get a video with synchronized sound from a reference image in one pass. The model to use for product photos, character illustrations, and storyboard frames that need animation with sound.',
@@ -876,7 +925,7 @@ export const VIDEO_MODEL_REGISTRY = {
       weaknesses: ['same artifacts as 2.6 T2V', 'no multi-shot', 'max 1080p', 'input image quality heavily affects output'],
       promptTechniques: ['describe motion and context, not visual content', 'specify camera movement relative to subject', 'include audio context for better native audio'],
       communityInsights: ['widely regarded as best I2V model for character consistency', 'used in pharmaceutical and educational content production'],
-      costEfficiency: '10 cr/s — same as T2V. More cost-effective than T2V when you have visual assets since you skip the generation lottery.',
+      costEfficiency: '12.6 cr/s (25.2 with sound) — same as T2V. More cost-effective than T2V when you have visual assets since you skip the generation lottery.',
       comparedTo: { 'kling/v2-5-turbo-image-to-video': '2.6 has audio. 2.5 Turbo is 20% cheaper for drafts.' },
       lastResearched: '2026-04-19',
       sources: ['https://www.dzine.ai/blog/kling-3-0-vs-kling-2-6/', 'https://kie.ai/kling/v2-1'],
@@ -887,7 +936,7 @@ export const VIDEO_MODEL_REGISTRY = {
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
       duration: { type: 'string', enum: ['5', '10'], default: '5' },
-      sound: { type: 'boolean', default: false },
+      sound: { type: 'boolean', default: false, description: 'Generate audio — doubles the price (25.2 vs 12.6 cr/s)' },
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
       return { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, duration: String(opts.duration || '5'), sound: opts.sound || false };
@@ -895,15 +944,15 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'kling/motion-control': {
     name: 'Kling 2.6 Motion Control',
-    description: 'Budget motion transfer. Same workflow as 3.0 MC but without 4K and improved physics. 17% cheaper.',
+    description: 'Kling 2.6 motion transfer. Same workflow as 3.0 MC but without 4K and improved physics. 12.6 cr/s at 720p (kie re-priced Nov 2026 — no longer cheaper than 3.0 MC).',
     capabilities: ['motion-control', 'animation', 'dance'],
     research: {
-      verdict: 'Budget alternative to 3.0 Motion Control. Same workflow (ref image + motion video) but without 4K and improved limb tracking. Still very capable — drove initial viral trends. At 10 cr/s vs 12 for 3.0, reasonable budget choice if 1080p is acceptable.',
+      verdict: 'Budget alternative to 3.0 Motion Control. Same workflow (ref image + motion video) but without 4K and improved limb tracking. Still very capable — drove initial viral trends. At 12.6 cr/s (kie re-priced Nov 2026; was 10) vs 12 for 3.0 the price edge is gone — reasonable budget choice if 1080p is acceptable.',
       bestFor: ['budget motion transfer', 'high-volume dance content', 'iterating before upgrading to 3.0', 'social media content'],
       weaknesses: ['inferior limb tracking vs 3.0', 'no 4K', 'less refined physics'],
       promptTechniques: ['identical to 3.0: describe environment and style, NOT motion', 'match framing between image and video'],
       communityInsights: ['many use 2.6 MC for drafts, upgrade to 3.0 for finals', '17% savings adds up at volume'],
-      costEfficiency: '10 cr/s — 17% cheaper than 3.0. Good for drafts.',
+      costEfficiency: '12.6 cr/s at 720p (kie re-priced Nov 2026; was 10) — no longer cheaper than 3.0.',
       comparedTo: { 'kling-3/motion-control': '3.0 has better physics, 4K, limb tracking. Use 2.6 for drafts.' },
       lastResearched: '2026-04-19',
       sources: ['https://higgsfield.ai/blog/Kling-2.6-Motion-Control-Full-Guide'],
@@ -1181,9 +1230,9 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'kling/v2-1-standard': {
     name: 'Kling V2.1 Standard',
-    description: 'Absolute budget option at 5 cr/s. 720p I2V only. Good enough for social media, not for client work.',
+    description: 'Budget V2.1 tier at 10.1 cr/s (kie re-priced; was 5). 720p I2V only. Good enough for social media, not for client work.',
     capabilities: ['animation', 'image-to-video'],
-    research: { verdict: 'Budget option at 5 cr/s. 720p I2V only. Quality serviceable for social media and internal content but noticeably below 1080p models. For budget-conscious volume work where 720p is acceptable, perfectly adequate. Not for client-facing or production-grade work.', bestFor: ['maximum volume social media on tight budgets', 'internal communications', 'concept testing before upgrading'], weaknesses: ['720p only', 'I2V only', 'no audio, no multi-shot', 'basic motion quality'], communityInsights: ['good enough for social media, not for client work', '5 cr/s makes it practical for testing concepts', 'delivers ~/bin/zsh.50-1.00 per final video vs -15 for Veo 3'], costEfficiency: 'Best pure cr/s ratio in Kling. 2.4x more videos than 3.0 for same budget.', comparedTo: { 'kling/v2-1-pro': 'Pro is 2x cost but adds 1080p, sharpness, frame conditioning.' }, lastResearched: '2026-04-19', sources: ['https://kie.ai/kling/v2-1'] },
+    research: { verdict: 'Budget option at 10.1 cr/s (re-priced Nov 2026, was 5). 720p I2V only. Quality serviceable for social media and internal content but noticeably below 1080p models. For budget-conscious volume work where 720p is acceptable, perfectly adequate. Not for client-facing or production-grade work.', bestFor: ['maximum volume social media on tight budgets', 'internal communications', 'concept testing before upgrading'], weaknesses: ['720p only', 'I2V only', 'no audio, no multi-shot', 'basic motion quality'], communityInsights: ['good enough for social media, not for client work', '5 cr/s makes it practical for testing concepts', 'delivers ~/bin/zsh.50-1.00 per final video vs -15 for Veo 3'], costEfficiency: 'Best pure cr/s ratio in Kling. 2.4x more videos than 3.0 for same budget.', comparedTo: { 'kling/v2-1-pro': 'Pro is 2x cost but adds 1080p, sharpness, frame conditioning.' }, lastResearched: '2026-04-19', sources: ['https://kie.ai/kling/v2-1'] },
     type: 'market',
     apiModel: 'kling/v2-1-standard',
     requiresImage: true,
@@ -1483,9 +1532,9 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'kling/v2-1-master-text-to-video': {
     name: 'Kling V2.1 Master T2V',
-    description: 'LEGACY — largely obsolete. 32 cr/s but Kling 3.0 is better at 12 cr/s. Only for niche motion richness needs.',
+    description: 'LEGACY — largely obsolete. 50.4 cr/s (kie re-priced; was 32) but Kling 3.0 is better at 12 cr/s. Only for niche motion richness needs.',
     capabilities: ['cinematic'],
-    research: { verdict: 'Former premium flagship, now largely obsolete. At 32 cr/s, costs 2.67x more than the superior Kling 3.0. Its one strength: advanced 3D spatiotemporal attention for hyper-realistic motion dynamics. But 3.0 has closed most of this gap while adding multi-shot, audio, and 4K. AVOID for almost all use cases.', bestFor: ['niche cinematic work needing maximum motion richness'], weaknesses: ['2.67x cost of the superior Kling 3.0', 'no audio, no multi-shot, no 4K', 'max 10s'], communityInsights: ['community consensus: use 3.0 instead'], costEfficiency: 'Poor. 32 cr/s — most expensive Kling by far. 3.0 is objectively better at 63% less cost.', comparedTo: { 'kling-3/video': '3.0 is better AND 63% cheaper.' }, lastResearched: '2026-04-19', sources: ['https://videoweb.ai/blog/detail/Exploring-Kling-AI-A-Deep-Dive-into-Kling-2-1-Standard-and-Kling-2-1-Master-12f6c7c5cb3c/'] },
+    research: { verdict: 'Former premium flagship, now largely obsolete. At 50.4 cr/s, costs 4.2x more than the superior Kling 3.0. Its one strength: advanced 3D spatiotemporal attention for hyper-realistic motion dynamics. But 3.0 has closed most of this gap while adding multi-shot, audio, and 4K. AVOID for almost all use cases.', bestFor: ['niche cinematic work needing maximum motion richness'], weaknesses: ['2.67x cost of the superior Kling 3.0', 'no audio, no multi-shot, no 4K', 'max 10s'], communityInsights: ['community consensus: use 3.0 instead'], costEfficiency: 'Poor. 32 cr/s — most expensive Kling by far. 3.0 is objectively better at 63% less cost.', comparedTo: { 'kling-3/video': '3.0 is better AND 63% cheaper.' }, lastResearched: '2026-04-19', sources: ['https://videoweb.ai/blog/detail/Exploring-Kling-AI-A-Deep-Dive-into-Kling-2-1-Standard-and-Kling-2-1-Master-12f6c7c5cb3c/'] },
     type: 'market',
     apiModel: 'kling/v2-1-master-text-to-video',
     aspectRatios: ['16:9', '9:16', '1:1'],
@@ -1503,9 +1552,9 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'kling/v2-1-master-image-to-video': {
     name: 'Kling V2.1 Master I2V',
-    description: 'LEGACY — overpriced at 32 cr/s. Kling 2.6 I2V at 10 cr/s has 90% of the quality with native audio.',
+    description: 'LEGACY — overpriced at 50.4 cr/s (kie re-priced; was 32). Kling 2.6 I2V at 12.6 cr/s has 90% of the quality with native audio.',
     capabilities: ['cinematic', 'image-to-video'],
-    research: { verdict: 'I2V counterpart to V2.1 Master T2V. At 32 cr/s it costs 3.2x more than 2.6 I2V. Advanced motion dynamics but 2.6 I2V has closed 90% of the gap while adding native audio. Recommend only for confirmed niche needs.', bestFor: ['maximum-fidelity character animation from reference images'], weaknesses: ['32 cr/s is 3.2x more than 2.6 I2V with audio', 'no audio, no multi-shot, no 4K'], costEfficiency: 'Very poor. 2.6 I2V at 10 cr/s has 90% of the quality with native audio.', comparedTo: { 'kling/image-to-video': '2.6 I2V is 69% cheaper with native audio.' }, lastResearched: '2026-04-19', sources: ['https://kie.ai/kling/v2-1'] },
+    research: { verdict: 'I2V counterpart to V2.1 Master T2V. At 50.4 cr/s it costs 4x more than 2.6 I2V. Advanced motion dynamics but 2.6 I2V has closed 90% of the gap while adding native audio. Recommend only for confirmed niche needs.', bestFor: ['maximum-fidelity character animation from reference images'], weaknesses: ['32 cr/s is 3.2x more than 2.6 I2V with audio', 'no audio, no multi-shot, no 4K'], costEfficiency: 'Very poor. 2.6 I2V at 10 cr/s has 90% of the quality with native audio.', comparedTo: { 'kling/image-to-video': '2.6 I2V is 69% cheaper with native audio.' }, lastResearched: '2026-04-19', sources: ['https://kie.ai/kling/v2-1'] },
     type: 'market',
     apiModel: 'kling/v2-1-master-image-to-video',
     requiresImage: true,
@@ -1523,9 +1572,9 @@ export const VIDEO_MODEL_REGISTRY = {
   },
   'kling/v2-1-pro': {
     name: 'Kling V2.1 Pro I2V',
-    description: 'Unique niche: first/last frame conditioning for seamless loops and transitions. 10 cr/s. I2V only.',
+    description: 'Unique niche: first/last frame conditioning for seamless loops and transitions. 17.6 cr/s (kie re-priced; was 10). I2V only.',
     capabilities: ['cinematic', 'image-to-video', 'looping'],
-    research: { verdict: 'Sensible middle ground in V2.1 family. Unique feature: first-frame AND last-frame conditioning for precise transitions and seamless loops. At 10 cr/s, occupies an interesting niche: use when you need looping video, controlled transitions, or defined start/end frames.', bestFor: ['seamless looping videos (product turntables, digital signage)', 'transition-controlled sequences', 'marketing with specific opening/closing compositions'], weaknesses: ['no audio', 'I2V only', 'no multi-shot', 'V2.1 tier motion quality'], promptTechniques: ['leverage first/last frame conditioning for loops', 'define camera movement that returns to starting position', 'describe transition arcs between start and end states'], communityInsights: ['first/last frame conditioning is genuinely unique in Kling lineup', 'popular for e-commerce product turntables and ambient videos'], costEfficiency: '10 cr/s — same as 2.6 I2V. Choose 2.6 for audio, V2.1 Pro for loop control.', comparedTo: { 'kling/image-to-video': 'Same price. 2.6 has audio; V2.1 Pro has frame conditioning.' }, lastResearched: '2026-04-19', sources: ['https://kie.ai/kling/v2-1'] },
+    research: { verdict: 'Sensible middle ground in V2.1 family. Unique feature: first-frame AND last-frame conditioning for precise transitions and seamless loops. At 17.6 cr/s, occupies an interesting niche: use when you need looping video, controlled transitions, or defined start/end frames.', bestFor: ['seamless looping videos (product turntables, digital signage)', 'transition-controlled sequences', 'marketing with specific opening/closing compositions'], weaknesses: ['no audio', 'I2V only', 'no multi-shot', 'V2.1 tier motion quality'], promptTechniques: ['leverage first/last frame conditioning for loops', 'define camera movement that returns to starting position', 'describe transition arcs between start and end states'], communityInsights: ['first/last frame conditioning is genuinely unique in Kling lineup', 'popular for e-commerce product turntables and ambient videos'], costEfficiency: '10 cr/s — same as 2.6 I2V. Choose 2.6 for audio, V2.1 Pro for loop control.', comparedTo: { 'kling/image-to-video': 'Same price. 2.6 has audio; V2.1 Pro has frame conditioning.' }, lastResearched: '2026-04-19', sources: ['https://kie.ai/kling/v2-1'] },
     type: 'market',
     apiModel: 'kling/v2-1-pro',
     requiresImage: true,
@@ -2084,6 +2133,76 @@ export const VIDEO_MODEL_REGISTRY = {
         if (videoList.length) input.video_list = videoList;
       }
       if (opts.seed !== undefined) input.seed = opts.seed;
+      return input;
+    },
+  },
+
+  // Gemini Omni 1.2 Flash (Nov 2026) — integer durations 3-15s, per-second pricing, plus an Extend endpoint.
+  'gemini-omni/flash-1-2': {
+    name: 'Gemini Omni 1.2 Flash (Google)',
+    description: 'NEW (Nov 2026) — Gemini Omni 1.2 Flash. Four modes, one per request: text / reference images (≤6, plus ≤2 character IDs), first frame only, first→last frame, or video edit (model_options.video_list — one clip ≤15s). Any duration 3-15s (3-10 for first→last), 360p-4K. Billed per second: 360p 4 / 720p 9 / 1080p 10 / 4K 22 cr — far cheaper than Omni 1.1 Flash; a video edit is billed on the input clip\'s length. Voice IDs (audio_ids) are not accepted by 1.2. Extend a finished clip with gemini-omni/flash-1-2-extend.',
+    capabilities: ['cinematic', 'animation', 'audio', 'character', 'multi-reference', 'first-last-frame', 'video-edit', 'latest', 'new', 'multimodal', '4k', 'budget'],
+    type: 'market',
+    apiModel: 'google/gemini-omni-flash-1-2',
+    aspectRatios: ['16:9', '9:16', 'auto'],
+    maxPromptChars: 20000,
+    options: {
+      duration: { type: 'number', min: 3, max: 15, default: 8, description: 'Seconds, any integer 3-15 (3-10 with first + last frame). Not sent for a video edit — the output follows the input clip' },
+      resolution: { type: 'string', enum: ['360p', '720p', '1080p', '4k'], default: '720p', description: 'Per second: 360p 4, 720p 9, 1080p 10, 4k 22 cr' },
+      first_frame_url: { type: 'string', description: 'Start frame. Exclusive with image_urls, character_ids and video_list' },
+      last_frame_url: { type: 'string', description: 'End frame — requires first_frame_url' },
+      character_ids: { type: 'array', items: { type: 'string' }, description: 'Up to 2 character IDs from create_omni_character (do not use reference-image slots)' },
+      video_list: { type: 'array', items: { type: 'string' }, description: 'Video edit mode: ONE video URL (≤15s, MP4 recommended; takes 2 of the 7 reference slots). Billed on its length' },
+      seed: { type: 'number', min: 10000, max: 99999, description: 'Random seed, 10000-99999' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const id = 'gemini-omni/flash-1-2';
+      const input = { prompt, aspect_ratio: aspectRatio || '16:9', resolution: opts.resolution || '720p' };
+      const images = Array.isArray(imageUrls) ? imageUrls : [];
+      const characterIds = Array.isArray(opts.character_ids) ? opts.character_ids : [];
+      // 1.1 took {url, start, ends} objects; 1.2 takes plain URLs — accept either.
+      const videoList = (Array.isArray(opts.video_list) ? opts.video_list : []).map((v) => (typeof v === 'string' ? v : v?.url)).filter(Boolean);
+      if (opts.audio_ids?.length) throw new Error(`${id}: audio_ids (voices) are not supported by Omni 1.2 Flash — use gemini-omni/flash-1-1 or gemini-omni/video`);
+      if (opts.last_frame_url && !opts.first_frame_url) throw new Error(`${id}: last_frame_url requires first_frame_url`);
+      if (videoList.length > 1) throw new Error(`${id}: video_list takes one video`);
+      if (characterIds.length > 2) throw new Error(`${id}: at most 2 character_ids`);
+      const dur = Number(opts.duration ?? 8);
+      if (opts.first_frame_url) {
+        if (images.length || characterIds.length || videoList.length) throw new Error(`${id}: first_frame_url cannot be combined with image_urls, character_ids or video_list`);
+        if (opts.last_frame_url && dur > 10) throw new Error(`${id}: first + last frame takes 3-10s (got ${dur})`);
+        input.first_frame_url = opts.first_frame_url;
+        if (opts.last_frame_url) input.last_frame_url = opts.last_frame_url;
+        input.duration = dur;
+      } else {
+        // Reference slots: images + 2 for a video ≤ 7, and never more than 6 images (per kie.ai docs).
+        const quota = images.length + videoList.length * 2;
+        if (images.length > 6 || quota > 7) throw new Error(`${id} reference quota exceeded: images(${images.length}, max 6) + 2 per video(${videoList.length * 2}) = ${quota}, must be ≤ 7`);
+        if (images.length) input.image_urls = images;
+        if (characterIds.length) input.character_ids = characterIds;
+        if (videoList.length) input.video_list = videoList;   // video edit: no duration
+        else input.duration = dur;
+      }
+      if (opts.seed !== undefined) input.seeds = opts.seed;
+      return input;
+    },
+  },
+  'gemini-omni/flash-1-2-extend': {
+    name: 'Gemini Omni 1.2 Flash — Extend',
+    description: 'NEW (Nov 2026) — extends a finished Gemini Omni 1.2 Flash video from its end by 3-10s and returns the complete clip (source + new segment) under a new task id, which can be extended again while the result is ≤15s. Pass model_options.task_id (the source generation) and describe what happens next; up to 3 reference images via image_urls. The source must be ≤15s and 360p or 720p. Billed only for the added seconds: 360p 4 / 720p 9 cr per second.',
+    capabilities: ['extend', 'cinematic', 'audio', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'google/gemini-omni-flash-1-2-extend',
+    aspectRatios: [],
+    maxPromptChars: 20000,
+    options: {
+      task_id: { type: 'string', description: 'REQUIRED — task id of a completed gemini-omni/flash-1-2 (or earlier extend) generation, ≤15s, 360p or 720p' },
+      duration: { type: 'number', min: 3, max: 10, default: 5, description: 'Seconds to ADD (3-10); billed at the source resolution\'s rate' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      if (!opts.task_id) throw new Error('gemini-omni/flash-1-2-extend needs model_options.task_id (the task id of the Omni 1.2 Flash video to extend)');
+      const input = { task_id: opts.task_id, prompt, duration: Number(opts.duration ?? 5) };
+      if (imageUrls?.length > 3) throw new Error('gemini-omni/flash-1-2-extend: at most 3 reference images');
+      if (imageUrls?.length) input.image_urls = imageUrls;
       return input;
     },
   },

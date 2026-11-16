@@ -2,6 +2,36 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [5.12.0] — 2026-11-16
+
+Closes #133, #134, #135, #136, #137, #138, #139, #140, #141, all filed by the weekly live check.
+
+Prices below are kie's published rates, read from its marketing pages on 2026-11-16. **Nothing in this release was generated live**: every new slug was confirmed with a deliberately invalid request (kie answers with a validation error and charges nothing), so inputs follow the docs and the first real charge may differ from the estimate.
+
+### Added
+
+- **Seedream 5.5** (`seedream/5-5-text-to-image`, `seedream/5-5-image-to-image`, #135): **3.6 cr** at 1K / 1.5K, **6.3 cr** at 2K (the default), transparent background, 8 aspect ratios. Edits take 1–10 images and add **1.44 cr per input image** (a 2K edit of one image is 7.74 cr). `seedream_layer_decompose` gains **`tier: "5.5"`** with `max_images` (cap the layer count, 2–100) and `text_recognition`; `size: "auto"` is billed at the 2K rate there.
+- **MiniMax H3 Image** (`minimax-h3/text-to-image`, `minimax-h3/image-edit`, #137): **1.8 cr** at 1K or 2K, **5.5 cr** at 4K; 11 aspect ratios or an exact `width` × `height`. Edits take up to 16 references at **0.5 cr each**. The mutually exclusive size inputs are checked before submitting.
+- **Gemini Omni 1.2 Flash** (`gemini-omni/flash-1-2`, #133): any duration 3–15 s, **4 / 9 / 10 / 22 cr/s** at 360p / 720p / 1080p / 4K. Four modes: text or reference images (≤6, plus ≤2 character IDs), first frame, first→last frame (3–10 s), or video edit. Voice IDs are not accepted by 1.2. **`gemini-omni/flash-1-2-extend`** adds 3–10 s to a finished clip (4 / 9 cr per added second).
+- **Seedance 2.5 Flash** (`bytedance/seedance-2-5-flash`, #138): 4–30 s at 480p / 720p, **18.5 / 41 cr/s** (11.5 / 25.5 with reference video, billed on input + output). Text, first/last frame, or multimodal references (10 images, 5 videos, 5 audio clips) with `omni_reference_task_type` for edit / extend. kie marks these prices as beta.
+- **`upscale_image`** (Kie Image Upscale, #136): 1x / 2x / 4x / 8x, billed by output pixels (**1.5 / 4 / 12 cr** up to ~4 / 17 / 67 MP).
+- **`upscale_video`** (Kie Video Upscale, #136): any video ≤ 60 s to 1080P / 2K / 4K at **1.5 / 3 / 6 cr per second** of input. Pass `video_seconds` for a real cost estimate.
+- **`generate_speech`** (Suno Speech, #139): expressive spoken audio from a scene `prompt` (the model writes the script) or your own `script` with `tone`, `variety`, `vocal_gender` and `background_music`. **12 cr** per request. Mixing the two modes is rejected with an explanation instead of kie's bare 422.
+
+### Fixed
+
+- **Kling 2.6** (`kling/text-to-video`, `kling/image-to-video`, #140): 10 → **12.6 cr/s**, and **25.2 cr/s with `sound: true`** (kie: 63 / 126 cr per 5 s). Estimates were under-quoting by up to 2.5×. `kling/motion-control` moves 10 → 12.6 cr/s too.
+- **Kling V2.1** (#134): Master 32 → **50.4 cr/s**, Standard 5 → **10.1**, Pro 10 → **17.6** (kie: 252 / 50.5 / 88 cr per 5 s). Standard and Pro were not flagged by the drift watch; they are on the same pricing page.
+- `seedream_layer_decompose` with `wait: false` now reports the model it actually submitted.
+
+### Security
+
+- `npm audit fix` (#141): hono 4.13.14 → 4.13.19 (5 moderate advisories, transitive via the MCP SDK; kie-mcp does not use hono's router). `npm audit`: 0.
+
+### Unchanged
+
+- ElevenLabs TTS and GPT Image 2.6 Economy (GIF output, image-to-image) still fail upstream.
+
 ## [5.11.0] — 2026-11-05
 
 Closes #130.

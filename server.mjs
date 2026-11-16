@@ -263,9 +263,20 @@ function estimateCallCredits(name, args = {}) {
     const id = args.model || 'gpt4o';
     const def = MODEL_REGISTRY[id];
     const key = PRICING[id] !== undefined ? id : def?.apiModel;
-    const { price, tier } = tierPrice(id, opts);
+    let { price, tier } = tierPrice(id, opts);
+    // MiniMax H3 Image with an exact width × height is billed by total pixels (> 4.5 MP = the 4K tier).
+    if (id.startsWith('minimax-h3/') && opts.width && opts.height) {
+      const big = opts.width * opts.height > 4500000;
+      price = PRICE_TIERS[id].prices[big ? '4K' : '2K']; tier = `${opts.width}×${opts.height} → ${big ? '4K' : '1K/2K'} tier`;
+    }
     const p = price ?? PRICING[key];
     if (typeof p !== 'number') return null;
+    // Some edit models bill every input image on top of the output (Seedream 5.5, MiniMax H3 Image).
+    const perInput = PRICE_TIERS[id]?.perInputImage;
+    if (perInput) {
+      const n = Math.max(args.image_urls?.length || 0, 1);
+      return { credits: fmt(p + perInput * n), basis: `${id}${tier ? ` (${tier})` : ''}: ${p} cr per image + ${perInput} cr × ${n} input image${n > 1 ? 's' : ''}`, uncertain: PRICING_ESTIMATED.has(id) };
+    }
     return { credits: fmt(p), basis: `${id}${tier ? ` (${tier})` : ''}: ${p} cr per image`, uncertain: PRICING_ESTIMATED.has(id) || PRICING_ESTIMATED.has(key) };
   }
   if (name === 'generate_video') {
@@ -286,6 +297,23 @@ function estimateCallCredits(name, args = {}) {
     if (id === 'bytedance/seedance-2-5-draft') return { credits: fmt(p * 5), basis: `${p} cr/s × the draft's duration (assumed 5s; billed on the real length)`, uncertain: true };
     const dur = Number(opts.duration ?? def?.options?.duration?.default ?? 5) || 5;
     return { credits: fmt(p * dur), basis: `${id}${tier ? ` (${tier})` : ''}: ${p} cr/s × ${dur}s`, uncertain: PRICING_ESTIMATED.has(id) };
+  }
+  if (name === 'seedream_layer_decompose' && args.tier === '5.5') {
+    // Seedream 5.5: per output image by size tier ("auto" bills at the 2K rate) + 1.44 cr for the input image.
+    const per = ['1K', '1.5K'].includes(args.size) ? 3.6 : 6.3;
+    const layers = Math.min(args.prompt ? 3 : 12, args.max_images || 100);
+    return { credits: fmt(per * layers + 1.44), basis: `${per} cr per output layer × ~${layers} layers (${args.prompt ? 'typical for a named split' : 'a prompt-less split can return many — cap it with max_images'}) + 1.44 cr input image — the real layer count decides`, uncertain: true };
+  }
+  if (name === 'upscale_image') {
+    const f = String(args.upscale_factor ?? '2');
+    const p = { 1: 1.5, 2: 1.5, 4: 4, 8: 12 }[f] ?? 1.5;
+    return { credits: p, basis: `kie/image-upscale ${f}x: billed by OUTPUT pixels — 1.5 cr ≤ 4.19 MP, 4 cr ≤ 16.78 MP, 12 cr ≤ 67.11 MP (${p} cr assumes a ~1 MP source)`, uncertain: true };
+  }
+  if (name === 'upscale_video') {
+    const res = args.resolution || '2K';
+    const p = { '1080P': 1.5, '2K': 3, '4K': 6 }[res] ?? 3;
+    const secs = Number(args.video_seconds) || 60;
+    return { credits: fmt(p * secs), basis: `video/upscale ${res}: ${p} cr per second of input × ${args.video_seconds ? `${secs}s` : 'up to 60s (the maximum; pass video_seconds for a real estimate)'}`, uncertain: !args.video_seconds };
   }
   if (name === 'seedream_layer_decompose') {
     const flash = args.tier === 'flash';
@@ -699,6 +727,30 @@ const SUNO_MARKET_MODELS = {
   '/api/v1/generate/get-timestamped-lyrics': 'ai-music-api/timeStamped-lyrics',
   '/api/v1/suno/cover/generate': 'ai-music-api/cover-generate',
 };
+// Suno Speech (ai-music-api/speech): Simple = prompt only; Advanced = script + optional
+// direction. kie answers a mixed request with a bare 422, so reject it here with a reason.
+function buildSpeechInput(args = {}) {
+  const { prompt, script, tone, variety, vocal_gender, background_music } = args;
+  const advanced = { tone, variety, vocal_gender, background_music };
+  const usedAdvanced = Object.keys(advanced).filter((k) => advanced[k] !== undefined);
+  if (script && prompt) return { error: 'generate_speech: pass EITHER prompt (Simple — the model writes the script) OR script (Advanced — your exact words), not both.' };
+  if (!script && !prompt) return { error: 'generate_speech needs prompt (Simple mode) or script (Advanced mode).' };
+  if (script) {
+    if (script.length > 5000) return { error: `generate_speech: script is ${script.length} chars — the maximum is 5000.` };
+    if (tone && tone.length > 1000) return { error: 'generate_speech: tone is limited to 1000 chars.' };
+    if (variety !== undefined && (!Number.isInteger(variety) || variety < 0 || variety > 4)) return { error: 'generate_speech: variety must be an integer from 0 to 4.' };
+    const input = { customMode: true, script };
+    if (tone) input.tone = tone;
+    if (variety !== undefined) input.variety = variety;
+    if (vocal_gender) input.vocalGender = vocal_gender;
+    if (background_music !== undefined) input.backgroundMusic = background_music;
+    return { input };
+  }
+  if (usedAdvanced.length) return { error: `generate_speech: ${usedAdvanced.join(', ')} only work in Advanced mode — pass script (the exact words) instead of prompt.` };
+  if (prompt.length > 3000) return { error: `generate_speech: prompt is ${prompt.length} chars — the maximum is 3000 (use script for longer text).` };
+  return { input: { customMode: false, prompt } };
+}
+
 // Legacy-only fields with no market equivalent.
 const SUNO_DROP_FIELDS = new Set(['callBackUrl', 'defaultParamFlag', 'vocalStart', 'vocalEnd']);
 // Task IDs created on the market API — the poll helpers branch on this.
@@ -1264,7 +1316,7 @@ function renderProfileBrief(profile, request) {
   return lines.join('\n');
 }
 
-const SERVER_INFO = { name: 'kie-art', version: '5.11.0' };
+const SERVER_INFO = { name: 'kie-art', version: '5.12.0' };
 const SERVER_CAPS = { capabilities: { tools: {}, prompts: {} } };
 
 // Handler functions — extracted so they can be registered on multiple server instances (HTTP sessions)
@@ -1279,7 +1331,7 @@ const handleListToolsBase = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning, 8cr). Cheap fast all-rounder→nano-banana-2-1 (4cr, ~13s, NEW Oct 2026; NB2 doubled to 8cr). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-6/flare-* (NEW Nov 2026, ~6cr @1K, 16 ratios incl. 3:1) / sunburst-* (premium) / economy-* (5cr flat @1K, can return animated GIF); previous gen gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Split any image into layers→seedream_layer_decompose tool (7cr/layer, NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→flux-3/klein-text-to-image (1.6cr @1K, 4K up to 6.5cr, NEW) or flux-3/klein-edit-image (1.6cr, 10 free refs); z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning, 8cr). Cheap fast all-rounder→nano-banana-2-1 (4cr, ~13s, NEW Oct 2026; NB2 doubled to 8cr). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-6/flare-* (NEW Nov 2026, ~6cr @1K, 16 ratios incl. 3:1) / sunburst-* (premium) / economy-* (5cr flat @1K, can return animated GIF); previous gen gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Newest Seedream→seedream/5-5-text-to-image (NEW Nov 2026: 3.6cr @1K, 6.3 @2K, transparent BG) / seedream/5-5-image-to-image (+1.44cr per input). Cheap 2K/4K→minimax-h3/text-to-image (NEW Nov 2026: 1.8cr @1K-2K, 5.5 @4K, exact custom sizes) / minimax-h3/image-edit (16 refs). Split any image into layers→seedream_layer_decompose tool (from 3.24cr/layer; tier "5.5" NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→upscale_image tool (NEW: 2x/4x/8x, 1.5-12cr, keeps text) or recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→flux-3/klein-text-to-image (1.6cr @1K, 4K up to 6.5cr, NEW) or flux-3/klein-edit-image (1.6cr, 10 free refs); z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1379,7 +1431,7 @@ const handleListToolsBase = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Higher-quality PixVerse without templates→pixverse-v6-max T2V/I2V (NEW, 8.8cr/s @720p). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p; transformation=restyle existing video). Long consistent-character clips (3-30s) with named @subjects, voices and reference videos→kling-4/reference-to-video (NEW, 28.5cr/s @720p); first→keyframes→last animation→kling-4/keyframe-to-video (NEW). Same at 720p for 40% less→kling-4-flash/reference-to-video (17cr/s, 3-20s, NEW Nov 2026); kling-4-flash/image-to-video from a first frame. Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-2-0 (NEW Oct 2026: 14cr/s, up to 5-min audio, half of 1.5's price), omnihuman-1-5 (multi-person masks, 1080p), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Higher-quality PixVerse without templates→pixverse-v6-max T2V/I2V (NEW, 8.8cr/s @720p). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p; transformation=restyle existing video). Long consistent-character clips (3-30s) with named @subjects, voices and reference videos→kling-4/reference-to-video (NEW, 28.5cr/s @720p); first→keyframes→last animation→kling-4/keyframe-to-video (NEW). Same at 720p for 40% less→kling-4-flash/reference-to-video (17cr/s, 3-20s, NEW Nov 2026); kling-4-flash/image-to-video from a first frame. Cheapest multimodal Google video→gemini-omni/flash-1-2 (NEW Nov 2026: 4/9/10/22cr/s @360p/720p/1080p/4K, any 3-15s, first→last frame, video edit; lengthen with gemini-omni/flash-1-2-extend). Cheaper long Seedance takes→bytedance/seedance-2-5-flash (NEW Nov 2026: 18.5cr/s @480p, 41 @720p, 4-30s, audio). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-2-0 (NEW Oct 2026: 14cr/s, up to 5-min audio, half of 1.5's price), omnihuman-1-5 (multi-person masks, 1080p), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1779,6 +1831,25 @@ const handleListToolsBase = async () => ({
       },
     },
     {
+      name: 'generate_speech',
+      description: 'NEW (Nov 2026) — Suno Speech: expressive spoken audio (tone, rhythm, emotion, optional background music). NOT fixed-voice TTS — there is no voice list; you describe the delivery. 12 credits per request. TWO MODES: (1) Simple — pass prompt only (a scene description, ≤3000 chars) and the model writes the script. (2) Advanced — pass script (the exact words, ≤5000 chars) plus optional tone, variety, vocal_gender, background_music. Do not mix prompt with the Advanced fields. For a specific named voice use generate_gemini_tts instead. Downloads to kie/assets/raw/.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'Simple mode: one-line scene description, e.g. "A calm bedtime story intro about a fox" (1-3000 chars). The model writes the words.' },
+          script: { type: 'string', description: 'Advanced mode: the exact text to speak (1-5000 chars)' },
+          tone: { type: 'string', description: 'Advanced: delivery direction, e.g. "Warm, calm female narrator, slightly smiling" (≤1000 chars)' },
+          variety: { type: 'number', minimum: 0, maximum: 4, description: 'Advanced: integer 0-4 — how much the delivery varies' },
+          vocal_gender: { type: 'string', enum: ['f', 'm'], description: 'Advanced: voice gender' },
+          background_music: { type: 'boolean', description: 'Advanced: add background music' },
+          filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save the file(s) into (created if missing). Defaults to the server\'s kie/assets/raw/.' },
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds. Ignored when wait=false.' },
+        },
+      },
+    },
+    {
       name: 'generate_persona',
       description: 'NEW — Create a Suno Persona (reusable music character) from an existing Suno track. Requires taskId from V3.6+ generation.',
       inputSchema: {
@@ -1998,19 +2069,54 @@ const handleListToolsBase = async () => ({
     },
     {
       name: 'seedream_layer_decompose',
-      description: 'Split ANY image into independent layers with Seedream 5.0 (billed per OUTPUT layer incl. base). tier="pro" (default): 7 cr @1K, 14 @2K, so a 3-layer split ≈ 21 cr. tier="flash" (NEW): 3.24 cr/layer at any size, so ≈ 10 cr. Works on any public image URL (upload local files with upload_file first). Describe which elements become layers in the prompt, optionally bounding them with <bbox>x1 y1 x2 y2</bbox> tags. Downloads every layer image to kie/assets/raw/.',
+      description: 'Split ANY image into independent layers with Seedream (billed per OUTPUT layer incl. base). tier="pro" (default): Seedream 5.0 Pro, 7 cr @1K, 14 @2K, so a 3-layer split ≈ 21 cr. tier="flash": 3.24 cr/layer at any size, so ≈ 10 cr. tier="5.5" (NEW Nov 2026): Seedream 5.5, 3.6 cr/layer @1K/1.5K, 6.3 @2K or auto, + 1.44 cr for the input — with max_images to cap the layer count and optional text recognition. Works on any public image URL (upload local files with upload_file first). Describe which elements become layers in the prompt, optionally bounding them with <bbox>x1 y1 x2 y2</bbox> tags. Downloads every layer image to kie/assets/raw/.',
       inputSchema: {
         type: 'object',
         properties: {
           image_url: { type: 'string', description: 'Public URL of the source image (singular — one image per call)' },
           prompt: { type: 'string', description: 'Which elements to separate into layers, e.g. "Separate the title text <bbox>179 58 809 197</bbox> and the parrot <bbox>330 274 641 991</bbox> into independent layers"' },
-          tier: { type: 'string', enum: ['pro', 'flash'], default: 'pro', description: 'pro = Seedream 5.0 Pro (7 cr/layer @1K, 14 @2K; prompt required). flash = Seedream 5.0 Flash (NEW: 3.24 cr/layer at any size; prompt optional — but WITHOUT a prompt it splits out every element: a poster gave 12 layers = 38.9 cr. Name the elements you want to cap the layer count).' },
-          size: { type: 'string', default: 'auto', description: 'auto, 1K, 1.5K or 2K. Pro: 7 cr/layer at 1K/1.5K, 14 at 2K. Flash: 3.24 at any size.' },
+          tier: { type: 'string', enum: ['pro', 'flash', '5.5'], default: 'pro', description: 'pro = Seedream 5.0 Pro (7 cr/layer @1K, 14 @2K; prompt required). flash = Seedream 5.0 Flash (3.24 cr/layer at any size; prompt optional — but WITHOUT a prompt it splits out every element: a poster gave 12 layers = 38.9 cr. Name the elements you want to cap the layer count). 5.5 = Seedream 5.5 (NEW: 3.6 cr/layer @1K/1.5K, 6.3 @2K/auto, + 1.44 cr input image; prompt optional, ≤2000 chars; supports max_images and text_recognition).' },
+          size: { type: 'string', default: 'auto', description: 'auto, 1K, 1.5K or 2K. Pro: 7 cr/layer at 1K/1.5K, 14 at 2K. Flash: 3.24 at any size. 5.5: 3.6 at 1K/1.5K, 6.3 at 2K — and auto is billed at the 2K rate.' },
+          max_images: { type: 'number', minimum: 2, maximum: 100, description: 'tier "5.5" only: maximum output images INCLUDING the base (2-100, kie default 30). The cheapest way to cap the bill.' },
+          text_recognition: { type: 'boolean', description: 'tier "5.5" only: recognize text in the layers (default false)' },
           output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png', description: 'png recommended for transparency' },
           filename: { type: 'string', description: 'Base output filename; layers get -2, -3... suffixes' },
           download_dir: { type: 'string', description: 'Absolute directory to save into (created if missing). Defaults to the server\'s kie/assets/raw/.' },
         },
         required: ['image_url'],
+      },
+    },
+    {
+      name: 'upscale_image',
+      description: 'NEW (Nov 2026) — Kie Image Upscale: enlarge ANY image 2x / 4x / 8x (or 1x = same-size enhance: denoise + sharpen) keeping the aspect ratio. Detail is restored generatively; text regions get a fidelity pass so lettering is not rewritten. Billed by OUTPUT pixels: 1.5 cr up to 4.19 MP (~2048²), 4 cr up to 16.78 MP (~4096²), 12 cr up to 67.11 MP (~8192²). Input: public URL, JPG/PNG/WEBP/GIF (first frame), ≤20 MB. Output must stay ≤67 MP and ≤16,384 px per side — kie rejects larger requests at submit with a 422 (no charge), so lower upscale_factor. Upload local files with upload_file first.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          image_url: { type: 'string', description: 'Public URL of the source image' },
+          upscale_factor: { type: 'string', enum: ['1', '2', '4', '8'], default: '2', description: 'Multiplies width AND height. 1 = enhance at the same size' },
+          filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save into (created if missing). Defaults to the server\'s kie/assets/raw/.' },
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds. Ignored when wait=false.' },
+        },
+        required: ['image_url'],
+      },
+    },
+    {
+      name: 'upscale_video',
+      description: 'NEW (Nov 2026) — Kie Video Upscale: upscale ANY video (not just Veo output) to 1080P / 2K / 4K, keeping aspect ratio, frame rate, frame count and audio. resolution is an output box: the source is fitted into it without cropping (a larger source is scaled down and enhanced). 1.5 / 3 / 6 cr per second of input for 1080P / 2K / 4K. Input: public URL, MP4/MOV/MKV, ≤50 MB, ≤60 s (checked after download, so an over-limit video fails the task). Output is MP4 (H.264 + AAC). Upload local files with upload_file first.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          video_url: { type: 'string', description: 'Public URL of the source video (≤50 MB, ≤60 s)' },
+          resolution: { type: 'string', enum: ['1080P', '2K', '4K'], default: '2K', description: 'Output box: 1920×1080 / 2560×1440 / 3840×2160 (or the portrait equivalents). 1.5 / 3 / 6 cr per second' },
+          video_seconds: { type: 'number', description: 'Length of the source video in seconds — only used for the cost estimate (estimate_only / max_credits)' },
+          filename: { type: 'string' },
+          download_dir: { type: 'string', description: 'Absolute directory to save into (created if missing). Defaults to the server\'s kie/assets/raw/.' },
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id (async mode) — then poll with check_task and fetch with download_result.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds. Ignored when wait=false.' },
+        },
+        required: ['video_url'],
       },
     },
     {
@@ -2973,6 +3079,25 @@ const handleCallToolInner = async (request) => {
         return { content: [{ type: 'text', text: `✅ Sound generated!\nTask ID: ${taskId}${soundLoop ? ' (loopable)' : ''}\n${files.map(f => `  → ${f.file}${f.id ? ` [audioId: ${f.id}]` : ''}`).join('\n')}` }] };
       }
 
+      // Suno Speech (Nov 2026) — market-only endpoint; Simple and Advanced fields are mutually exclusive.
+      case 'generate_speech': {
+        const built = buildSpeechInput(args);
+        if (built.error) return { content: [{ type: 'text', text: built.error }], isError: true };
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const outFilename = sanitizeFilename(args.filename) || `speech-${ts}.mp3`;
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'ai-music-api/speech', input: built.input });
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        sunoMarketTasks.add(taskId);
+        trackTask({ taskId, model: 'suno/generate-speech', prompt: String(args.script || args.prompt).slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'suno/generate-speech', outFilename);
+        const pollResult = await pollSunoTask(taskId, pollBudgetMs('speech', args));
+        const sunoData = pollResult.sunoData || [];
+        if (!sunoData.length) return { content: [{ type: 'text', text: `Speech task ${taskId} done but no audio was returned.\n${JSON.stringify(pollResult, null, 2).slice(0, 1500)}` }] };
+        const files = await downloadSunoTracks(sunoData, outFilename, 'mp3', resolveOutputDir(args));
+        return { content: [{ type: 'text', text: `✅ Speech generated!\nTask ID: ${taskId}\nCost: ${formatCost('suno/generate-speech', pollResult)}\n${files.map(f => `  → ${f.file}`).join('\n')}` }] };
+      }
+
       // ── New Suno Tools (April-May 2026) ──
 
       case 'generate_persona': {
@@ -3334,22 +3459,50 @@ const handleCallToolInner = async (request) => {
         return { content: [{ type: 'text', text: inferenceNote + renderProfileBrief(chosen, request) }] };
       }
 
+      // Kie Image / Video Upscale (Nov 2026) — source URL in, one upscaled file out.
+      case 'upscale_image':
+      case 'upscale_video': {
+        const isVideo = name === 'upscale_video';
+        const src = isVideo ? args.video_url : args.image_url;
+        if (!src) return { content: [{ type: 'text', text: `${name} needs ${isVideo ? 'video_url' : 'image_url'} (a public URL — upload local files with upload_file first).` }], isError: true };
+        const upModel = isVideo ? 'video/upscale' : 'kie/image-upscale';
+        const upInput = isVideo ? { video_url: src, resolution: args.resolution || '2K' } : { image_url: src, upscale_factor: String(args.upscale_factor ?? '2') };
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const outFilename = sanitizeFilename(args.filename) || (isVideo ? `upscaled-${upInput.resolution}-${ts}.mp4` : `upscaled-${upInput.upscale_factor}x-${ts}.png`);
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: upModel, input: upInput });
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start the upscale — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        const upEntry = { taskId, model: upModel, prompt: src.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
+        trackTask(upEntry);
+        if (args.wait === false) return submitOnly(taskId, upModel, outFilename);
+        const pollResult = await pollTask(taskId, pollBudgetMs(isVideo ? 'video' : 'image', args));
+        const resultUrls = extractResultUrls(pollResult);
+        if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Upscale task ${taskId} done but no result URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
+        const outPath = await downloadToFile(resultUrls[0], join(resolveOutputDir(args), outFilename));
+        upEntry.status = 'downloaded'; appendTaskLog(upEntry);
+        return { content: [{ type: 'text', text: [`✅ ${isVideo ? `Video upscaled to ${upInput.resolution}` : `Image upscaled ${upInput.upscale_factor}x`}!`, `Task ID: ${taskId}`, `Cost: ${formatCost(upModel, pollResult)}`, ``, `Downloaded to: ${outPath}`, `Result URL: ${resultUrls[0]}`].join('\n') }] };
+      }
+
       case 'seedream_layer_decompose': {
-        const { image_url, prompt = '', tier = 'pro', size = 'auto', output_format = 'png', filename } = args;
-        const layerModel = tier === 'flash' ? 'seedream/5-flash-layer-decomposition' : 'seedream/5-pro-layer-decomposition';
-        if (tier !== 'flash' && !prompt) return { content: [{ type: 'text', text: 'tier "pro" needs a prompt describing which elements to separate (tier "flash" can run without one).' }], isError: true };
+        const { image_url, prompt = '', tier = 'pro', size = 'auto', output_format = 'png', filename, max_images, text_recognition } = args;
+        const layerModel = { flash: 'seedream/5-flash-layer-decomposition', '5.5': 'seedream/5-5-layer-decomposition' }[tier] || 'seedream/5-pro-layer-decomposition';
+        if (tier === 'pro' && !prompt) return { content: [{ type: 'text', text: 'tier "pro" needs a prompt describing which elements to separate (tiers "flash" and "5.5" can run without one).' }], isError: true };
+        if (tier !== '5.5' && (max_images !== undefined || text_recognition !== undefined)) return { content: [{ type: 'text', text: 'max_images and text_recognition are Seedream 5.5 options — set tier: "5.5".' }], isError: true };
+        if (max_images !== undefined && (!Number.isInteger(max_images) || max_images < 2 || max_images > 100)) return { content: [{ type: 'text', text: 'max_images must be an integer from 2 to 100 (it includes the base image).' }], isError: true };
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const ext = output_format === 'jpeg' ? 'jpg' : 'png';
         const outFilename = sanitizeFilename(filename) || `seedream-layers-${ts}.${ext}`;
 
         const layerInput = { image_url, size, output_format };
         if (prompt) layerInput.prompt = prompt;
+        if (max_images !== undefined) layerInput.max_images = max_images;
+        if (text_recognition !== undefined) layerInput.text_recognition = text_recognition;
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: layerModel, input: layerInput });
         const taskId = result.data?.taskId || result.taskId;
         if (!taskId) return { content: [{ type: 'text', text: `Failed to start layer decomposition — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
         const taskEntry = { taskId, model: layerModel, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() };
         trackTask(taskEntry);
-        if (args.wait === false) return submitOnly(taskId, 'seedream/5-pro-layer-decomposition', outFilename);
+        if (args.wait === false) return submitOnly(taskId, layerModel, outFilename);
 
         const pollResult = await pollTask(taskId, pollBudgetMs('image', args));
         const resultUrls = extractResultUrls(pollResult);
@@ -3782,6 +3935,7 @@ if (httpFlag) {
 // (gitignored) RAW_DIR.
 export {
   summarizeSpend,
+  buildSpeechInput,
   estimateCallCredits,
   spendGuard,
   camelToSnake,
