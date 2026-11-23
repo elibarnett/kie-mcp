@@ -2,11 +2,11 @@
 
 All notable changes to kie-mcp will be documented here.
 
-## [5.12.0] — 2026-11-16
+## [5.12.0] — 2026-11-23
 
-Closes #133, #134, #135, #136, #137, #138, #139, #140, #141, all filed by the weekly live check.
+Closes #133, #134, #135, #136, #137, #138, #139, #140, #141, #143, #144, #145, all filed by the weekly live check.
 
-Prices below are kie's published rates, read from its marketing pages on 2026-11-16. **Nothing in this release was generated live**: every new slug was confirmed with a deliberately invalid request (kie answers with a validation error and charges nothing), so inputs follow the docs and the first real charge may differ from the estimate.
+Prices are kie's published rates, read from its marketing pages on 2026-11-16 and 2026-11-23. Every new slug was confirmed with a deliberately invalid request (kie answers with a validation error and charges nothing), and every new model and tool except `upscale_video` then ran live through the MCP on 2026-11-23 (see **Live** below).
 
 ### Added
 
@@ -14,6 +14,15 @@ Prices below are kie's published rates, read from its marketing pages on 2026-11
 - **MiniMax H3 Image** (`minimax-h3/text-to-image`, `minimax-h3/image-edit`, #137): **1.8 cr** at 1K or 2K, **5.5 cr** at 4K; 11 aspect ratios or an exact `width` × `height`. Edits take up to 16 references at **0.5 cr each**. The mutually exclusive size inputs are checked before submitting.
 - **Gemini Omni 1.2 Flash** (`gemini-omni/flash-1-2`, #133): any duration 3–15 s, **4 / 9 / 10 / 22 cr/s** at 360p / 720p / 1080p / 4K. Four modes: text or reference images (≤6, plus ≤2 character IDs), first frame, first→last frame (3–10 s), or video edit. Voice IDs are not accepted by 1.2. **`gemini-omni/flash-1-2-extend`** adds 3–10 s to a finished clip (4 / 9 cr per added second).
 - **Seedance 2.5 Flash** (`bytedance/seedance-2-5-flash`, #138): 4–30 s at 480p / 720p, **18.5 / 41 cr/s** (11.5 / 25.5 with reference video, billed on input + output). Text, first/last frame, or multimodal references (10 images, 5 videos, 5 audio clips) with `omni_reference_task_type` for edit / extend. kie marks these prices as beta.
+- **LTX 2.5** (#143), Lightricks video with native synced audio (quoted text is spoken as dialogue) and "Shot 1 / Shot 2" multi-shot prompts:
+  - **`ltx/2-5-fast-text-to-video`** / **`-image-to-video`**: 6–20 s, 720p / 1080p / 1440p, **10.8 / 15.6 / 22.8 cr/s**. 1440p or 48 / 50 fps caps the clip at 10 s; that is checked before submitting. Frame rate is free.
+  - **`ltx/2-5-pro-text-to-video`** / **`-image-to-video`**: 6 / 8 / 10 s at 720p / 1080p, **14.4 / 20.4 cr/s**.
+  - **`ltx/2-5-fast-audio-to-video`**: your speech, singing or music (`model_options.audio_url`) becomes the soundtrack and the picture follows it, optionally from a first-frame image. Fast rates, billed on the real output length. The estimate uses `duration` or `audio_duration`, capped at 20 s (10 s at 1440p / 48–50 fps).
+- **Kling Image 4.0** (#144):
+  - **`kling-4-0/image`**: one model for text-to-image and image-to-image at native 2k / 4k / 8k, **11.3 / 17 / 28.3 cr per output image**, plus **0.5 cr per reference image or element**. Up to 10 references (`@image_1`…) and named `elements` (`@Hero`, 2–4 views each). `mode: "series"` makes a coherent set of 2–10 images, each billed. A mention of a missing `@image_N`, a bad element name or more than 10 references is rejected before submitting. 8k returns JPEG.
+  - **`kling-4-0/long-image`**: one tall image per task. `skill: "ecommerce"` builds a product detail page from 1–3 product photos (`length` short / medium / long). `skill: "webpage"` designs a page from `style_image` / `subject_image`. Per image at 1k / 2k: ecommerce short 42.5 / 51, medium 84.5 / 99, long 141 / 155, webpage 99 / 107.5, plus 0.5 cr per input image. kie 422s a field from the other skill, so the mix is rejected with an explanation first.
+  - kie's docs say long-image pricing "depends only on resolution", but its pricing page lists per-length prices. The estimate follows the pricing page.
+- **`moderate_content`** (KIE NSFW Moderation, new on kie 2026-11-23): a pass / block verdict for sexual content in a text, one image, or both, at the `social` (default), `strict` or `adult` level, with levels, scores, face ages and other harmful categories for display. **0.15 cr** per check; failed checks are free. Use it to screen prompts before generating or results before publishing.
 - **`upscale_image`** (Kie Image Upscale, #136): 1x / 2x / 4x / 8x, billed by output pixels (**1.5 / 4 / 12 cr** up to ~4 / 17 / 67 MP).
 - **`upscale_video`** (Kie Video Upscale, #136): any video ≤ 60 s to 1080P / 2K / 4K at **1.5 / 3 / 6 cr per second** of input. Pass `video_seconds` for a real cost estimate.
 - **`generate_speech`** (Suno Speech, #139): expressive spoken audio from a scene `prompt` (the model writes the script) or your own `script` with `tone`, `variety`, `vocal_gender` and `background_music`. **12 cr** per request. Mixing the two modes is rejected with an explanation instead of kie's bare 422.
@@ -21,12 +30,43 @@ Prices below are kie's published rates, read from its marketing pages on 2026-11
 ### Fixed
 
 - **Kling 2.6** (`kling/text-to-video`, `kling/image-to-video`, #140): 10 → **12.6 cr/s**, and **25.2 cr/s with `sound: true`** (kie: 63 / 126 cr per 5 s). Estimates were under-quoting by up to 2.5×. `kling/motion-control` moves 10 → 12.6 cr/s too.
-- **Kling V2.1** (#134): Master 32 → **50.4 cr/s**, Standard 5 → **10.1**, Pro 10 → **17.6** (kie: 252 / 50.5 / 88 cr per 5 s). Standard and Pro were not flagged by the drift watch; they are on the same pricing page.
+- **Kling V2.1** (#134): Standard 5 → **10.1 cr/s**, Pro 10 → **17.6** (kie: 50.5 / 88 cr per 5 s). Neither was flagged by the drift watch; they are on the same pricing page as Master.
 - `seedream_layer_decompose` with `wait: false` now reports the model it actually submitted.
+- **Live check flagged retired models as missing.** kie still documents Kling V2.1 Master with `deprecated: true`, so the stateless docs check listed it once the MCP removed it. Deprecated pages are now skipped. Pages that come back as the docs site's HTML shell are retried twice and then listed as not checked, instead of being dropped silently. That is how the NSFW Moderation page slipped through on the first run.
+- **Drift watch misread slash price lists.** In "10.8 / 15.6 / 22.8 credits" it saw only 22.8, so it reported false drift on LTX 2.5 Fast. It now reads every figure. It also knows four marketing pages whose paths don't match their slugs (`image-upscaler`, `4o-image-api`, `features/v3-api`, `nsfw-moderation`), so the remaining catalog findings are chat models.
+- `scripts/drift-watch.mjs` had a raw NUL byte in a string literal, which made git treat the file as binary and hid its diffs in PRs. It is now written as `'\0'`.
+
+### Removed
+
+- **Kling V2.1 Master** T2V + I2V (#145): kie now answers `410 — "no longer available on Kie.ai"`, and its docs mark both endpoints deprecated. Use `kling-4/reference-to-video` or `kling-4/keyframe-to-video`, which kie suggests as replacements. This supersedes the 32 → 50.4 cr/s re-pricing from #134.
 
 ### Security
 
 - `npm audit fix` (#141): hono 4.13.14 → 4.13.19 (5 moderate advisories, transitive via the MCP SDK; kie-mcp does not use hono's router). `npm audit`: 0.
+
+### Live
+
+All runs on 2026-11-23 went through the MCP tools. Every charge matched the published rate: 451.34 cr in total, and the account balance moved by exactly that.
+
+| Call | Charged |
+|---|---|
+| LTX 2.5 Fast T2V, 720p, 6 s | 64.8 |
+| LTX 2.5 Pro I2V, 720p, 6 s | 86.4 |
+| LTX 2.5 Fast audio-to-video, 720p, 3 s of a longer clip | 32.4 |
+| Kling Image 4.0, 2k T2I / with one `@image_1` reference | 11.3 / 11.8 |
+| Kling Image 4.0 Long Image, ecommerce short, 1k, one product photo | 43 |
+| Seedream 5.5 T2I 1K / layer split 1K with `max_images: 2` | 3.6 / 8.64 |
+| MiniMax H3 Image T2I 1K / edit with one reference | 1.8 / 2.3 |
+| Gemini Omni 1.2 Flash, 360p, 3 s, then Extend +3 s | 12 + 12 |
+| Seedance 2.5 Flash, 480p, 4 s, silent | 74 |
+| Kling 2.6 T2V, 5 s, silent (confirms the #140 re-pricing) | 63 |
+| `generate_speech` (Simple mode; returns two takes) | 12 |
+| `upscale_image` 2x of a 2816×1584 image | 12 |
+| `moderate_content` text / text + image (strict) | 0.15 / 0.15 |
+
+- **`upscale_image` is billed by OUTPUT pixels.** A 2x upscale of a 4.5 MP source lands above 16.78 MP, so it costs 12 cr, not the 1.5 cr the estimate assumes for a ~1 MP source. The estimate is marked uncertain and states that assumption.
+- **`upscale_video` is not live-confirmed.** kie answered "The service is busy" twice (not billed). The request was accepted both times.
+- `gemini-omni/flash-1-2-extend` billed the source's 360p rate (4 cr/s); its estimate assumes 720p (9 cr/s) because the source resolution isn't known at submit time.
 
 ### Unchanged
 

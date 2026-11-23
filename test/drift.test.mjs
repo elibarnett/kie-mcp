@@ -93,3 +93,25 @@ test('catalogGroupKnown — tool-backed models and dotted versions (Nov 2026)', 
   assert.equal(catalogGroupKnown('gemini-2.5-pro-preview-tts', [...slugs, 'google/gemini-2-5-pro-tts']), true, '-preview is ignored');
   assert.equal(catalogGroupKnown('vidu-q5', slugs), false);
 });
+
+test('drift-watch — slash price lists and catalog aliases (LTX 2.5, Nov 2026)', async () => {
+  const { advertisedRates, priceMatches, catalogGroupKnown } = await import('../scripts/drift-watch.mjs');
+  const ltx = 'LTX 2.5 Fast: 10.8 / 15.6 / 22.8 credits ($0.054 / $0.078 / $0.114) per second of video at 720p / 1080p / 1440p';
+  assert.deepEqual(advertisedRates(ltx), [10.8, 15.6, 22.8]);
+  assert.ok(priceMatches(15.6, ltx), 'the 1080p default matches the middle figure');
+  assert.deepEqual(advertisedRates('2,800 credits for 10 seconds'), [2800, 280]);
+  assert.ok(catalogGroupKnown('image-upscaler', ['kie/image-upscale']));
+  assert.ok(!catalogGroupKnown('gemini-4-neon', ['kie/image-upscale']));
+});
+
+test('live-check — deprecated docs pages are not "missing"; unreadable pages are detectable', async () => {
+  const { findUnsupportedModels, parseDocsPage } = await import('../scripts/live-check.mjs');
+  const spec = (slug, dep) => `paths:\n  /api/v1/jobs/createTask:\n    post:\n      deprecated: ${dep}\n      x:\n              model: ${slug}\n`;
+  assert.deepEqual(parseDocsPage(spec('kling/v2-1-master-text-to-video', true)), { model: 'kling/v2-1-master-text-to-video', deprecated: true });
+  assert.deepEqual(parseDocsPage('<!DOCTYPE html><html>'), { model: null, deprecated: false });
+  const pages = [
+    { page: 'market/kling/v2-1-master-text-to-video.md', ...parseDocsPage(spec('kling/v2-1-master-text-to-video', true)) },
+    { page: 'market/kie/nsfw-moderation.md', ...parseDocsPage(spec('kie/nsfw-moderation', false)) },
+  ];
+  assert.deepEqual(findUnsupportedModels(pages, "'ltx/2-5-pro-text-to-video'").map((p) => p.model), ['kie/nsfw-moderation']);
+});

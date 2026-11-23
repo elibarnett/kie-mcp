@@ -70,27 +70,43 @@ const CHAT_PATH = /\/market\/(claude|chat|codex|grok|deepseek|kimi|moonshot)[\/-
 // unlike the docs-index diff, it can't be "used up" by an earlier run that moved
 // the baseline without acting (that's how GPT Image 2.6 / Kling 4.0 Flash /
 // Nemotron slipped past the weekly check in Nov 2026).
+// Pages kie marks `deprecated: true` (retired models it still documents, e.g. Kling
+// V2.1 Master since Nov 2026) are skipped: the MCP removes those on purpose.
 export function findUnsupportedModels(pages, sourceText) {
-  return pages.filter((p) => p.model && !CHAT_PATH.test(`/${p.page}`) && !sourceText.includes(`'${p.model}'`));
+  return pages.filter((p) => p.model && !p.deprecated && !CHAT_PATH.test(`/${p.page}`) && !sourceText.includes(`'${p.model}'`));
+}
+
+// Pure: read a docs page's model slug and deprecated flag. null model = the page
+// didn't come back as the OpenAPI markdown (the docs site sometimes serves its
+// HTML shell to scripted fetches).
+export function parseDocsPage(text) {
+  const t = String(text);
+  return { model: t.match(/^\s+model: ([a-z0-9][a-z0-9._\/-]+)\s*$/m)?.[1] || null, deprecated: /^\s+deprecated: true\s*$/m.test(t) };
 }
 
 async function unsupportedSection(llmsText) {
   const urls = [...new Set([...String(llmsText).matchAll(/\[([^\]]+)\]\((https:\/\/docs\.kie\.ai\/market\/[^)]+\.md)\)/g)]
     .filter((m) => !CHAT_PATH.test(m[2])).map((m) => `${m[2]}\t${m[1]}`))].map((x) => x.split('\t'));
   const pages = [];
+  const get = (url) => fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
   for (let i = 0; i < urls.length; i += 12) {
     await Promise.all(urls.slice(i, i + 12).map(async ([url, title]) => {
-      const t = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
-      const model = t.match(/^\s+model: ([a-z0-9][a-z0-9._\/-]+)\s*$/m)?.[1];
-      pages.push({ page: url.replace('https://docs.kie.ai/', ''), title, model });
+      let p = parseDocsPage(await get(url));
+      for (let a = 0; !p.model && a < 2; a++) { await sleep(1500 * (a + 1)); p = parseDocsPage(await get(url)); }
+      pages.push({ page: url.replace('https://docs.kie.ai/', ''), title, ...p });
     }));
   }
+  // A page that never returned its spec could hide a new model — say so instead of passing silently.
+  const unread = pages.filter((p) => !p.model && !/\/(common|file-upload)\b|get-task|callback/i.test(p.page));
   const src = ['server.mjs', ...readdirSync(join(ROOT, 'data')).filter((f) => f.endsWith('.mjs')).map((f) => `data/${f}`)]
     .map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
   const missing = findUnsupportedModels(pages, src);
-  if (!missing.length) return `### 🧩 Docs models not in the MCP\nNone — all ${pages.filter((p) => p.model).length} media model pages are covered.`;
+  const unreadNote = unread.length ? `\n⚠️ ${unread.length} page(s) could not be read after 3 tries, so they were NOT checked: ${unread.map((p) => p.page).join(', ')}` : '';
+  const deprecated = pages.filter((p) => p.deprecated).length;
+  const skipped = deprecated ? ` (${deprecated} deprecated page${deprecated > 1 ? 's' : ''} skipped)` : '';
+  if (!missing.length) return `### 🧩 Docs models not in the MCP\nNone — all ${pages.filter((p) => p.model && !p.deprecated).length} media model pages are covered${skipped}.${unreadNote}`;
   return [`### 🧩 Docs models not in the MCP (${missing.length})`, ...missing.map((p) => `- **${p.title}** — \`${p.model}\` (${p.page})`),
-    '_Stateless check: lists every docs model slug the registry never mentions, regardless of earlier runs._'].join('\n');
+    `_Stateless check: lists every docs model slug the registry never mentions, regardless of earlier runs${skipped}._${unreadNote}`].join('\n');
 }
 
 async function docsSection() {

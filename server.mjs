@@ -271,6 +271,19 @@ function estimateCallCredits(name, args = {}) {
     }
     const p = price ?? PRICING[key];
     if (typeof p !== 'number') return null;
+    // Kling Image 4.0: per output image × count, + 0.5 cr per reference image or element (T2I has none).
+    if (id === 'kling-4-0/image') {
+      const n = Number(opts.count) || (opts.mode === 'series' ? 2 : 1);
+      const refs = (args.image_urls?.length || 0) + (opts.elements?.length || 0);
+      return { credits: fmt(p * n + 0.5 * refs), basis: `${id} (${tier}): ${p} cr × ${n} image${n > 1 ? 's' : ''}${refs ? ` + 0.5 cr × ${refs} reference${refs > 1 ? 's' : ''}` : ''}`, uncertain: true };
+    }
+    if (id === 'kling-4-0/long-image') {
+      const res = opts.resolution === '1k' ? '1k' : '2k';
+      const webpage = String(opts.skill || 'ecommerce').toLowerCase() === 'webpage';
+      const table = webpage ? { '1k': 99, '2k': 107.5 } : { short: { '1k': 42.5, '2k': 51 }, medium: { '1k': 84.5, '2k': 99 }, long: { '1k': 141, '2k': 155 } }[opts.length || 'medium'] || { '1k': 84.5, '2k': 99 };
+      const inputs = webpage ? [opts.style_image, opts.subject_image].filter(Boolean).length : (args.image_urls?.length || 0);
+      return { credits: fmt(table[res] + 0.5 * inputs), basis: `${id} (${webpage ? 'webpage' : `ecommerce, ${opts.length || 'medium'}`}, ${res}): ${table[res]} cr per long image${inputs ? ` + 0.5 cr × ${inputs} input image${inputs > 1 ? 's' : ''}` : ''}`, uncertain: true };
+    }
     // Some edit models bill every input image on top of the output (Seedream 5.5, MiniMax H3 Image).
     const perInput = PRICE_TIERS[id]?.perInputImage;
     if (perInput) {
@@ -286,6 +299,10 @@ function estimateCallCredits(name, args = {}) {
     const { price, tier, videoInput } = tierPrice(id, res);
     const p = price ?? PRICING[def?.apiModel];
     if (typeof p !== 'number') return null;
+    if (def?.billedOnAudio && def.billedSeconds?.(opts)) {
+      const secs = def.billedSeconds(opts);
+      return { credits: fmt(p * secs), basis: `${id}${tier ? ` (${tier})` : ''}: ${p} cr/s × ${secs}s (billed on the real output length)`, uncertain: !opts.duration };
+    }
     if (def?.billedOnAudio) {
       const secs = Number(opts.audio_duration) || 15;
       return { credits: fmt(p * secs), basis: `${id}: ${p} cr/s × ${opts.audio_duration ? `${secs}s of audio` : 'the audio length (assumed 15s — pass model_options.audio_duration for a real estimate)'}`, uncertain: !opts.audio_duration };
@@ -1331,7 +1348,7 @@ const handleListToolsBase = async () => ({
   tools: [
     {
       name: 'generate_image',
-      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning, 8cr). Cheap fast all-rounder→nano-banana-2-1 (4cr, ~13s, NEW Oct 2026; NB2 doubled to 8cr). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-6/flare-* (NEW Nov 2026, ~6cr @1K, 16 ratios incl. 3:1) / sunburst-* (premium) / economy-* (5cr flat @1K, can return animated GIF); previous gen gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Newest Seedream→seedream/5-5-text-to-image (NEW Nov 2026: 3.6cr @1K, 6.3 @2K, transparent BG) / seedream/5-5-image-to-image (+1.44cr per input). Cheap 2K/4K→minimax-h3/text-to-image (NEW Nov 2026: 1.8cr @1K-2K, 5.5 @4K, exact custom sizes) / minimax-h3/image-edit (16 refs). Split any image into layers→seedream_layer_decompose tool (from 3.24cr/layer; tier "5.5" NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→upscale_image tool (NEW: 2x/4x/8x, 1.5-12cr, keeps text) or recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→flux-3/klein-text-to-image (1.6cr @1K, 4K up to 6.5cr, NEW) or flux-3/klein-edit-image (1.6cr, 10 free refs); z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
+      description: `Generate an image using kie.ai. TIP: for architecture/game-art/advertising/product-UI jobs, call profile_brief first — it returns the vertical's intake questions, routing, and prompt formulas. (60+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Architecture/blueprints→gpt4o or nano-banana-2 (reasoning, 8cr). Cheap fast all-rounder→nano-banana-2-1 (4cr, ~13s, NEW Oct 2026; NB2 doubled to 8cr). Game art/3D→seedream/4.5 or 5-lite. Character sheets→ideogram/character. Text/logos→ideogram/v3 (best text). Photo editing→flux-kontext-pro. Newest OpenAI→gpt-image-2-6/flare-* (NEW Nov 2026, ~6cr @1K, 16 ratios incl. 3:1) / sunburst-* (premium) / economy-* (5cr flat @1K, can return animated GIF); previous gen gpt-image-2-5/flare-* (6cr @1K, fast default) or gpt-image-2-5/sunburst-* (premium polish); both 1K-4K + transparent background (NEW). Newest Seedream→seedream/5-5-text-to-image (NEW Nov 2026: 3.6cr @1K, 6.3 @2K, transparent BG) / seedream/5-5-image-to-image (+1.44cr per input). Native 2K-8K, @image_N refs, named @elements, coherent 2-10 image series→kling-4-0/image (NEW Nov 2026: 11.3/17/28.3cr @2k/4k/8k per image, +0.5 per ref). E-commerce product detail page or web page design as one long image→kling-4-0/long-image (NEW, 42.5-155cr). Cheap 2K/4K→minimax-h3/text-to-image (NEW Nov 2026: 1.8cr @1K-2K, 5.5 @4K, exact custom sizes) / minimax-h3/image-edit (16 refs). Split any image into layers→seedream_layer_decompose tool (from 3.24cr/layer; tier "5.5" NEW). Generate-then-refine by named region→grok-imagine-image-2-0/text-to-image (4cr, #2 Arena T2I+edit) then grok_segment_map (free) + grok_image_edit (4cr; also edits ANY uploaded image via image_urls mode). Anime→qwen (3cr cheapest); qwen2-1/* (4cr, NEW) adds transparent BG, mask inpainting, 10-ref compositing. Fast drafts→nano-banana-2-lite (4cr, ~4s, NEW). Upscale→upscale_image tool (NEW: 2x/4x/8x, 1.5-12cr, keeps text) or recraft/crisp-upscale (0.5cr). BG removal→recraft/remove-background. Cheapest→flux-3/klein-text-to-image (1.6cr @1K, 4K up to 6.5cr, NEW) or flux-3/klein-edit-image (1.6cr, 10 free refs); z-image,qwen (3cr). Best quality→nano-banana-pro (24cr), flux-kontext-max (100cr). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1431,7 +1448,7 @@ const handleListToolsBase = async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Higher-quality PixVerse without templates→pixverse-v6-max T2V/I2V (NEW, 8.8cr/s @720p). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p; transformation=restyle existing video). Long consistent-character clips (3-30s) with named @subjects, voices and reference videos→kling-4/reference-to-video (NEW, 28.5cr/s @720p); first→keyframes→last animation→kling-4/keyframe-to-video (NEW). Same at 720p for 40% less→kling-4-flash/reference-to-video (17cr/s, 3-20s, NEW Nov 2026); kling-4-flash/image-to-video from a first frame. Cheapest multimodal Google video→gemini-omni/flash-1-2 (NEW Nov 2026: 4/9/10/22cr/s @360p/720p/1080p/4K, any 3-15s, first→last frame, video edit; lengthen with gemini-omni/flash-1-2-extend). Cheaper long Seedance takes→bytedance/seedance-2-5-flash (NEW Nov 2026: 18.5cr/s @480p, 41 @720p, 4-30s, audio). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-2-0 (NEW Oct 2026: 14cr/s, up to 5-min audio, half of 1.5's price), omnihuman-1-5 (multi-person masks, 1080p), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
+      description: `Generate a video using kie.ai (85+ models). Downloads to kie/assets/raw/. MODEL GUIDE: Best cinematic→veo-3/text-to-video (50cr/s, audio). Fast+cheap→grok-imagine-video-1-5-preview (1.6-3cr/s, audio, NEW), wan/flash-image-to-video (6-8cr/s measured; alias of wan/2-6-flash). Budget cinematic→hailuo-standard (4cr/s). First→last-frame or anything-from-anything refs→gemini-omni/flash-1-1 (NEW, est. ~63cr per 4s clip). Budget multimodal refs→bytedance/seedance-2-mini (9.5cr/s @480p). 30s single takes→bytedance/seedance-2-5 (now up to 1080p; set model_options.draft=true for a 28cr/s 480p preview, then upgrade the approved take with bytedance/seedance-2-5-draft). Cheap or 4K image-to-video with audio→vidu-q4/image-to-video (7.2cr/s @540p … 62.4 @4K, NEW); 15-image refs→vidu-q4/reference-to-video. Budget all-rounder w/ audio+templates+extend→pixverse-v6 family (4-9.6cr/s, NEW; I2V is its strength; transition=first/last-frame morph). Higher-quality PixVerse without templates→pixverse-v6-max T2V/I2V (NEW, 8.8cr/s @720p). Multilingual lip-synced dialogue→happyhorse-1-1 T2V/I2V/R2V (NEW). 2K + stereo audio→minimax-h3 (8cr/s @768P, price halved Sept 2026). Per-shot scripted multi-shot→kling-3-omni (14cr/s @720p; transformation=restyle existing video). Long consistent-character clips (3-30s) with named @subjects, voices and reference videos→kling-4/reference-to-video (NEW, 28.5cr/s @720p); first→keyframes→last animation→kling-4/keyframe-to-video (NEW). Same at 720p for 40% less→kling-4-flash/reference-to-video (17cr/s, 3-20s, NEW Nov 2026); kling-4-flash/image-to-video from a first frame. Cheapest multimodal Google video→gemini-omni/flash-1-2 (NEW Nov 2026: 4/9/10/22cr/s @360p/720p/1080p/4K, any 3-15s, first→last frame, video edit; lengthen with gemini-omni/flash-1-2-extend). Cheaper long Seedance takes→bytedance/seedance-2-5-flash (NEW Nov 2026: 18.5cr/s @480p, 41 @720p, 4-30s, audio). Long takes WITH dialogue/SFX on a budget→ltx/2-5-fast-text-to-video (NEW Nov 2026: 6-20s, 10.8/15.6/22.8cr/s @720p/1080p/1440p, multi-shot; also -image-to-video) or ltx/2-5-pro-* (14.4/20.4cr/s, ≤10s). Music video / talking head from your own audio→ltx/2-5-fast-audio-to-video (NEW, same rates, billed on the audio length). Next-gen Wan draft→wan/3-0-video (8cr/s @480P, NEW). Fast Kling→kling/v3-turbo (18cr/s, audio, NEW). Image-to-video→veo-3/image-to-video (include a sound cue like "SFX: room tone" — Veo I2V intermittently fails its audio pass without one; images must be served with their real Content-Type, upload via upload_file), kling/image-to-video. Avatar/talking head→omnihuman-2-0 (NEW Oct 2026: 14cr/s, up to 5-min audio, half of 1.5's price), omnihuman-1-5 (multi-person masks, 1080p), kling/ai-avatar-pro, infinitalk/from-audio. Re-dub existing footage→volcengine/video-to-video-lip-sync (8cr/s, NEW). Motion control→kling/motion-control, wan/animate-move. Extend video→use veo_extend or runway_extend tools. NOTE: Sora 2 family removed (OpenAI API sunset Sept 2026). Use list_models filter="use-case" to explore.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -2117,6 +2134,20 @@ const handleListToolsBase = async () => ({
           max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds. Ignored when wait=false.' },
         },
         required: ['video_url'],
+      },
+    },
+    {
+      name: 'moderate_content',
+      description: 'NEW (Nov 2026) — KIE NSFW Moderation: check a TEXT (e.g. a prompt before generating), ONE IMAGE (e.g. a result before publishing), or both together, and get a pass / block verdict for sexual content. 0.15 credits per check (text + image together count once); failed checks are free. scene: "social" (default) blocks nudity and explicit content but usually allows suggestive; "strict" blocks anything above none; "adult" allows adult content. Sexual content involving minors is blocked in every scene. Act on the verdict only; scores and levels are for display and may shift as kie updates its rules. Also lists other harmful categories (violence, weapons) for reference; they do not change the verdict. For a video, check sampled frames (~1 per second) and treat any block as a block.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: 'Text to review, any language, up to 12,000 characters' },
+          image_url: { type: 'string', description: 'Public URL of ONE image (JPG/PNG/WEBP/GIF first frame, ≤20 MB, ≤50 MP). Upload local files with upload_file first' },
+          scene: { type: 'string', enum: ['social', 'strict', 'adult'], default: 'social', description: 'Moderation level' },
+          wait: { type: 'boolean', default: true, description: 'Set false to submit and return immediately with the task_id — then poll with check_task.' },
+          max_wait_seconds: { type: 'number', minimum: 30, maximum: 3600, description: 'Override the blocking-mode polling budget in seconds. Ignored when wait=false.' },
+        },
       },
     },
     {
@@ -3528,6 +3559,41 @@ const handleCallToolInner = async (request) => {
             ].join('\n'),
           }],
         };
+      }
+
+      // KIE NSFW Moderation (Nov 2026) — verdict JSON in resultJson.resultObject, no file.
+      case 'moderate_content': {
+        const { text, image_url, scene = 'social' } = args;
+        if (!text && !image_url) return { content: [{ type: 'text', text: 'moderate_content needs text, image_url, or both.' }], isError: true };
+        if (text !== undefined && (typeof text !== 'string' || text.length > 12000)) return { content: [{ type: 'text', text: `text must be a string of at most 12,000 characters (got ${typeof text === 'string' ? text.length : typeof text}).` }], isError: true };
+        if (image_url && !/^https?:\/\//i.test(image_url)) return { content: [{ type: 'text', text: 'image_url must be a public http(s) URL — upload local files with upload_file first.' }], isError: true };
+        if (!['social', 'strict', 'adult'].includes(scene)) return { content: [{ type: 'text', text: 'scene must be social, strict or adult.' }], isError: true };
+        const modInput = { scene };
+        if (text) modInput.text = text;
+        if (image_url) modInput.image_url = image_url;
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'kie/nsfw-moderation', input: modInput });
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start the moderation check — no taskId.\n${JSON.stringify(result, null, 2)}` }] };
+        trackTask({ taskId, model: 'kie/nsfw-moderation', prompt: (text || image_url).slice(0, 80), filename: '', status: 'polling', createdAt: new Date().toISOString() });
+        if (args.wait === false) return submitOnly(taskId, 'kie/nsfw-moderation', '');
+        const pollResult = await pollTask(taskId, pollBudgetMs('image', args));
+        let rj = pollResult.resultJson;
+        try { rj = typeof rj === 'string' ? JSON.parse(rj) : rj; } catch { /* leave raw */ }
+        const r = rj?.resultObject;
+        if (!r?.suggestion) return { content: [{ type: 'text', text: `Moderation task ${taskId} finished without a verdict.\nRaw: ${JSON.stringify(pollResult, null, 2)}` }] };
+        const block = r.suggestion === 'block';
+        const img = r.details?.image, txt = r.details?.text;
+        const lines = [
+          `${block ? '🚫 BLOCK' : '✅ PASS'} — scene "${scene}", NSFW level: ${r.nsfw_level ?? 'n/a'}${typeof r.minor_risk === 'number' ? `, minor risk ${r.minor_risk}` : ''}`,
+          txt ? `Text: level ${txt.nsfw_level}, unsafe score ${txt.unsafe_score}${txt.categories?.length ? `, categories: ${txt.categories.join(', ')}` : ''}${txt.age_signals?.length ? `, age signals: ${txt.age_signals.join(', ')}` : ''}` : null,
+          img ? `Image (${img.image_type || r.image_type || '?'}): level ${img.nsfw_level}, unsafe score ${img.unsafe_score}${img.categories?.length ? `, categories: ${img.categories.join(', ')}` : ''}${img.faces?.length ? `, ${img.faces.length} face(s), youngest est. age ${img.min_face_age ?? '?'}` : ''}` : null,
+          r.reasons?.length ? `Reasons: ${r.reasons.join('; ')}` : null,
+          r.other_categories?.length ? `Other harmful categories (do not affect the verdict): ${r.other_categories.join(', ')}` : null,
+          `Task ID: ${taskId}`,
+          `Cost: ${formatCost('kie/nsfw-moderation', pollResult)}`,
+          `Act on the verdict only — scores and levels may change as kie updates its detection rules.`,
+        ].filter(Boolean);
+        return { content: [{ type: 'text', text: lines.join('\n') }] };
       }
 
       case 'grok_segment_map': {

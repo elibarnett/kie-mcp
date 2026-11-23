@@ -716,8 +716,49 @@ test('v5.12.0 — Seedream 5.5, MiniMax H3 Image, Omni 1.2 Flash, Seedance 2.5 F
   // Kling re-pricing (#134, #140)
   assert.equal(est('generate_video', { model: 'kling/text-to-video' }).credits, 63, '5s silent = 63 cr');
   assert.equal(est('generate_video', { model: 'kling/image-to-video', model_options: { duration: '10', sound: true } }).credits, 252, '10s with audio = 252 cr');
-  assert.equal(est('generate_video', { model: 'kling/v2-1-master-text-to-video', model_options: { duration: 5 } }).credits, 252);
+  assert.equal(V['kling/v2-1-master-text-to-video'], undefined, 'Master retired upstream (#145)');
+  assert.equal(P['kling/v2-1-master-image-to-video'], undefined);
   assert.equal(P['kling/v2-1-standard'] * 5, 50.5);
   assert.equal(P['kling/v2-1-pro'] * 5, 88);
   assert.equal(P['kling/motion-control'], 12.6);
+});
+
+test('v5.12.0 — LTX 2.5 (#143) and Kling Image 4.0 (#144)', async () => {
+  const { MODEL_REGISTRY: I, VIDEO_MODEL_REGISTRY: V, estimateCallCredits: est } = await import('../server.mjs');
+  // LTX 2.5 Fast: 1080p / 10 s default; 1440p or 48-50 fps cap at 10 s; Pro has no 1440p
+  const fast = V['ltx/2-5-fast-text-to-video'];
+  assert.deepEqual(fast.buildInput('p', '9:16', null, {}), { prompt: 'p', resolution: '1080p', fps: 24, duration: 10, aspect_ratio: '9:16' });
+  assert.throws(() => fast.buildInput('p', '16:9', null, { resolution: '1440p', duration: 12 }), /max 10 s at 1440p/);
+  assert.throws(() => fast.buildInput('p', '16:9', null, { fps: 50, duration: 14 }), /max 10 s at 50 fps/);
+  assert.equal(fast.buildInput('p', '16:9', null, { resolution: '720p', duration: 20 }).duration, 20);
+  assert.throws(() => V['ltx/2-5-pro-text-to-video'].buildInput('p', '16:9', null, { resolution: '1440p' }), /Fast only/);
+  assert.deepEqual(V['ltx/2-5-pro-image-to-video'].buildInput('p', '16:9', ['img'], { duration: 6 }), { prompt: 'p', resolution: '1080p', fps: 24, duration: 6, image_url: 'img' });
+  const a2v = V['ltx/2-5-fast-audio-to-video'];
+  assert.throws(() => a2v.buildInput('p', '16:9', [], {}), /needs model_options.audio_url/);
+  assert.deepEqual(a2v.buildInput('p', '16:9', ['img'], { audio_url: 'a', duration: 5.5 }), { prompt: 'p', resolution: '1080p', fps: 24, audio_url: 'a', image_url: 'img', duration: 5.5 });
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-text-to-video' }).credits, 156);
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-image-to-video', model_options: { resolution: '1440p', duration: 10 } }).credits, 228);
+  assert.equal(est('generate_video', { model: 'ltx/2-5-pro-text-to-video', model_options: { resolution: '720p', duration: 6 } }).credits, 86.4);
+  // audio-to-video bills the real output length: the audio, capped at 20 s (10 s at 1440p)
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-audio-to-video', model_options: { audio_url: 'a', audio_duration: 8 } }).credits, 124.8);
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-audio-to-video', model_options: { audio_url: 'a', audio_duration: 30, resolution: '1440p' } }).credits, 228);
+
+  // Kling Image 4.0: T2I without refs, @image_N must exist, series needs count, refs + elements ≤ 10
+  const k = I['kling-4-0/image'];
+  assert.deepEqual(k.buildInput('an apple', '1:1', [], {}), { prompt: 'an apple', mode: 'default', resolution: '2k', aspect_ratio: '1:1', count: 1 });
+  assert.throws(() => k.buildInput('@image_2', 'auto', ['u'], {}), /mentions @image_2 but only 1/);
+  assert.throws(() => k.buildInput('x', 'auto', [], { mode: 'series' }), /needs model_options.count 2-10/);
+  assert.throws(() => k.buildInput('x', 'auto', [], { elements: [{ name: 'object_1', image_urls: ['a', 'b'] }] }), /invalid element name/);
+  assert.throws(() => k.buildInput('x', 'auto', Array(9).fill('u'), { elements: [{ name: 'A', image_urls: ['a', 'b'] }, { name: 'B', image_urls: ['a', 'b'] }] }), /must total ≤ 10/);
+  assert.equal(est('generate_image', { model: 'kling-4-0/image' }).credits, 11.3);
+  assert.equal(est('generate_image', { model: 'kling-4-0/image', image_urls: ['a', 'b'], model_options: { resolution: '8k', count: 3 } }).credits, 85.9);
+  // Long Image: ecommerce vs webpage fields are mutually exclusive (kie 422s the mix)
+  const L = I['kling-4-0/long-image'];
+  assert.throws(() => L.buildInput('p', undefined, [], {}), /needs 1-3 product images/);
+  assert.throws(() => L.buildInput('p', undefined, ['u'], { skill: 'webpage' }), /doesn't take image_urls/);
+  assert.deepEqual(L.buildInput('p', undefined, [], { skill: 'webpage', subject_image: 's' }), { prompt: 'p', skill: 'webpage', resolution: '2k', subject_image: 's' });
+  assert.equal(est('generate_image', { model: 'kling-4-0/long-image', image_urls: ['a'] }).credits, 99.5);
+  assert.equal(est('generate_image', { model: 'kling-4-0/long-image', model_options: { skill: 'webpage', resolution: '1k' } }).credits, 99);
+  // KIE NSFW Moderation: flat 0.15 cr per check, guarded like the other paid tools
+  assert.equal(est('moderate_content', { text: 'a prompt' }).credits, 0.15);
 });

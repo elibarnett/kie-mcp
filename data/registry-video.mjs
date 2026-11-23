@@ -35,6 +35,34 @@ function kling4RefInput(prompt, aspectRatio, imageUrls, opts, { label = 'kling-4
     return input;
 }
 
+// LTX 2.5 (Nov 2026, #143): shared input builder. Fast: 720p/1080p/1440p, 6-20 s;
+// Pro: 720p/1080p, 6-10 s. 1440p or 48/50 fps caps Fast at 10 s. Frame rate is free.
+function ltxInput(label, prompt, aspectRatio, imageUrls, opts, { pro = false, kind = 't2v' } = {}) {
+    const resolution = opts.resolution || '1080p';
+    const fps = opts.fps ?? 24;
+    const cap = pro || resolution === '1440p' || fps >= 48 ? 10 : 20;
+    const why = pro ? 'Pro' : resolution === '1440p' ? 'at 1440p' : `at ${fps} fps`;
+    if (pro && resolution === '1440p') throw new Error(`${label}: Pro supports 720p or 1080p (1440p is Fast only)`);
+    const input = { prompt, resolution, fps };
+    if (kind === 'a2v') {
+      if (!opts.audio_url) throw new Error(`${label} needs model_options.audio_url (speech / singing / music, ≥ 2 s, ≤ 50 MB) — the video follows the audio`);
+      input.audio_url = opts.audio_url;
+      if (imageUrls?.length) input.image_url = imageUrls[0];
+      if (opts.duration !== undefined) {
+        if (opts.duration < 2 || opts.duration > cap) throw new Error(`${label}: duration must be 2-${cap} s ${cap === 10 ? why : ''}`.trim());
+        input.duration = opts.duration;
+      }
+    } else {
+      const duration = opts.duration ?? 10;
+      if (duration > cap) throw new Error(`${label}: max ${cap} s ${why} (got ${duration})`);
+      input.duration = duration;
+      if (kind === 'i2v') input.image_url = imageUrls[0];
+      else input.aspect_ratio = aspectRatio || '16:9';
+    }
+    if (opts.seed !== undefined) input.seed = opts.seed;
+    return input;
+}
+
 export const VIDEO_MODEL_REGISTRY = {
   // ── Dedicated endpoint models ──
   'veo-3/text-to-video': {
@@ -428,6 +456,110 @@ export const VIDEO_MODEL_REGISTRY = {
         if (opts[k] !== undefined) input[k] = opts[k];
       }
       return input;
+    },
+  },
+
+  // ── LTX 2.5 (Nov 2026, #143) — native synced audio (dialogue, SFX, ambience), multi-shot prompts.
+  //    Fast 10.8 / 15.6 / 22.8 cr/s (720p / 1080p / 1440p); Pro 14.4 / 20.4 (720p / 1080p). fps is free. ──
+  'ltx/2-5-fast-text-to-video': {
+    name: 'LTX 2.5 Fast T2V',
+    description: 'NEW (Nov 2026) — Lightricks LTX 2.5 Fast: video WITH native synced audio (quoted text is spoken as dialogue; write "Shot 1 / Shot 2" for multi-shot). 6-20 s (max 10 s at 1440p or 48/50 fps), 24-50 fps. 10.8 / 15.6 / 22.8 cr/s at 720p / 1080p (default) / 1440p — a 10 s 1080p clip is 156 cr. Frame rate does not change the price.',
+    capabilities: ['audio', 'dialogue', 'multi-shot', 'long-form', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'ltx/2-5-fast-text-to-video',
+    maxPromptChars: 5000,
+    aspectRatios: ['16:9', '9:16', '1:1', '3:2', '2:3'],
+    options: {
+      resolution: { type: 'string', enum: ['720p', '1080p', '1440p'], default: '1080p', description: '10.8 / 15.6 / 22.8 cr/s' },
+      duration: { type: 'number', enum: [6, 8, 10, 12, 14, 16, 18, 20], default: 10, description: 'Seconds; 12-20 only at 720p/1080p with 24/25 fps' },
+      fps: { type: 'number', enum: [24, 25, 48, 50], default: 24, description: 'Free; 48/50 fps cap duration at 10 s' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return ltxInput('ltx/2-5-fast-text-to-video', prompt, aspectRatio, null, opts);
+    },
+  },
+  'ltx/2-5-fast-image-to-video': {
+    name: 'LTX 2.5 Fast I2V',
+    description: 'NEW (Nov 2026) — LTX 2.5 Fast from a first-frame image (JPG/PNG/WEBP ≤ 10 MB), with native synced audio. The output keeps the image\'s aspect ratio (short side = resolution, capped at 3:1). 6-20 s (max 10 s at 1440p or 48/50 fps). 10.8 / 15.6 / 22.8 cr/s at 720p / 1080p (default) / 1440p.',
+    capabilities: ['image-to-video', 'audio', 'dialogue', 'multi-shot', 'long-form', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'ltx/2-5-fast-image-to-video',
+    requiresImage: true,
+    maxPromptChars: 5000,
+    aspectRatios: [],
+    options: {
+      resolution: { type: 'string', enum: ['720p', '1080p', '1440p'], default: '1080p', description: '10.8 / 15.6 / 22.8 cr/s' },
+      duration: { type: 'number', enum: [6, 8, 10, 12, 14, 16, 18, 20], default: 10, description: 'Seconds; 12-20 only at 720p/1080p with 24/25 fps' },
+      fps: { type: 'number', enum: [24, 25, 48, 50], default: 24, description: 'Free; 48/50 fps cap duration at 10 s' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return ltxInput('ltx/2-5-fast-image-to-video', prompt, aspectRatio, imageUrls, opts, { kind: 'i2v' });
+    },
+  },
+  'ltx/2-5-fast-audio-to-video': {
+    name: 'LTX 2.5 Fast Audio-to-Video',
+    description: 'NEW (Nov 2026) — LTX 2.5 Fast driven by YOUR audio (speech, singing or music; MP3/WAV/M4A/AAC/OGG/FLAC, ≥ 2 s, ≤ 50 MB): the soundtrack is that audio and the picture follows it — talking heads, music videos. Optional first-frame image via image_urls (else 16:9). Billed on the actual output length (follows the audio, ≤ 20 s; ≤ 10 s at 1440p or 48/50 fps): 10.8 / 15.6 / 22.8 cr/s at 720p / 1080p (default) / 1440p.',
+    capabilities: ['audio-driven', 'lip-sync', 'music-video', 'avatar', 'budget', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'ltx/2-5-fast-audio-to-video',
+    billedOnAudio: true,
+    maxPromptChars: 5000,
+    aspectRatios: [],
+    options: {
+      audio_url: { type: 'string', description: 'REQUIRED — public audio URL (≥ 2 s). The output soundtrack is this audio' },
+      resolution: { type: 'string', enum: ['720p', '1080p', '1440p'], default: '1080p', description: '10.8 / 15.6 / 22.8 cr/s' },
+      duration: { type: 'number', min: 2, max: 20, description: 'Optional: seconds cut from the start of the audio (decimals ok). Omit to match the audio length (cut at 20 s, or 10 s at 1440p / 48-50 fps)' },
+      audio_duration: { type: 'number', description: 'Optional: the audio length in seconds, used only for the cost estimate (estimate_only / max_credits)' },
+      fps: { type: 'number', enum: [24, 25, 48, 50], default: 24, description: 'Free; 48/50 fps cap the length at 10 s' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    // Billed seconds = requested duration, else the audio length, capped by resolution / fps.
+    billedSeconds(opts) {
+      const cap = opts.resolution === '1440p' || (opts.fps ?? 24) >= 48 ? 10 : 20;
+      const s = Number(opts.duration) || Number(opts.audio_duration);
+      return s ? Math.min(s, cap) : null;
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return ltxInput('ltx/2-5-fast-audio-to-video', prompt, aspectRatio, imageUrls, opts, { kind: 'a2v' });
+    },
+  },
+  'ltx/2-5-pro-text-to-video': {
+    name: 'LTX 2.5 Pro T2V',
+    description: 'NEW (Nov 2026) — LTX 2.5 Pro: the higher-fidelity tier, same native synced audio and multi-shot prompting as Fast. 720p / 1080p (default), 6 / 8 / 10 s, 24-50 fps. 14.4 / 20.4 cr/s — a 10 s 1080p clip is 204 cr.',
+    capabilities: ['audio', 'dialogue', 'multi-shot', 'cinematic', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'ltx/2-5-pro-text-to-video',
+    maxPromptChars: 5000,
+    aspectRatios: ['16:9', '9:16', '1:1', '3:2', '2:3'],
+    options: {
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p', description: '14.4 / 20.4 cr/s' },
+      duration: { type: 'number', enum: [6, 8, 10], default: 10 },
+      fps: { type: 'number', enum: [24, 25, 48, 50], default: 24, description: 'Does not change the price' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return ltxInput('ltx/2-5-pro-text-to-video', prompt, aspectRatio, null, opts, { pro: true });
+    },
+  },
+  'ltx/2-5-pro-image-to-video': {
+    name: 'LTX 2.5 Pro I2V',
+    description: 'NEW (Nov 2026) — LTX 2.5 Pro from a first-frame image, with native synced audio; keeps the image\'s aspect ratio. 720p / 1080p (default), 6 / 8 / 10 s. 14.4 / 20.4 cr/s.',
+    capabilities: ['image-to-video', 'audio', 'dialogue', 'multi-shot', 'cinematic', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'ltx/2-5-pro-image-to-video',
+    requiresImage: true,
+    maxPromptChars: 5000,
+    aspectRatios: [],
+    options: {
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p', description: '14.4 / 20.4 cr/s' },
+      duration: { type: 'number', enum: [6, 8, 10], default: 10 },
+      fps: { type: 'number', enum: [24, 25, 48, 50], default: 24, description: 'Does not change the price' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return ltxInput('ltx/2-5-pro-image-to-video', prompt, aspectRatio, imageUrls, opts, { pro: true, kind: 'i2v' });
     },
   },
 
@@ -1517,46 +1649,6 @@ export const VIDEO_MODEL_REGISTRY = {
     research: { verdict: 'I2V counterpart to V2.5 Turbo T2V. Same speed/cost advantages, strong image fidelity, no audio. Best budget option for animating reference images without audio needs. Use for rapid iteration on product animations and concept testing.', bestFor: ['rapid product photo animation at scale', 'I2V concept iteration', 'budget character animation'], weaknesses: ['no native audio', 'motion slightly flatter than V2.1 Master'], promptTechniques: ['describe motion and environment, not visual content'], communityInsights: ['go-to budget I2V model', 'upgrade to 2.6 I2V only if you need audio'], costEfficiency: '8 cr/s — 20% cheaper than 2.6 I2V and 75% cheaper than V2.1 Master I2V.', comparedTo: { 'kling/image-to-video': '2.6 I2V adds audio for 25% more.', 'kling/v2-1-pro': 'V2.1 Pro has first/last frame conditioning at 10 cr/s.' }, lastResearched: '2026-04-19', sources: ['https://curiousrefuge.com/blog/kling-25-turbo-ai-video-generator-review'] },
     type: 'market',
     apiModel: 'kling/v2-5-turbo-image-to-video-pro',
-    requiresImage: true,
-    options: {
-      duration: { type: 'string', enum: ['5', '10'], default: '5' },
-      negative_prompt: { type: 'string' },
-      cfg_scale: { type: 'number', min: 0, max: 1, default: 0.5 },
-    },
-    buildInput(prompt, _ar, imageUrls, opts) {
-      const input = { prompt, image_url: imageUrls?.[0], duration: opts.duration || '5' };
-      if (opts.negative_prompt) input.negative_prompt = opts.negative_prompt;
-      if (opts.cfg_scale !== undefined) input.cfg_scale = opts.cfg_scale;
-      return input;
-    },
-  },
-  'kling/v2-1-master-text-to-video': {
-    name: 'Kling V2.1 Master T2V',
-    description: 'LEGACY — largely obsolete. 50.4 cr/s (kie re-priced; was 32) but Kling 3.0 is better at 12 cr/s. Only for niche motion richness needs.',
-    capabilities: ['cinematic'],
-    research: { verdict: 'Former premium flagship, now largely obsolete. At 50.4 cr/s, costs 4.2x more than the superior Kling 3.0. Its one strength: advanced 3D spatiotemporal attention for hyper-realistic motion dynamics. But 3.0 has closed most of this gap while adding multi-shot, audio, and 4K. AVOID for almost all use cases.', bestFor: ['niche cinematic work needing maximum motion richness'], weaknesses: ['2.67x cost of the superior Kling 3.0', 'no audio, no multi-shot, no 4K', 'max 10s'], communityInsights: ['community consensus: use 3.0 instead'], costEfficiency: 'Poor. 32 cr/s — most expensive Kling by far. 3.0 is objectively better at 63% less cost.', comparedTo: { 'kling-3/video': '3.0 is better AND 63% cheaper.' }, lastResearched: '2026-04-19', sources: ['https://videoweb.ai/blog/detail/Exploring-Kling-AI-A-Deep-Dive-into-Kling-2-1-Standard-and-Kling-2-1-Master-12f6c7c5cb3c/'] },
-    type: 'market',
-    apiModel: 'kling/v2-1-master-text-to-video',
-    aspectRatios: ['16:9', '9:16', '1:1'],
-    options: {
-      duration: { type: 'string', enum: ['5', '10'], default: '5' },
-      negative_prompt: { type: 'string' },
-      cfg_scale: { type: 'number', min: 0, max: 1, default: 0.5 },
-    },
-    buildInput(prompt, aspectRatio, _imgs, opts) {
-      const input = { prompt, aspect_ratio: aspectRatio, duration: opts.duration || '5' };
-      if (opts.negative_prompt) input.negative_prompt = opts.negative_prompt;
-      if (opts.cfg_scale !== undefined) input.cfg_scale = opts.cfg_scale;
-      return input;
-    },
-  },
-  'kling/v2-1-master-image-to-video': {
-    name: 'Kling V2.1 Master I2V',
-    description: 'LEGACY — overpriced at 50.4 cr/s (kie re-priced; was 32). Kling 2.6 I2V at 12.6 cr/s has 90% of the quality with native audio.',
-    capabilities: ['cinematic', 'image-to-video'],
-    research: { verdict: 'I2V counterpart to V2.1 Master T2V. At 50.4 cr/s it costs 4x more than 2.6 I2V. Advanced motion dynamics but 2.6 I2V has closed 90% of the gap while adding native audio. Recommend only for confirmed niche needs.', bestFor: ['maximum-fidelity character animation from reference images'], weaknesses: ['32 cr/s is 3.2x more than 2.6 I2V with audio', 'no audio, no multi-shot, no 4K'], costEfficiency: 'Very poor. 2.6 I2V at 10 cr/s has 90% of the quality with native audio.', comparedTo: { 'kling/image-to-video': '2.6 I2V is 69% cheaper with native audio.' }, lastResearched: '2026-04-19', sources: ['https://kie.ai/kling/v2-1'] },
-    type: 'market',
-    apiModel: 'kling/v2-1-master-image-to-video',
     requiresImage: true,
     options: {
       duration: { type: 'string', enum: ['5', '10'], default: '5' },

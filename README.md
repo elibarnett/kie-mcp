@@ -31,6 +31,8 @@ Just ask Claude things like:
 - **Black Forest Labs**: FLUX 3 Klein T2I + Edit (NEW, 1.6 cr), Flux Kontext Pro/Max, Flux 2 Pro/Flex
 - **ByteDance**: Seedream 5.5 (NEW Nov 2026 — 3.6 cr @1K, 6.3 @2K, transparent background, T2I + I2I + layer decomposition), Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
 - **MiniMax H3 Image** (NEW Nov 2026): text-to-image + 16-reference editing, 1.8 cr at 1K/2K, 5.5 cr at 4K, exact custom sizes
+- **Kling Image 4.0** (NEW Nov 2026): native 2K / 4K / 8K T2I + I2I with `@image_N` references, named `@elements` and coherent 2–10 image series (11.3 / 17 / 28.3 cr per image), plus **Long Image** — a whole e-commerce product detail page or web page design as one tall image (42.5–155 cr)
+- **KIE NSFW Moderation** (NEW Nov 2026): `moderate_content` — pass / block verdict for a prompt, an image or both (adult / social / strict), 0.15 cr per check
 - **Kie Image Upscale** (NEW Nov 2026): `upscale_image` — 2x / 4x / 8x with text-preserving detail restoration, 1.5–12 cr
 - **Alibaba**: Wan 2.7 Image / Image Pro
 - **Ideogram**: v3, Character, Edit, Remix, Reframe
@@ -44,7 +46,8 @@ Just ask Claude things like:
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
 - **ByteDance Seedance**: 2.5 Flash (NEW Nov 2026 — 480p/720p, 4-30s, 18.5 / 41 cr/s), 2.5 (30s single takes, 1080p, draft→1080p upgrade) / 2.0 / 2.0 Fast / 2.0 Mini (1.5 Pro retired upstream Oct 2026)
-- **Kuaishou Kling**: 4.0 Flash (NEW — 720p, 17 cr/s), 4.0 (NEW — reference-to-video with named @subjects/voices/video refs, keyframe-to-video, 3-30s), 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
+- **Kuaishou Kling**: 4.0 Flash (NEW — 720p, 17 cr/s), 4.0 (NEW — reference-to-video with named @subjects/voices/video refs, keyframe-to-video, 3-30s), 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Pro/Standard (V2.1 Master retired upstream Nov 2026), AI Avatar
+- **Lightricks LTX 2.5** (NEW Nov 2026): Fast (6–20 s, 720p–1440p, 10.8 / 15.6 / 22.8 cr/s) and Pro (6–10 s, 14.4 / 20.4 cr/s), T2V + I2V with native dialogue/SFX audio and multi-shot prompts; Fast **audio-to-video** animates a picture to your own speech or music
 - **Alibaba Wan**: 3.0 + 3.0 Prime (NEW — unified prompt-or-media, audio), 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
 - **Google Gemini Omni**: 1.2 Flash (NEW Nov 2026 — any 3-15s, 4 / 9 / 10 / 22 cr/s at 360p-4K, video edit, plus Extend), Video + 1.1 Flash (NEW — first→last-frame mode, 360p-4K; image/voice/video/character references)
 - **MiniMax Hailuo**: H3 (NEW — 2K + native stereo audio, image+video+audio references, first→last-frame I2V), 2.3 Pro/Standard, 02 Pro/Standard
@@ -169,7 +172,7 @@ list_models, check_task, list_tasks, check_credits, spend_report,
 download_result, list_raw_assets, upload_file,
 grok_segment_map, grok_image_edit, seedream_layer_decompose,
 veo_extend, veo_upscale_1080p, veo_upscale_4k, runway_extend,
-upscale_image, upscale_video
+upscale_image, upscale_video, moderate_content
 ```
 
 ## Cost control

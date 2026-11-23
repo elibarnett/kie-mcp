@@ -86,6 +86,10 @@ export const PRICING = {
   // MiniMax H3 Image (Nov 2026) — kie published: billed by output pixels, 1.8 cr ≤ 4.5 MP (1K/2K), 5.5 cr ≤ 20 MP (4K).
   'minimax-h3/text-to-image': 1.8,
   'minimax-h3/image-edit': 1.8,              // + 0.5 cr per reference image, including the first
+  // Kling Image 4.0 (Nov 2026, #144) — kie.ai/kling-image-4-0 pricingDesc, read 2026-11-23
+  'kling-4-0/image': 11.3,                 // per OUTPUT image: 2k 11.3, 4k 17, 8k 28.3 (× count) + 0.5 per reference image / element
+  'kling-4-0/long-image': 99,              // per long image — ecommerce 1k/2k: short 42.5/51, medium 84.5/99, long 141/155; webpage 99/107.5; + 0.5 per input image
+  'kie/nsfw-moderation': 0.15,               // KIE NSFW Moderation (Nov 2026) — published: 0.15 cr per request (text, image or both; any scene); failed tasks free
   'kie/image-upscale': 1.5,                  // Kie Image Upscale (Nov 2026) — by OUTPUT pixels: 1.5 ≤ 4.19 MP, 4 ≤ 16.78 MP, 12 ≤ 67.11 MP
   'seedream/5-lite-text-to-image': 5,
   'seedream/5-lite-image-to-image': 5,
@@ -141,10 +145,8 @@ export const PRICING = {
   'kling-3-omni/transformation': 20,     // 720p default; 1080p 27, 4K 67 — video input required
   'kling-3/video': 12,
   'kling-3/motion-control': 12,
-  // Kling V2.1 — kie published (kie.ai/kling/v2-1, read 2026-11-16, #134): Standard 50.5 cr / 5s, Pro 88, Master 252 (10s = double).
+  // Kling V2.1 — kie published (kie.ai/kling/v2-1, read 2026-11-16, #134): Standard 50.5 cr / 5s, Pro 88 (10s = double). Master retired upstream 2026-11-23 (410, #145).
   'kling/v2-1-standard': 10.1,        // 50.5 credits/5s (was 5)
-  'kling/v2-1-master-text-to-video': 50.4,  // 252 credits/5s (was 32)
-  'kling/v2-1-master-image-to-video': 50.4,
   'kling/v2-1-pro': 17.6,             // 88 credits/5s (was 10)
   'kling/v2-5-turbo-text-to-video': 8,
   'kling/v2-5-turbo-image-to-video': 8,
@@ -202,6 +204,12 @@ export const PRICING = {
   'kling-4/keyframe-to-video': 28.5,   // 720p 28.5 / 1080p 42.5 cr/s on output duration
   'kling-4-flash/reference-to-video': 17, // Kling 4.0 Flash (Nov 2026) — 720p only: 17 cr/s, 11.3 with video input (× input + output)
   'kling-4-flash/image-to-video': 17,
+  // LTX 2.5 (Nov 2026, #143) — kie published: Fast 10.8 / 15.6 / 22.8 cr/s (720p / 1080p / 1440p), Pro 14.4 / 20.4 (720p / 1080p); default 1080p; fps free. Audio-to-video is billed on the real output length.
+  'ltx/2-5-fast-text-to-video': 15.6,
+  'ltx/2-5-fast-image-to-video': 15.6,
+  'ltx/2-5-fast-audio-to-video': 15.6,
+  'ltx/2-5-pro-text-to-video': 20.4,
+  'ltx/2-5-pro-image-to-video': 20.4,
   'pixverse-v6-max/text-to-video': 8.8,   // PixVerse V6 Max (Oct 2026) — 720p no-audio default; see PRICE_TIERS
   'pixverse-v6-max/image-to-video': 8.8,
   // ── Volcengine lip-sync — kie published: 8 cr/s of generated video (follows audio duration) ──
@@ -283,6 +291,7 @@ export const PRICE_TIERS = {
   'seedream/5-5-image-to-image': { opt: 'size', prices: { '1K': 3.6, '1.5K': 3.6, '2K': 6.3 }, perInputImage: 1.44 },
   'minimax-h3/text-to-image': { opt: 'resolution', prices: { '2K': 1.8, '1K': 1.8, '4K': 5.5 } },
   'minimax-h3/image-edit': { opt: 'resolution', prices: { '2K': 1.8, '1K': 1.8, '4K': 5.5 }, perInputImage: 0.5 },
+  'kling-4-0/image': { opt: 'resolution', prices: { '2k': 11.3, '4k': 17, '8k': 28.3 } },  // × count, + 0.5 per reference (see estimateCallCredits)
   // video — credits per second
   'kling/text-to-video': { opt: 'duration', prices: { '5': 12.6, '10': 12.6 }, audio: { opt: 'sound', prices: { '5': 25.2, '10': 25.2 } } },
   'kling/image-to-video': { opt: 'duration', prices: { '5': 12.6, '10': 12.6 }, audio: { opt: 'sound', prices: { '5': 25.2, '10': 25.2 } } },
@@ -299,6 +308,11 @@ export const PRICE_TIERS = {
   'wan/3-0-video': { opt: 'resolution', prices: { '480P': 8, '720P': 16, '1080P': 32 } },
   'kling-4/reference-to-video': { opt: 'resolution', prices: { '720p': 28.5, '1080p': 42.5 }, videoInput: { opt: 'video_urls', prices: { '720p': 17, '1080p': 25.5 } } },
   'kling-4/keyframe-to-video': { opt: 'resolution', prices: { '720p': 28.5, '1080p': 42.5 } },
+  'ltx/2-5-fast-text-to-video': { opt: 'resolution', prices: { '720p': 10.8, '1080p': 15.6, '1440p': 22.8 } },
+  'ltx/2-5-fast-image-to-video': { opt: 'resolution', prices: { '720p': 10.8, '1080p': 15.6, '1440p': 22.8 } },
+  'ltx/2-5-fast-audio-to-video': { opt: 'resolution', prices: { '720p': 10.8, '1080p': 15.6, '1440p': 22.8 } },
+  'ltx/2-5-pro-text-to-video': { opt: 'resolution', prices: { '720p': 14.4, '1080p': 20.4 } },
+  'ltx/2-5-pro-image-to-video': { opt: 'resolution', prices: { '720p': 14.4, '1080p': 20.4 } },
   'kling-4-flash/reference-to-video': { opt: 'resolution', prices: { '720p': 17 }, videoInput: { opt: 'video_urls', prices: { '720p': 11.3 } } },
   'gpt-image-2-6/flare-text-to-image': { opt: 'resolution', prices: { '1K': 6.2, '2K': 8.3, '4K': 17.6 } },
   'gpt-image-2-6/sunburst-text-to-image': { opt: 'resolution', prices: { '1K': 6.2, '2K': 8.3, '4K': 17.6 } },
@@ -325,9 +339,11 @@ export const PRICING_ESTIMATED = new Set([
   'bytedance/seedance-2-5', 'bytedance/seedance-2-5-draft', 'bytedance/seedance-2-5-flash',  // Flash: published "beta" prices
   'gemini-omni/flash-1-2', 'gemini-omni/flash-1-2-extend',  // published, not yet measured; extend follows the source resolution
   'seedream/5-5-text-to-image', 'seedream/5-5-image-to-image', 'seedream/5-5-layer-decomposition',  // size-tiered + per-input billing
+  'kling-4-0/image', 'kling-4-0/long-image',  // published; live 2026-11-23 matched at 2k (11.3, +0.5 per ref) and ecommerce short 1k (43) — other tiers unmeasured
   'minimax-h3/text-to-image', 'minimax-h3/image-edit', 'kie/image-upscale', 'video/upscale',  // pixel- / duration-billed, published not measured
-  'kling/v2-1-standard', 'kling/v2-1-pro', 'kling/v2-1-master-text-to-video', 'kling/v2-1-master-image-to-video',  // re-priced from kie's page 2026-11-16, not measured
+  'kling/v2-1-standard', 'kling/v2-1-pro',  // re-priced from kie's page 2026-11-16, not measured
   'vidu-q4/image-to-video', 'vidu-q4/reference-to-video',
+  'ltx/2-5-fast-text-to-video', 'ltx/2-5-fast-image-to-video', 'ltx/2-5-fast-audio-to-video', 'ltx/2-5-pro-text-to-video', 'ltx/2-5-pro-image-to-video',  // published; live 2026-11-23 matched at 720p (Fast T2V 64.8 / 6 s, Pro I2V 86.4 / 6 s, A2V 32.4 / 3 s) — 1080p/1440p unmeasured
   'kling-4/reference-to-video', 'kling-4/keyframe-to-video', 'kling-4-flash/reference-to-video', 'kling-4-flash/image-to-video',
   'gpt-image-2-6/flare-text-to-image', 'gpt-image-2-6/flare-image-to-image', 'gpt-image-2-6/sunburst-text-to-image', 'gpt-image-2-6/sunburst-image-to-image',  // token-billed
   'nvidia/nemotron-3-5-transcribe', 'pixverse-v6-max/text-to-video', 'pixverse-v6-max/image-to-video', 'omnihuman-2-0',
@@ -407,7 +423,6 @@ export const PROMPT_CAPS = {
   'wan/2-2-a14b-text-to-video-turbo': 5000, 'wan/2-2-a14b-image-to-video-turbo': 5000, 'wan/2-2-a14b-speech-to-video-turbo': 5000,
   'hailuo/2-3-image-to-video-pro': 5000, 'hailuo/2-3-image-to-video-standard': 5000,
   'kling/v2-1-standard': 5000, 'kling/v2-1-pro': 5000,
-  'kling/v2-1-master-text-to-video': 5000, 'kling/v2-1-master-image-to-video': 5000,
   'kling/ai-avatar-standard': 5000, 'kling/ai-avatar-pro': 5000,
   'infinitalk/from-audio': 5000,
   'happyhorse/text-to-video': 5000, 'happyhorse/image-to-video': 5000,
