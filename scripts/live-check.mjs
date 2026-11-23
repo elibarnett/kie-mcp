@@ -97,7 +97,7 @@ async function unsupportedSection(llmsText) {
     }));
   }
   // A page that never returned its spec could hide a new model — say so instead of passing silently.
-  const unread = pages.filter((p) => !p.model && !/\/(common|file-upload)\b|get-task|callback/i.test(p.page));
+  const unread = pages.filter((p) => !p.model && !/\/(common|file-upload)\b|get-task|callback|quickstart/i.test(p.page));
   const src = ['server.mjs', ...readdirSync(join(ROOT, 'data')).filter((f) => f.endsWith('.mjs')).map((f) => `data/${f}`)]
     .map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
   const missing = findUnsupportedModels(pages, src);
