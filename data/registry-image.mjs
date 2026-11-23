@@ -2,6 +2,79 @@
 // server-scope references. Imported (and re-exported) by server.mjs.
 
 
+// MiniMax H3 Image: either a tier (resolution + aspect_ratio) or an exact width × height —
+// kie rejects the two together, and a lone width or height.
+function minimaxH3ImageInput(id, prompt, aspectRatio, imageUrls, opts) {
+  const input = { prompt };
+  if (imageUrls) input.image_urls = imageUrls;
+  const w = opts.width, h = opts.height;
+  if ((w === undefined) !== (h === undefined)) throw new Error(`${id}: width and height must be set together`);
+  if (w !== undefined) {
+    if (opts.resolution) throw new Error(`${id}: pass either width + height or resolution, not both`);
+    const px = w * h, ratio = w / h;
+    if (px < 655360 || px > 20000000) throw new Error(`${id}: width × height must be 655,360-20,000,000 px (got ${px})`);
+    if (ratio < 1 / 3 || ratio > 3) throw new Error(`${id}: width : height must be between 1:3 and 3:1`);
+    input.width = w; input.height = h;   // aspect_ratio is deliberately not sent
+  } else {
+    input.aspect_ratio = aspectRatio || 'auto';
+    input.resolution = opts.resolution || '2K';
+  }
+  for (const k of ['expand_prompt', 'seed', 'output_format']) if (opts[k] !== undefined) input[k] = opts[k];
+  return input;
+}
+
+// Kling 4.0 Image (Nov 2026, #144): validate what kie would 422 on, before submitting.
+// Reference images are @image_1… in array order; elements are @Name (2-4 views each);
+// image_urls + elements ≤ 10; series mode needs count 2-10, default mode 1-9.
+function kling4ImageInput(prompt, aspectRatio, imageUrls, opts) {
+  const id = 'kling-4-0/image';
+  const imgs = imageUrls || [];
+  const elements = opts.elements || [];
+  if (imgs.length + elements.length > 10) throw new Error(`${id}: image_urls + elements must total ≤ 10 (got ${imgs.length} + ${elements.length})`);
+  const NAME = /^[一-龥A-Za-z0-9_]{1,20}$/;
+  const RESERVED = /^(image|object)_\d+$/i;
+  const seen = new Set();
+  for (const el of elements) {
+    if (!NAME.test(el?.name || '') || RESERVED.test(el.name)) throw new Error(`${id}: invalid element name "${el?.name}" — 1-20 letters/digits/underscore/Chinese, not image_N / object_N`);
+    if (seen.has(el.name.toLowerCase())) throw new Error(`${id}: duplicate element name "${el.name}"`);
+    seen.add(el.name.toLowerCase());
+    if (!Array.isArray(el.image_urls) || el.image_urls.length < 2 || el.image_urls.length > 4) throw new Error(`${id}: element "${el.name}" needs 2-4 image_urls (views of the same subject, primary view first)`);
+  }
+  for (const m of String(prompt).matchAll(/@image_(\d+)(?![A-Za-z0-9_])/g)) {
+    if (Number(m[1]) < 1 || Number(m[1]) > imgs.length) throw new Error(`${id}: prompt mentions @image_${m[1]} but only ${imgs.length} image_urls ${imgs.length === 1 ? 'was' : 'were'} given`);
+  }
+  const mode = opts.mode || 'default';
+  const count = opts.count ?? (mode === 'series' ? undefined : 1);
+  if (mode === 'series' && (count === undefined || count < 2 || count > 10)) throw new Error(`${id}: mode "series" needs model_options.count 2-10`);
+  if (mode === 'default' && (count < 1 || count > 9)) throw new Error(`${id}: count must be 1-9 in default mode (series allows 2-10)`);
+  const input = { prompt, mode, resolution: opts.resolution || '2k', aspect_ratio: aspectRatio || 'auto', count };
+  if (imgs.length) input.image_urls = imgs;
+  if (elements.length) input.elements = elements;
+  return input;
+}
+
+// Kling 4.0 Long Image: one long image per task. skill "ecommerce" needs 1-3 product images
+// (image_urls) and takes `length`; skill "webpage" takes style_image / subject_image only.
+// kie 422s any field from the other skill, so reject the mix here with a clear message.
+function kling4LongImageInput(prompt, imageUrls, opts) {
+  const id = 'kling-4-0/long-image';
+  const skill = String(opts.skill || 'ecommerce').toLowerCase();
+  const imgs = imageUrls || [];
+  const input = { prompt, skill, resolution: opts.resolution || '2k' };
+  if (skill === 'ecommerce') {
+    if (imgs.length < 1 || imgs.length > 3) throw new Error(`${id}: skill "ecommerce" needs 1-3 product images in image_urls (referenced as @image_1…)`);
+    if (opts.style_image || opts.subject_image) throw new Error(`${id}: style_image / subject_image are for skill "webpage" only`);
+    input.image_urls = imgs;
+    input.length = opts.length || 'medium';
+  } else {
+    if (imgs.length) throw new Error(`${id}: skill "webpage" doesn't take image_urls — pass model_options.style_image (@style) and/or subject_image (@subject)`);
+    if (opts.length) throw new Error(`${id}: length is for skill "ecommerce" only`);
+    if (opts.style_image) input.style_image = opts.style_image;
+    if (opts.subject_image) input.subject_image = opts.subject_image;
+  }
+  return input;
+}
+
 export const MODEL_REGISTRY = {
   // ── GPT-4o (dedicated endpoint) ──
   'gpt4o': {
@@ -1019,6 +1092,132 @@ export const MODEL_REGISTRY = {
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
       return { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, quality: opts.quality || 'basic', size: opts.size || 'auto', output_format: opts.output_format || 'png' };
+    },
+  },
+  // ── Seedream 5.5 (Nov 2026) — 3.6 cr @1K/1.5K, 6.3 @2K; transparent backgrounds; layer split via seedream_layer_decompose tier="5.5" ──
+  'seedream/5-5-text-to-image': {
+    name: 'Seedream 5.5',
+    description: 'NEW (Nov 2026) — ByteDance Seedream 5.5: photorealistic generation at about half the price of 5.0 Pro. 3.6 cr at 1K / 1.5K, 6.3 cr at 2K (the default). 8 aspect ratios incl. 21:9, transparent background (PNG). Layer decomposition via seedream_layer_decompose tier="5.5".',
+    capabilities: ['photorealistic', 'illustration', 'design', 'text-rendering', 'transparent-background', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'seedream/5-5-text-to-image',
+    aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'],
+    maxPromptChars: 5000,
+    options: {
+      size: { type: 'string', enum: ['1K', '1.5K', '2K'], default: '2K', description: '1K / 1.5K = 3.6 cr, 2K = 6.3 cr' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      background: { type: 'string', enum: ['auto', 'transparent', 'opaque'], default: 'auto', description: 'transparent needs output_format png' },
+      nsfw_checker: { type: 'boolean' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      if (opts.background === 'transparent' && opts.output_format === 'jpeg') throw new Error('seedream/5-5: background="transparent" needs output_format="png"');
+      const input = { prompt, aspect_ratio: aspectRatio || '1:1', size: opts.size || '2K', output_format: opts.output_format || 'png' };
+      if (opts.background) input.background = opts.background;
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
+  'seedream/5-5-image-to-image': {
+    name: 'Seedream 5.5 (img2img)',
+    description: 'NEW (Nov 2026) — Seedream 5.5 editing / restyling with 1-10 input images (JPEG/PNG/WebP, ≤10 MB each). 3.6 cr at 1K / 1.5K, 6.3 cr at 2K (default) PLUS 1.44 cr per input image — a 2K edit of one image is 7.74 cr. aspect_ratio "auto" keeps the model\'s choice; transparent background (PNG).',
+    capabilities: ['editing', 'style-transfer', 'multi-reference', 'transparent-background', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'seedream/5-5-image-to-image',
+    requiresImage: true,
+    aspectRatios: ['auto', '1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'],
+    maxPromptChars: 5000,
+    options: {
+      size: { type: 'string', enum: ['1K', '1.5K', '2K'], default: '2K', description: '1K / 1.5K = 3.6 cr, 2K = 6.3 cr; + 1.44 cr per input image' },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+      background: { type: 'string', enum: ['auto', 'transparent', 'opaque'], default: 'auto', description: 'transparent needs output_format png' },
+      nsfw_checker: { type: 'boolean' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      if (opts.background === 'transparent' && opts.output_format === 'jpeg') throw new Error('seedream/5-5: background="transparent" needs output_format="png"');
+      const input = { prompt, image_urls: (imageUrls || []).slice(0, 10), aspect_ratio: aspectRatio || 'auto', size: opts.size || '2K', output_format: opts.output_format || 'png' };
+      if (opts.background) input.background = opts.background;
+      if (opts.nsfw_checker !== undefined) input.nsfw_checker = opts.nsfw_checker;
+      return input;
+    },
+  },
+  // ── MiniMax H3 Image (Nov 2026) — 1.8 cr up to 4.5 MP (1K/2K), 5.5 cr up to 20 MP (4K); exact custom sizes ──
+  'minimax-h3/text-to-image': {
+    name: 'MiniMax H3 Image',
+    description: 'NEW (Nov 2026) — MiniMax-H3-Image: 1.8 cr per image at 1K OR 2K (default 2K), 5.5 cr at 4K — one of the cheapest 2K/4K generators. 11 aspect ratios incl. 5:4 and 21:9, or an exact custom size (model_options.width + height, 655,360-20,000,000 px, between 1:3 and 3:1). Prompt expansion is on by default (recommended); aspect_ratio "auto" lets the rewriter pick the shape.',
+    capabilities: ['photorealistic', 'illustration', 'budget', '4k', 'custom-size', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'minimax-h3/text-to-image',
+    aspectRatios: ['auto', '1:1', '5:4', '4:3', '3:2', '16:9', '21:9', '4:5', '3:4', '2:3', '9:16'],
+    maxPromptChars: 5000,
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '2K', description: '1K / 2K = 1.8 cr, 4K = 5.5 cr' },
+      width: { type: 'number', min: 1, max: 8192, description: 'Exact output width in px — set with height; replaces resolution + aspect_ratio' },
+      height: { type: 'number', min: 1, max: 8192, description: 'Exact output height in px — set with width' },
+      expand_prompt: { type: 'boolean', default: true, description: 'Prompt rewriter (recommended on). With false, aspect_ratio "auto" becomes 1:1' },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return minimaxH3ImageInput('minimax-h3/text-to-image', prompt, aspectRatio, null, opts);
+    },
+  },
+  'minimax-h3/image-edit': {
+    name: 'MiniMax H3 Image (edit)',
+    description: 'NEW (Nov 2026) — MiniMax-H3-Image editing with up to 16 reference images. 1.8 cr at 1K / 2K (default 2K), 5.5 cr at 4K, PLUS 0.5 cr per reference image (including the first). Same aspect ratios and exact custom sizes (model_options.width + height) as minimax-h3/text-to-image.',
+    capabilities: ['editing', 'multi-reference', 'budget', '4k', 'custom-size', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'minimax-h3/image-edit',
+    requiresImage: true,
+    aspectRatios: ['auto', '1:1', '5:4', '4:3', '3:2', '16:9', '21:9', '4:5', '3:4', '2:3', '9:16'],
+    maxPromptChars: 5000,
+    options: {
+      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '2K', description: '1K / 2K = 1.8 cr, 4K = 5.5 cr; + 0.5 cr per reference image' },
+      width: { type: 'number', min: 1, max: 8192, description: 'Exact output width in px — set with height; replaces resolution + aspect_ratio' },
+      height: { type: 'number', min: 1, max: 8192, description: 'Exact output height in px — set with width' },
+      expand_prompt: { type: 'boolean', default: true },
+      seed: { type: 'number', min: 0, max: 2147483647 },
+      output_format: { type: 'string', enum: ['png', 'jpeg'], default: 'png' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return minimaxH3ImageInput('minimax-h3/image-edit', prompt, aspectRatio, (imageUrls || []).slice(0, 16), opts);
+    },
+  },
+  // ── Kling 4.0 Image (Nov 2026, #144) — 2K 11.3 / 4K 17 / 8K 28.3 cr per output image, + 0.5 per reference image or element ──
+  'kling-4-0/image': {
+    name: 'Kling Image 4.0',
+    description: 'NEW (Nov 2026) — Kling Image 4.0: native 2K / 4K / 8K text-to-image AND image-to-image in one model. Omit image_urls for T2I; pass up to 10 references and mention them in the prompt as @image_1, @image_2… Named subjects via model_options.elements ([{name, image_urls: 2-4 views}], mention as @Name). mode "series" makes a coherent set of 2-10 images (e.g. one character morning to night). 11.3 / 17 / 28.3 cr per output image at 2k (default) / 4k / 8k, PLUS 0.5 cr per reference image or element. 8k returns JPEG.',
+    capabilities: ['photorealistic', 'illustration', 'editing', 'multi-reference', 'character', 'series', '4k', '8k', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'kling-4-0/image',
+    aspectRatios: ['auto', '9:16', '2:3', '3:4', '1:1', '4:3', '3:2', '16:9', '21:9'],
+    maxPromptChars: 20000,
+    options: {
+      resolution: { type: 'string', enum: ['2k', '4k', '8k'], default: '2k', description: '11.3 / 17 / 28.3 cr per output image' },
+      mode: { type: 'string', enum: ['default', 'series'], default: 'default', description: 'series = a coherent set (needs count 2-10)' },
+      count: { type: 'number', min: 1, max: 10, default: 1, description: 'Images to generate: 1-9 (default mode) or 2-10 (series) — each is billed' },
+      elements: { type: 'array', description: 'Named subjects [{name, image_urls: [2-4 views, primary first], tag?, description?}]; mention as @name. image_urls + elements ≤ 10; each adds 0.5 cr' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return kling4ImageInput(prompt, aspectRatio, imageUrls, opts);
+    },
+  },
+  'kling-4-0/long-image': {
+    name: 'Kling Image 4.0 Long Image',
+    description: 'NEW (Nov 2026) — Kling Image 4.0 long-image designer: ONE tall image per task. skill "ecommerce" (default) builds a product detail page from 1-3 product photos in image_urls (@image_1…); length short (2-5 sections) / medium / long (11-18). skill "webpage" designs a web page from model_options.style_image (@style) and/or subject_image (@subject). Per long image at 1k / 2k (default): ecommerce short 42.5 / 51, medium 84.5 / 99, long 141 / 155; webpage 99 / 107.5 — plus 0.5 cr per input image.',
+    capabilities: ['design', 'ecommerce', 'product', 'web-design', 'layout', 'latest', 'new'],
+    type: 'market',
+    apiModel: 'kling-4-0/long-image',
+    aspectRatios: [],
+    maxPromptChars: 20000,
+    options: {
+      skill: { type: 'string', enum: ['ecommerce', 'webpage'], default: 'ecommerce' },
+      length: { type: 'string', enum: ['short', 'medium', 'long'], default: 'medium', description: 'ecommerce only: about 2-5 / 6-10 / 11-18 sections' },
+      resolution: { type: 'string', enum: ['1k', '2k'], default: '2k' },
+      style_image: { type: 'string', description: 'webpage only: style/layout reference URL, mention as @style' },
+      subject_image: { type: 'string', description: 'webpage only: subject to keep, mention as @subject' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return kling4LongImageInput(prompt, imageUrls, opts);
     },
   },
   // ── Seedream 5.0 Flash (Oct 2026) — cheapest 5.0 tier: 3.24 cr flat at 1K/1.5K/2K ──

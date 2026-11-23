@@ -29,7 +29,11 @@ Just ask Claude things like:
 - **OpenAI**: GPT Image 2.6 Flare / Sunburst / Economy (NEW Nov 2026; Economy 5 cr flat, animated GIF), GPT Image 2.5 Flare / Sunburst (NEW — 1K-4K, transparent background), GPT Image 2, GPT-4o Image, GPT Image 1.5
 - **Google**: Nano Banana 2.1 (NEW, 4 cr), Nano Banana 2 / 2 Lite / Pro / Edit / Original, Imagen 4 (Fast/Standard/Ultra)
 - **Black Forest Labs**: FLUX 3 Klein T2I + Edit (NEW, 1.6 cr), Flux Kontext Pro/Max, Flux 2 Pro/Flex
-- **ByteDance**: Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
+- **ByteDance**: Seedream 5.5 (NEW Nov 2026 — 3.6 cr @1K, 6.3 @2K, transparent background, T2I + I2I + layer decomposition), Seedream 3.0 / 4.0 / 4.5 / 5.0 Lite
+- **MiniMax H3 Image** (NEW Nov 2026): text-to-image + 16-reference editing, 1.8 cr at 1K/2K, 5.5 cr at 4K, exact custom sizes
+- **Kling Image 4.0** (NEW Nov 2026): native 2K / 4K / 8K T2I + I2I with `@image_N` references, named `@elements` and coherent 2–10 image series (11.3 / 17 / 28.3 cr per image), plus **Long Image** — a whole e-commerce product detail page or web page design as one tall image (42.5–155 cr)
+- **KIE NSFW Moderation** (NEW Nov 2026): `moderate_content` — pass / block verdict for a prompt, an image or both (adult / social / strict), 0.15 cr per check
+- **Kie Image Upscale** (NEW Nov 2026): `upscale_image` — 2x / 4x / 8x with text-preserving detail restoration, 1.5–12 cr
 - **Alibaba**: Wan 2.7 Image / Image Pro
 - **Ideogram**: v3, Character, Edit, Remix, Reframe
 - **xAI Grok Imagine Image 2.0** (#2 Arena T2I + edit; free segment map → region-targeted edit chain; whole-image edits of ANY uploaded image)
@@ -41,19 +45,22 @@ Just ask Claude things like:
 ### Video (85+)
 - **Google Veo 3.1**: Quality / Fast / Lite (T2V + I2V), Extend, 1080p/4K upscale
 - **Alibaba HappyHorse**: 1.1 (NEW — T2V/I2V/R2V with native audio + 7-language lip-sync), 1.0 (T2V/I2V/R2V/Video Edit)
-- **ByteDance Seedance**: 2.5 (30s single takes, 1080p, draft→1080p upgrade) / 2.0 / 2.0 Fast / 2.0 Mini (1.5 Pro retired upstream Oct 2026)
-- **Kuaishou Kling**: 4.0 Flash (NEW — 720p, 17 cr/s), 4.0 (NEW — reference-to-video with named @subjects/voices/video refs, keyframe-to-video, 3-30s), 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Master/Pro/Standard, AI Avatar
+- **ByteDance Seedance**: 2.5 Flash (NEW Nov 2026 — 480p/720p, 4-30s, 18.5 / 41 cr/s), 2.5 (30s single takes, 1080p, draft→1080p upgrade) / 2.0 / 2.0 Fast / 2.0 Mini (1.5 Pro retired upstream Oct 2026)
+- **Kuaishou Kling**: 4.0 Flash (NEW — 720p, 17 cr/s), 4.0 (NEW — reference-to-video with named @subjects/voices/video refs, keyframe-to-video, 3-30s), 3.0 Omni "O3" (NEW — per-shot multi_prompt scripting, 4K, video Transformation), 3.0, 3.0 Turbo, 2.6, V2.5 Turbo, V2.1 Pro/Standard (V2.1 Master retired upstream Nov 2026), AI Avatar
+- **Lightricks LTX 2.5** (NEW Nov 2026): Fast (6–20 s, 720p–1440p, 10.8 / 15.6 / 22.8 cr/s) and Pro (6–10 s, 14.4 / 20.4 cr/s), T2V + I2V with native dialogue/SFX audio and multi-shot prompts; Fast **audio-to-video** animates a picture to your own speech or music
 - **Alibaba Wan**: 3.0 + 3.0 Prime (NEW — unified prompt-or-media, audio), 2.7 (T2V/I2V/Edit/R2V), 2.6, 2.5, 2.2 Turbo, Animate
-- **Google Gemini Omni**: Video + 1.1 Flash (NEW — first→last-frame mode, 360p-4K; image/voice/video/character references)
+- **Google Gemini Omni**: 1.2 Flash (NEW Nov 2026 — any 3-15s, 4 / 9 / 10 / 22 cr/s at 360p-4K, video edit, plus Extend), Video + 1.1 Flash (NEW — first→last-frame mode, 360p-4K; image/voice/video/character references)
 - **MiniMax Hailuo**: H3 (NEW — 2K + native stereo audio, image+video+audio references, first→last-frame I2V), 2.3 Pro/Standard, 02 Pro/Standard
 - **xAI Grok Imagine**: Video 1.5 preview (NEW — I2V with native audio, cheapest audio video), T2V, I2V, Upscale, Extend
 - **Avatar / lip-sync**: OmniHuman 2.0 (NEW — 14 cr/s, up to 5-minute audio), OmniHuman 1.5 (NEW — audio-driven full-body avatar + free subject-detection + human-identification utilities), Volcengine Video Lip-Sync (NEW — re-dub existing footage), Kling AI Avatar, Infinitalk
 - **PixVerse V6 / V6 Max** (V6 Max NEW: higher-quality T2V/I2V): T2V, I2V (viral templates), Transition (first→last morph), Fusion R2V (@ref_name), Extend — budget all-rounder with native audio
 - **Runway**: Aleph, Aleph Edit, Extend
+- **Kie Video Upscale** (NEW Nov 2026): `upscale_video` — any video ≤60 s to 1080P / 2K / 4K, 1.5 / 3 / 6 cr per second
 - **Others**: ByteDance V1 Pro/Lite, Topaz upscale
 
 ### Audio (20+)
 - **Suno**: Music Gen, Extend, Cover, Add Instrumental/Vocals, Replace Section, Lyrics, Sounds, Sound Effects, MIDI, Music Video, Cover Art, Mashup, Persona, Timestamped Lyrics, Boost Style, Vocal Separation, WAV, Custom Voice cloning (experimental)
+- **Suno Speech** (NEW Nov 2026): `generate_speech` — expressive spoken audio from a scene prompt or your own script (tone, variety, gender, background music), 12 cr per request
 - **NVIDIA Nemotron 3.5 Transcribe** (NEW): `speech_to_text` default — 0.3 cr per minute, ≤60 min, 32 languages, word timings + speaker labels, translation
 - **ElevenLabs**: TTS (Turbo 2.5 + Multilingual V2), Text-to-Dialogue V3, Audio Isolation, Speech-to-Text
 - **Google Gemini TTS** (NEW): style-directed speech, 30 voices, 2-speaker dialogue, inline tone tags — ~4.2 cr/min
@@ -151,7 +158,7 @@ To reach it remotely, put it behind a tunnel (ngrok / Cloudflare Tunnel) or a re
 
 ```
 generate_image, generate_video, generate_music, generate_sfx,
-generate_tts, generate_gemini_tts, generate_dialogue, generate_sounds, generate_lyrics,
+generate_tts, generate_gemini_tts, generate_speech, generate_dialogue, generate_sounds, generate_lyrics,
 generate_persona, generate_mashup, generate_cover_art,
 generate_midi, create_music_video,
 prepare_voice_clone, create_voice_clone, regenerate_voice_clone,
@@ -164,7 +171,8 @@ profile_brief,
 list_models, check_task, list_tasks, check_credits, spend_report,
 download_result, list_raw_assets, upload_file,
 grok_segment_map, grok_image_edit, seedream_layer_decompose,
-veo_extend, veo_upscale_1080p, veo_upscale_4k, runway_extend
+veo_extend, veo_upscale_1080p, veo_upscale_4k, runway_extend,
+upscale_image, upscale_video, moderate_content
 ```
 
 ## Cost control

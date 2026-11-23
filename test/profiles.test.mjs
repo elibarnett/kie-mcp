@@ -16,6 +16,7 @@ const TOOL_NAMES = new Set([
   'upload_file', 'download_result', 'check_task', 'list_tasks', 'list_models', 'check_credits',
   'grok_segment_map', 'grok_image_edit', 'seedream_layer_decompose',
   'veo_extend', 'veo_upscale_1080p', 'veo_upscale_4k', 'runway_extend', 'profile_brief',
+  'upscale_image', 'upscale_video', 'generate_speech', 'moderate_content',
 ]);
 
 for (const [id, p] of Object.entries(PROFILES)) {

@@ -626,3 +626,139 @@ test('v5.11.0 — GPT Image 2.6, Kling 4.0 Flash, Nemotron transcribe', async ()
   assert.equal(stt.credits, 3, 'Nemotron: 0.3 cr per minute');
   assert.equal(spendGuard('speech_to_text', { audio_url: 'a', estimate_only: true }).content[0].text.includes('0.3 cr per minute'), true);
 });
+
+test('v5.12.0 — Seedream 5.5, MiniMax H3 Image, Omni 1.2 Flash, Seedance 2.5 Flash, upscalers, Suno Speech, Kling re-pricing', async () => {
+  const { MODEL_REGISTRY: I, VIDEO_MODEL_REGISTRY: V, PRICING: P, estimateCallCredits, spendGuard, buildSpeechInput } = await import('../server.mjs');
+  const { AUDIO_TOOLS_REGISTRY: A } = await import('../data/registry-audio.mjs');
+  const est = (name, args) => estimateCallCredits(name, args);
+
+  // Seedream 5.5 — 2K default, per-input billing on edits
+  assert.deepEqual(I['seedream/5-5-text-to-image'].buildInput('p', '21:9', [], { background: 'transparent' }),
+    { prompt: 'p', aspect_ratio: '21:9', size: '2K', output_format: 'png', background: 'transparent' });
+  assert.throws(() => I['seedream/5-5-text-to-image'].buildInput('p', '1:1', [], { background: 'transparent', output_format: 'jpeg' }), /needs output_format="png"/);
+  assert.equal(I['seedream/5-5-image-to-image'].buildInput('p', 'auto', Array(12).fill('u'), {}).image_urls.length, 10);
+  assert.equal(est('generate_image', { model: 'seedream/5-5-text-to-image' }).credits, 6.3);
+  assert.equal(est('generate_image', { model: 'seedream/5-5-text-to-image', model_options: { size: '1K' } }).credits, 3.6);
+  assert.equal(est('generate_image', { model: 'seedream/5-5-image-to-image', image_urls: ['a'] }).credits, 7.74, 'kie\'s own example: 2K edit of one image');
+  assert.equal(est('generate_image', { model: 'seedream/5-5-image-to-image', image_urls: ['a', 'b'] }).credits, 9.18);
+  assert.equal(est('seedream_layer_decompose', { tier: '5.5', size: '1K', prompt: 'x', max_images: 4 }).credits, 12.24, '3 layers × 3.6 + 1.44');
+  assert.equal(est('seedream_layer_decompose', { tier: '5.5', max_images: 4 }).credits, 26.64, 'auto bills at 2K: 4 × 6.3 + 1.44');
+  assert.equal(est('seedream_layer_decompose', { tier: 'flash', prompt: 'x' }).credits, 9.72, 'older tiers unchanged');
+
+  // MiniMax H3 Image — tier OR exact size, never both
+  const h3 = I['minimax-h3/text-to-image'];
+  assert.deepEqual(h3.buildInput('p', '5:4', [], {}), { prompt: 'p', aspect_ratio: '5:4', resolution: '2K' });
+  assert.deepEqual(h3.buildInput('p', '2:3', [], { width: 1920, height: 1080, seed: 7 }), { prompt: 'p', width: 1920, height: 1080, seed: 7 }, 'custom size drops aspect_ratio + resolution');
+  assert.throws(() => h3.buildInput('p', '1:1', [], { width: 1920 }), /set together/);
+  assert.throws(() => h3.buildInput('p', '1:1', [], { width: 1920, height: 1080, resolution: '4K' }), /not both/);
+  assert.throws(() => h3.buildInput('p', '1:1', [], { width: 500, height: 500 }), /655,360/);
+  assert.throws(() => h3.buildInput('p', '1:1', [], { width: 4000, height: 1000 }), /between 1:3 and 3:1/);
+  assert.equal(I['minimax-h3/image-edit'].buildInput('p', 'auto', Array(20).fill('u'), {}).image_urls.length, 16);
+  assert.equal(est('generate_image', { model: 'minimax-h3/text-to-image' }).credits, 1.8);
+  assert.equal(est('generate_image', { model: 'minimax-h3/text-to-image', model_options: { resolution: '4K' } }).credits, 5.5);
+  assert.equal(est('generate_image', { model: 'minimax-h3/text-to-image', model_options: { width: 4000, height: 3000 } }).credits, 5.5, '12 MP custom size → 4K tier');
+  assert.equal(est('generate_image', { model: 'minimax-h3/image-edit', image_urls: ['a', 'b'] }).credits, 2.8, '1.8 + 2 × 0.5');
+
+  // Gemini Omni 1.2 Flash — integer duration, 4 exclusive modes
+  const omni = V['gemini-omni/flash-1-2'];
+  assert.equal(omni.apiModel, 'google/gemini-omni-flash-1-2');
+  assert.deepEqual(omni.buildInput('p', '9:16', ['a', 'b'], { duration: 12, character_ids: ['c1'], seed: 12345 }),
+    { prompt: 'p', aspect_ratio: '9:16', resolution: '720p', image_urls: ['a', 'b'], character_ids: ['c1'], duration: 12, seeds: 12345 });
+  const edit = omni.buildInput('p', '16:9', [], { video_list: [{ url: 'v.mp4' }] });
+  assert.deepEqual(edit.video_list, ['v.mp4'], '1.1-style {url} objects become plain URLs');
+  assert.equal('duration' in edit, false, 'video edit sends no duration');
+  assert.equal(omni.buildInput('p', '16:9', [], { first_frame_url: 'f', last_frame_url: 'l', duration: 10 }).last_frame_url, 'l');
+  assert.throws(() => omni.buildInput('p', '16:9', [], { first_frame_url: 'f', last_frame_url: 'l', duration: 12 }), /3-10s/);
+  assert.throws(() => omni.buildInput('p', '16:9', [], { last_frame_url: 'l' }), /requires first_frame_url/);
+  assert.throws(() => omni.buildInput('p', '16:9', ['a'], { first_frame_url: 'f' }), /cannot be combined/);
+  assert.throws(() => omni.buildInput('p', '16:9', Array(6).fill('u'), { video_list: ['v'] }), /quota exceeded/);
+  assert.throws(() => omni.buildInput('p', '16:9', Array(7).fill('u'), {}), /quota exceeded/);
+  assert.throws(() => omni.buildInput('p', '16:9', [], { audio_ids: ['a'] }), /not supported by Omni 1.2/);
+  assert.equal(est('generate_video', { model: 'gemini-omni/flash-1-2' }).credits, 72, '9 cr/s × 8s');
+  assert.equal(est('generate_video', { model: 'gemini-omni/flash-1-2', model_options: { resolution: '4k', duration: 3 } }).credits, 66);
+  const ext = V['gemini-omni/flash-1-2-extend'];
+  assert.deepEqual(ext.buildInput('next', undefined, ['r'], { task_id: 't', duration: 4 }), { task_id: 't', prompt: 'next', duration: 4, image_urls: ['r'] });
+  assert.throws(() => ext.buildInput('next', undefined, [], {}), /task_id/);
+  assert.equal(est('generate_video', { model: 'gemini-omni/flash-1-2-extend', model_options: { task_id: 't', duration: 10 } }).credits, 90);
+
+  // Seedance 2.5 Flash — frames vs references, edit/extend rules
+  const sf = V['bytedance/seedance-2-5-flash'];
+  assert.deepEqual(sf.buildInput('p', '16:9', [], {}), { prompt: 'p', aspect_ratio: '16:9', duration: 5, resolution: '720p' });
+  const frames = sf.buildInput('p', '16:9', ['f', 'l'], { resolution: '480p' });
+  assert.deepEqual([frames.first_frame_url, frames.last_frame_url, frames.aspect_ratio], ['f', 'l', 'adaptive'], 'frame modes only support adaptive');
+  const ed = sf.buildInput('p', '16:9', [], { reference_video_urls: ['v'], omni_reference_task_type: 'edit', duration: 8 });
+  assert.deepEqual([ed.duration, ed.aspect_ratio, ed.first_frame_url], [-1, 'adaptive', undefined]);
+  assert.equal(sf.buildInput('p', '16:9', ['ignored'], { reference_audio_urls: ['a'] }).first_frame_url, undefined, 'image_urls are not a first frame in reference mode');
+  assert.throws(() => sf.buildInput('p', '16:9', [], { first_frame_url: 'f', reference_image_urls: ['r'] }), /separate modes/);
+  assert.throws(() => sf.buildInput('p', '16:9', [], { omni_reference_task_type: 'reference' }), /only applies with reference/);
+  assert.throws(() => sf.buildInput('p', '16:9', [], { reference_image_urls: ['r'], omni_reference_task_type: 'extend' }), /needs reference_video_urls/);
+  assert.throws(() => sf.buildInput('p', '16:9', [], { duration: 2 }), /4-30s/);
+  assert.equal(est('generate_video', { model: 'bytedance/seedance-2-5-flash', model_options: { duration: 10 } }).credits, 410);
+  assert.equal(est('generate_video', { model: 'bytedance/seedance-2-5-flash', model_options: { resolution: '480p', duration: 4 } }).credits, 74);
+  assert.equal(est('generate_video', { model: 'bytedance/seedance-2-5-flash', model_options: { duration: 5, reference_video_urls: ['v'] } }).credits, 255, '25.5 × (5 out + ~5 in)');
+
+  // Upscalers + Suno Speech tools
+  assert.equal(est('upscale_image', { image_url: 'u' }).credits, 1.5);
+  assert.equal(est('upscale_image', { image_url: 'u', upscale_factor: '8' }).credits, 12);
+  assert.equal(est('upscale_video', { video_url: 'u', resolution: '4K', video_seconds: 8 }).credits, 48);
+  assert.equal(est('upscale_video', { video_url: 'u' }).uncertain, true, 'unknown length → worst case, flagged');
+  assert.equal(spendGuard('upscale_video', { video_url: 'u', resolution: '4K', max_credits: 100 }).isError, true, '60s × 6 cr exceeds the cap');
+  assert.equal(est('generate_speech', { prompt: 'x' }).credits, 12);
+  for (const tool of ['upscale_image', 'upscale_video', 'generate_speech']) assert.equal(typeof P[A[tool].pricingKey], 'number', `${tool} is priced`);
+  assert.deepEqual(buildSpeechInput({ prompt: 'a fox story' }), { input: { customMode: false, prompt: 'a fox story' } });
+  assert.deepEqual(buildSpeechInput({ script: 'Hello.', tone: 'warm', variety: 2, vocal_gender: 'f', background_music: false }),
+    { input: { customMode: true, script: 'Hello.', tone: 'warm', variety: 2, vocalGender: 'f', backgroundMusic: false } });
+  assert.match(buildSpeechInput({ prompt: 'x', script: 'y' }).error, /EITHER prompt/);
+  assert.match(buildSpeechInput({ prompt: 'x', variety: 2 }).error, /only work in Advanced mode/);
+  assert.match(buildSpeechInput({ script: 'y', variety: 9 }).error, /0 to 4/);
+  assert.match(buildSpeechInput({}).error, /needs prompt/);
+
+  // Kling re-pricing (#134, #140)
+  assert.equal(est('generate_video', { model: 'kling/text-to-video' }).credits, 63, '5s silent = 63 cr');
+  assert.equal(est('generate_video', { model: 'kling/image-to-video', model_options: { duration: '10', sound: true } }).credits, 252, '10s with audio = 252 cr');
+  assert.equal(V['kling/v2-1-master-text-to-video'], undefined, 'Master retired upstream (#145)');
+  assert.equal(P['kling/v2-1-master-image-to-video'], undefined);
+  assert.equal(P['kling/v2-1-standard'] * 5, 50.5);
+  assert.equal(P['kling/v2-1-pro'] * 5, 88);
+  assert.equal(P['kling/motion-control'], 12.6);
+});
+
+test('v5.12.0 — LTX 2.5 (#143) and Kling Image 4.0 (#144)', async () => {
+  const { MODEL_REGISTRY: I, VIDEO_MODEL_REGISTRY: V, estimateCallCredits: est } = await import('../server.mjs');
+  // LTX 2.5 Fast: 1080p / 10 s default; 1440p or 48-50 fps cap at 10 s; Pro has no 1440p
+  const fast = V['ltx/2-5-fast-text-to-video'];
+  assert.deepEqual(fast.buildInput('p', '9:16', null, {}), { prompt: 'p', resolution: '1080p', fps: 24, duration: 10, aspect_ratio: '9:16' });
+  assert.throws(() => fast.buildInput('p', '16:9', null, { resolution: '1440p', duration: 12 }), /max 10 s at 1440p/);
+  assert.throws(() => fast.buildInput('p', '16:9', null, { fps: 50, duration: 14 }), /max 10 s at 50 fps/);
+  assert.equal(fast.buildInput('p', '16:9', null, { resolution: '720p', duration: 20 }).duration, 20);
+  assert.throws(() => V['ltx/2-5-pro-text-to-video'].buildInput('p', '16:9', null, { resolution: '1440p' }), /Fast only/);
+  assert.deepEqual(V['ltx/2-5-pro-image-to-video'].buildInput('p', '16:9', ['img'], { duration: 6 }), { prompt: 'p', resolution: '1080p', fps: 24, duration: 6, image_url: 'img' });
+  const a2v = V['ltx/2-5-fast-audio-to-video'];
+  assert.throws(() => a2v.buildInput('p', '16:9', [], {}), /needs model_options.audio_url/);
+  assert.deepEqual(a2v.buildInput('p', '16:9', ['img'], { audio_url: 'a', duration: 5.5 }), { prompt: 'p', resolution: '1080p', fps: 24, audio_url: 'a', image_url: 'img', duration: 5.5 });
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-text-to-video' }).credits, 156);
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-image-to-video', model_options: { resolution: '1440p', duration: 10 } }).credits, 228);
+  assert.equal(est('generate_video', { model: 'ltx/2-5-pro-text-to-video', model_options: { resolution: '720p', duration: 6 } }).credits, 86.4);
+  // audio-to-video bills the real output length: the audio, capped at 20 s (10 s at 1440p)
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-audio-to-video', model_options: { audio_url: 'a', audio_duration: 8 } }).credits, 124.8);
+  assert.equal(est('generate_video', { model: 'ltx/2-5-fast-audio-to-video', model_options: { audio_url: 'a', audio_duration: 30, resolution: '1440p' } }).credits, 228);
+
+  // Kling Image 4.0: T2I without refs, @image_N must exist, series needs count, refs + elements ≤ 10
+  const k = I['kling-4-0/image'];
+  assert.deepEqual(k.buildInput('an apple', '1:1', [], {}), { prompt: 'an apple', mode: 'default', resolution: '2k', aspect_ratio: '1:1', count: 1 });
+  assert.throws(() => k.buildInput('@image_2', 'auto', ['u'], {}), /mentions @image_2 but only 1/);
+  assert.throws(() => k.buildInput('x', 'auto', [], { mode: 'series' }), /needs model_options.count 2-10/);
+  assert.throws(() => k.buildInput('x', 'auto', [], { elements: [{ name: 'object_1', image_urls: ['a', 'b'] }] }), /invalid element name/);
+  assert.throws(() => k.buildInput('x', 'auto', Array(9).fill('u'), { elements: [{ name: 'A', image_urls: ['a', 'b'] }, { name: 'B', image_urls: ['a', 'b'] }] }), /must total ≤ 10/);
+  assert.equal(est('generate_image', { model: 'kling-4-0/image' }).credits, 11.3);
+  assert.equal(est('generate_image', { model: 'kling-4-0/image', image_urls: ['a', 'b'], model_options: { resolution: '8k', count: 3 } }).credits, 85.9);
+  // Long Image: ecommerce vs webpage fields are mutually exclusive (kie 422s the mix)
+  const L = I['kling-4-0/long-image'];
+  assert.throws(() => L.buildInput('p', undefined, [], {}), /needs 1-3 product images/);
+  assert.throws(() => L.buildInput('p', undefined, ['u'], { skill: 'webpage' }), /doesn't take image_urls/);
+  assert.deepEqual(L.buildInput('p', undefined, [], { skill: 'webpage', subject_image: 's' }), { prompt: 'p', skill: 'webpage', resolution: '2k', subject_image: 's' });
+  assert.equal(est('generate_image', { model: 'kling-4-0/long-image', image_urls: ['a'] }).credits, 99.5);
+  assert.equal(est('generate_image', { model: 'kling-4-0/long-image', model_options: { skill: 'webpage', resolution: '1k' } }).credits, 99);
+  // KIE NSFW Moderation: flat 0.15 cr per check, guarded like the other paid tools
+  assert.equal(est('moderate_content', { text: 'a prompt' }).credits, 0.15);
+});
