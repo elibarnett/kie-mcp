@@ -762,3 +762,23 @@ test('v5.12.0 — LTX 2.5 (#143) and Kling Image 4.0 (#144)', async () => {
   // KIE NSFW Moderation: flat 0.15 cr per check, guarded like the other paid tools
   assert.equal(est('moderate_content', { text: 'a prompt' }).credits, 0.15);
 });
+
+test('writeNewFile — a taken filename gets _2, _3 … instead of being overwritten (parallel same-second calls)', async () => {
+  const { writeNewFile } = await import('../server.mjs');
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'kie-collide-'));
+  try {
+    const want = join(dir, 'kling-4-0-image-2026-11-23T18-00-00.png');
+    assert.equal(writeNewFile(want, Buffer.from('first')), want);
+    assert.equal(writeNewFile(want, Buffer.from('second')), join(dir, 'kling-4-0-image-2026-11-23T18-00-00_2.png'));
+    assert.equal(writeNewFile(want, Buffer.from('third')), join(dir, 'kling-4-0-image-2026-11-23T18-00-00_3.png'));
+    assert.equal(readFileSync(want, 'utf8'), 'first', 'original must survive');
+    // no extension
+    const bare = join(dir, 'clip');
+    writeNewFile(bare, Buffer.from('a'));
+    assert.equal(writeNewFile(bare, Buffer.from('b')), join(dir, 'clip_2'));
+    // concurrent writers to the same name all land in distinct files
+    const many = await Promise.all(Array.from({ length: 8 }, (_, i) => Promise.resolve().then(() => writeNewFile(join(dir, 'race.mp4'), Buffer.from(String(i))))));
+    assert.equal(new Set(many).size, 8);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
