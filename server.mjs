@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync, existsSync, mkdirSync, readdirSync, statSync, appendFileSync, readFileSync } from 'fs';
-import { join, basename, dirname, isAbsolute } from 'path';
+import { join, basename, dirname, extname, isAbsolute } from 'path';
 import { createServer } from 'http';
 import crypto from 'crypto';
 import { AsyncLocalStorage } from 'async_hooks';
@@ -1074,7 +1074,6 @@ async function downloadUrlList(urls, outFilename, ext, outDir) {
   const files = [];
   for (let i = 0; i < urls.length; i++) {
     let p = join(outDir, sunoTrackName(outFilename, i, ext));
-    if (existsSync(p)) console.error(`[kie-mcp] overwriting existing file: ${p}`);
     p = await downloadToFile(urls[i], p);
     files.push(p);
   }
@@ -1196,7 +1195,6 @@ async function downloadSunoTracks(sunoData, outFilename, ext = 'mp3', outDir = R
     const url = track.audioUrl || track.videoUrl || track.midiUrl || track.wavUrl;
     if (!url) continue;
     let trackPath = join(outDir, sunoTrackName(outFilename, i, ext));
-    if (existsSync(trackPath)) console.error(`[kie-mcp] overwriting existing file: ${trackPath}`);
     trackPath = await downloadToFile(url, trackPath);
     downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration, id: track.id });
   }
@@ -1257,6 +1255,23 @@ function normalizeTaskState(data) {
   return 'generating';
 }
 
+// Write bytes to `path` without ever replacing an existing file: if the name
+// is taken, save as name_2.ext, name_3.ext, … Default names are model + a
+// to-the-second timestamp, so two same-model calls started in the same second
+// used to overwrite each other's paid output (2026-11-23). The exclusive 'wx'
+// open makes the check-and-create atomic, so parallel calls can't race.
+// Returns the path actually written.
+export function writeNewFile(path, bytes) {
+  const ext = extname(path);
+  const stem = ext ? path.slice(0, -ext.length) : path;
+  for (let n = 1; n <= 9999; n++) {
+    const p = n === 1 ? path : `${stem}_${n}${ext}`;
+    try { writeFileSync(p, bytes, { flag: 'wx' }); return p; }
+    catch (e) { if (e.code !== 'EEXIST') throw e; }
+  }
+  throw new Error(`No free filename for ${path} (tried _2 … _9999)`);
+}
+
 async function downloadToFile(url, destPath) {
   let downloadUrl = url;
   try {
@@ -1271,10 +1286,12 @@ async function downloadToFile(url, destPath) {
   // .png was later uploaded as image/png and broke Veo I2V, 2026-09-24). Save
   // under the real extension and report it on the tool result.
   const { name, renamedFrom } = fixMediaFilename(basename(destPath), bytes);
-  const finalPath = renamedFrom ? join(dirname(destPath), name) : destPath;
-  writeFileSync(finalPath, bytes);
+  const wantedPath = renamedFrom ? join(dirname(destPath), name) : destPath;
+  const finalPath = writeNewFile(wantedPath, bytes);
   if (renamedFrom) {
     downloadNotes.getStore()?.push(`⚠️ Saved as ${name.split('.').pop().toUpperCase()}: ${finalPath} (requested ${renamedFrom} — the model returned ${name.split('.').pop().toUpperCase()} bytes). Use this path, not the requested one.`);
+  } else if (finalPath !== wantedPath) {
+    downloadNotes.getStore()?.push(`ℹ️ ${basename(wantedPath)} already existed, so this was saved as ${basename(finalPath)} (nothing was overwritten): ${finalPath}`);
   }
   return finalPath;
 }

@@ -2,6 +2,12 @@
 
 All notable changes to kie-mcp will be documented here.
 
+## [Unreleased]
+
+### Fixed
+- **Saved results are never overwritten.** Default filenames are the model plus a timestamp to the second, so two calls to the same model that started in the same second saved to the same path, and the second download replaced the first. Found during the v5.12.0 live run, when one of two parallel Kling Image 4.0 results was lost. Every download now creates its file exclusively: if the name is taken, it saves as `name_2.ext`, `name_3.ext`, and so on, and the tool result says so. This also applies to an explicit `filename` that already exists. Before, that file was replaced with only a stderr warning.
+- Live check (2026-11-24): two parallel `minimax-h3/text-to-image` calls through the MCP saved `…T23-16-53.png` and `…T23-16-53_2.png`, two different images (3.6 credits).
+
 ## [5.12.0] — 2026-11-23
 
 Closes #133, #134, #135, #136, #137, #138, #139, #140, #141, #143, #144, #145, all filed by the weekly live check.
